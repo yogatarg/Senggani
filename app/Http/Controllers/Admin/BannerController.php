@@ -25,7 +25,7 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp',
+            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'tautan'        => 'nullable|url',
         ]);
 
@@ -62,7 +62,7 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp',
+            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'tautan'        => 'nullable|url',
         ]);
 

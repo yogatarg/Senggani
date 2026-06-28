@@ -26,7 +26,7 @@
         }
 
         body {
-            background: #dad0c9;
+            background: #ffffff;
             color: #333;
         }
 
@@ -255,58 +255,61 @@
 
         /* ── Carousel ── */
 
+        /* Fix: target picture + img agar tidak collapse di mobile */
+        .carousel-item picture {
+            display: block;
+            width: 100%;
+            line-height: 0;
+        }
+
         .carousel-item img {
+            width: 100%;
             height: 550px;
             object-fit: cover;
+            display: block;
         }
 
         .carousel-caption {
             left: 8%;
-top: 25%;
+            top: 50%;
+            transform: translateY(-50%);
             right: auto;
+            bottom: auto;
             text-align: left;
             max-width: 550px;
         }
 
-        /* Area teks */
         .banner-content {
-           bottom: 25%;
-        }
-
-        /* Judul */
-        .carousel-caption h2 {
-            font-family: 'montaser', sans-serif;
-            font-size: 2.8rem;
-            font-weight: 600;
-            color: ivory;
             margin-bottom: 1rem;
         }
 
-        /* Deskripsi */
-        .carousel-caption p {
-            font-family: 'helvetica', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #B22424;
+        .carousel-caption h2 {
+        
+            font-size: 2.8rem;
+            font-weight: 700;
+            color: #6e0c0c;
+            margin-bottom: 1rem;
+        }
 
+        .carousel-caption p {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #6e0c0c;
             display: -webkit-box;
             -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
-
             overflow: hidden;
         }
 
-        /* Tombol */
         .btn-banner-wa {
             display: inline-block;
-
             background: #7A0505;
             color: #fff;
             padding: 12px 24px;
             border-radius: 50px;
             text-decoration: none;
             font-weight: 600;
-            margin-top: 60px;
+            margin-top: 1.5rem;
         }
 
         .btn-banner-wa:hover {
@@ -314,41 +317,49 @@ top: 25%;
             background: #600404;
         }
 
-        @media (max-width:768px) {
+        /* ── Mobile Carousel ── */
+        @media (max-width: 767.98px) {
 
             .carousel-item img {
-                height: 300px;
+                height: 420px;
+                /* tinggi lebih besar agar foto mobile terlihat */
+                object-fit: cover;
+                object-position: center;
             }
 
             .carousel-caption {
-                left: 5%;
-                right: 5%;
-                bottom: 8%;
-                max-width: none;
+                left: 0;
+                right: 0;
+                top: auto;
+                bottom: 0;
+                transform: none;
+                max-width: 100%;
+                padding: 1rem 1.2rem 1.5rem;
+                background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, transparent 100%);
+                text-align: left;
             }
 
             .banner-content {
-                min-height: 90px;
+                display: none;
             }
 
             .carousel-caption h2 {
-                font-size: 1.3rem;
-                margin-bottom: .35rem;
+                font-size: 1.2rem;
+                margin-bottom: 0.25rem;
+                color: #fff;
             }
 
             .carousel-caption p {
-                font-size: .8rem;
-
-                display: -webkit-box;
+                font-size: 0.78rem;
                 -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-
-                overflow: hidden;
+                color: rgba(255, 255, 255, 0.85);
+                margin-bottom: 0;
             }
 
             .btn-banner-wa {
-                padding: 8px 14px;
-                font-size: .8rem;
+                padding: 8px 16px;
+                font-size: 0.8rem;
+                margin-top: 0.75rem;
             }
         }
 

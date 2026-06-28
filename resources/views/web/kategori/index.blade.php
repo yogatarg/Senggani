@@ -5,7 +5,7 @@
 @section('content')
 
 {{-- ── Header Kategori ── --}}
-<div style="background: linear-gradient(135deg, #6a3131, #4e2424); padding: 60px 0;">
+<div style="background: #4c0404; padding: 60px 0;">
     <div class="container text-white">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-2" style="background:transparent; padding:0;">

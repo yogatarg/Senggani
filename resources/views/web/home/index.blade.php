@@ -19,13 +19,14 @@
                 @foreach ($banner as $i => $item)
                     <div class="carousel-item {{ $i === 0 ? 'active' : '' }}">
                         <picture>
-
                             @if ($item->gambar_mobile)
-                                <source media="(max-width:768px)" srcset="{{ asset('storage/' . $item->gambar_mobile) }}">
+                                {{-- Fix: pakai max-width 767.98px sesuai Bootstrap breakpoint md --}}
+                                <source media="(max-width: 767.98px)"
+                                    srcset="{{ asset('storage/' . $item->gambar_mobile) }}"
+                                    type="image/webp, image/jpeg, image/png">
                             @endif
-
                             <img src="{{ asset('storage/' . $item->gambar) }}" class="d-block w-100"
-                                alt="{{ $item->judul }}">
+                                alt="{{ $item->judul }}" width="1920" height="550" loading="eager">
                         </picture>
                         <div class="carousel-caption custom-caption">
                             <div class="banner-content">
@@ -37,9 +38,8 @@
                                     </p>
                                 @endif
                             </div>
-                            
-                            <a href="https://wa.me/6285236987231" target="_blank"
-                                class="btn-banner-wa rounded-pill px-4">
+
+                            <a href="https://wa.me/6285236987231" target="_blank" class="btn-banner-wa rounded-pill px-4">
 
                                 <i class="fab fa-whatsapp me-2"></i>
                                 Pesan Sekarang
@@ -72,7 +72,7 @@
     @endif
 
     <!--2. KATEGORI PRODUK-->
-    <section class="py-5 bg-light" id="kategori">
+    <section class="py-5" style="background: #ffffff" id="kategori">
         <div class="container">
             <div class="text-center mb-5 fade-up">
                 <h2 class="section-title">Kategori Produk</h2>
@@ -162,7 +162,7 @@
 
     <!--4. KEUNGGULAN-->
 
-    <section class="py-5 bg-light" id="tentang">
+    <section class="py-5" style="background: #ffffff" id="tentang">
         <div class="container">
             <div class="text-center mb-5 fade-up">
                 <h2 class="section-title">Mengapa Senggani Kemasan?</h2>
