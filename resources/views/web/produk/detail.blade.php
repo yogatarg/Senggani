@@ -5,7 +5,7 @@
 @section('content')
 
     <div class="container py-5">
-        <div class="row g-5">
+        <div class="row gx-4 gx-sm-5 gy-5">
 
             {{-- ── Kolom Kiri: Foto Utama + Thumbnail ── --}}
             <div class="col-lg-6">
@@ -73,11 +73,13 @@
                         <li class="breadcrumb-item">
                             <a href="{{ route('home') }}" style="color:#6a3131;">Home</a>
                         </li>
-                        <li class="breadcrumb-item">
-                            <a href="{{ route('kategori.show', $produk->kategori->slug) }}" style="color:#6a3131;">
-                                {{ $produk->kategori->nama_kategori ?? '-' }}
-                            </a>
-                        </li>
+                        @if ($produk->kategori)
+                            <li class="breadcrumb-item">
+                                <a href="{{ route('kategori.show', $produk->kategori?->slug) }}" style="color:#6a3131;">
+                                    {{ $produk->kategori?->nama_kategori ?? '-' }}
+                                </a>
+                            </li>
+                        @endif
                         <li class="breadcrumb-item active text-muted">
                             {{ $produk->nama_produk }}
                         </li>
