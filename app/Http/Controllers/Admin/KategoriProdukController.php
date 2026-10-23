@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\KategoriProduk;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class KategoriProdukController extends Controller
 {
@@ -40,7 +42,15 @@ class KategoriProdukController extends Controller
                                       ->store('uploads/kategori', 'public');
         }
 
-        KategoriProduk::create($data);
+        try {
+            KategoriProduk::create($data);
+        } catch (Throwable $e) {
+            // Simpan gagal: buang gambar yang sempat terunggah
+            if (! empty($data['gambar'])) {
+                Storage::disk('public')->delete($data['gambar']);
+            }
+            throw $e;
+        }
 
         return redirect()->route('admin.kategori-produk.index')
                          ->with('success', 'Kategori berhasil ditambahkan.');
@@ -63,17 +73,30 @@ class KategoriProdukController extends Controller
         $kategoriProduk->slug          = KategoriProduk::slugUnik($request->nama_kategori, $kategoriProduk->id);
         $kategoriProduk->deskripsi     = $request->deskripsi;
 
+        $gambarLama = null;
+        $gambarBaru = null;
+
         // Ganti gambar jika ada upload baru
         if ($request->hasFile('gambar')) {
-            // Hapus gambar lama
-            if ($kategoriProduk->gambar) {
-                Storage::disk('public')->delete($kategoriProduk->gambar);
-            }
-            $kategoriProduk->gambar = $request->file('gambar')
-                                               ->store('uploads/kategori', 'public');
+            $gambarLama = $kategoriProduk->gambar;
+            $gambarBaru = $request->file('gambar')
+                                  ->store('uploads/kategori', 'public');
+            $kategoriProduk->gambar = $gambarBaru;
         }
 
-        $kategoriProduk->save();
+        try {
+            $kategoriProduk->save();
+        } catch (Throwable $e) {
+            if ($gambarBaru) {
+                Storage::disk('public')->delete($gambarBaru);
+            }
+            throw $e;
+        }
+
+        // Hapus gambar lama hanya setelah data baru tersimpan
+        if ($gambarLama) {
+            Storage::disk('public')->delete($gambarLama);
+        }
 
         return redirect()->route('admin.kategori-produk.index')
                          ->with('success', 'Kategori berhasil diperbarui.');
@@ -81,17 +104,18 @@ class KategoriProdukController extends Controller
 
     public function destroy(KategoriProduk $kategoriProduk)
     {
-        // Hapus gambar saat kategori dihapus
-        if ($kategoriProduk->gambar) {
-            Storage::disk('public')->delete($kategoriProduk->gambar);
-        }
+        // Catat dulu semua file: gambar kategori + file produk di kategori ini
+        // (produk ikut terhapus lewat cascade, aturan ini tidak diubah)
+        $file = array_filter([$kategoriProduk->gambar]);
 
-        // Produk di kategori ini ikut terhapus (cascade), jadi hapus juga file-filenya
         foreach ($kategoriProduk->produk as $produk) {
-            $produk->hapusFile();
+            $file = array_merge($file, $produk->daftarFile());
         }
 
-        $kategoriProduk->delete();
+        DB::transaction(fn () => $kategoriProduk->delete());
+
+        // File dihapus setelah datanya berhasil dihapus
+        Storage::disk('public')->delete($file);
 
         return redirect()->route('admin.kategori-produk.index')
                          ->with('success', 'Kategori berhasil dihapus.');

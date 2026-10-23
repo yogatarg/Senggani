@@ -3,12 +3,13 @@
 namespace App\Models;
 
 use App\Models\Concerns\SlugUnik;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 
 class Produk extends Model
 {
-    use SlugUnik;
+    use HasFactory, SlugUnik;
 
     protected $table = 'produk';
 
@@ -22,13 +23,17 @@ class Produk extends Model
         'produk_kustom',
     ];
 
+    // Daftar path gambar utama & semua foto galeri produk ini.
+    // Dicatat sebelum produk dihapus, lalu filenya dihapus setelah data terhapus.
+    public function daftarFile(): array
+    {
+        return $this->galeri()->pluck('nama_file')->push($this->gambar)->filter()->values()->all();
+    }
+
     // Hapus gambar utama & semua foto galeri dari storage
-    // (dipanggil sebelum produk dihapus)
     public function hapusFile(): void
     {
-        $file = $this->galeri()->pluck('nama_file')->push($this->gambar)->filter()->all();
-
-        Storage::disk('public')->delete($file);
+        Storage::disk('public')->delete($this->daftarFile());
     }
 
     // Relasi ke kategori

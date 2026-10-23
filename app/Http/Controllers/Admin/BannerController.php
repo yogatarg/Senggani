@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class BannerController extends Controller
 {
@@ -29,23 +31,31 @@ class BannerController extends Controller
             'tautan'        => 'nullable|url',
         ]);
 
-        $gambar       = $request->file('gambar')->store('banner', 'public');
+        $gambar       = null;
         $gambarMobile = null;
 
-        if ($request->hasFile('gambar_mobile')) {
-            $gambarMobile = $request
-                ->file('gambar_mobile')
-                ->store('banner', 'public');
-        }
+        try {
+            $gambar = $request->file('gambar')->store('banner', 'public');
 
-        Banner::create([
-            'judul'         => $request->judul,
-            'deskripsi'     => $request->deskripsi,
-            'gambar'        => $gambar,
-            'gambar_mobile' => $gambarMobile,
-            'tautan'        => $request->tautan,
-            'aktif'         => $request->has('aktif'),
-        ]);
+            if ($request->hasFile('gambar_mobile')) {
+                $gambarMobile = $request
+                    ->file('gambar_mobile')
+                    ->store('banner', 'public');
+            }
+
+            Banner::create([
+                'judul'         => $request->judul,
+                'deskripsi'     => $request->deskripsi,
+                'gambar'        => $gambar,
+                'gambar_mobile' => $gambarMobile,
+                'tautan'        => $request->tautan,
+                'aktif'         => $request->has('aktif'),
+            ]);
+        } catch (Throwable $e) {
+            // Simpan gagal: buang file yang sempat terunggah
+            Storage::disk('public')->delete(array_filter([$gambar, $gambarMobile]));
+            throw $e;
+        }
 
         return redirect()->route('admin.banner.index')
             ->with('success', 'Banner berhasil ditambahkan.');
@@ -66,28 +76,35 @@ class BannerController extends Controller
             'tautan'        => 'nullable|url',
         ]);
 
-        if ($request->hasFile('gambar')) {
-            Storage::disk('public')->delete($banner->gambar);
-            $banner->gambar = $request->file('gambar')->store('banner', 'public');
-        }
+        // File lama baru dihapus setelah data baru tersimpan;
+        // file baru dibuang lagi bila penyimpanan gagal
+        $fileLama = [];
+        $fileBaru = [];
 
-        if ($request->hasFile('gambar_mobile')) {
-
-            if ($banner->gambar_mobile) {
-                Storage::disk('public')
-                    ->delete($banner->gambar_mobile);
+        try {
+            if ($request->hasFile('gambar')) {
+                $fileLama[]     = $banner->gambar;
+                $banner->gambar = $fileBaru[] = $request->file('gambar')->store('banner', 'public');
             }
 
-            $banner->gambar_mobile = $request
-                ->file('gambar_mobile')
-                ->store('banner', 'public');
+            if ($request->hasFile('gambar_mobile')) {
+                $fileLama[]            = $banner->gambar_mobile;
+                $banner->gambar_mobile = $fileBaru[] = $request
+                    ->file('gambar_mobile')
+                    ->store('banner', 'public');
+            }
+
+            $banner->judul     = $request->judul;
+            $banner->deskripsi = $request->deskripsi;
+            $banner->tautan    = $request->tautan;
+            $banner->aktif     = $request->has('aktif');
+            $banner->save();
+        } catch (Throwable $e) {
+            Storage::disk('public')->delete($fileBaru);
+            throw $e;
         }
 
-        $banner->judul     = $request->judul;
-        $banner->deskripsi = $request->deskripsi;
-        $banner->tautan    = $request->tautan;
-        $banner->aktif     = $request->has('aktif');
-        $banner->save();
+        Storage::disk('public')->delete(array_filter($fileLama));
 
         return redirect()->route('admin.banner.index')
             ->with('success', 'Banner berhasil diperbarui.');
@@ -106,8 +123,12 @@ class BannerController extends Controller
 
     public function destroy(Banner $banner)
     {
-        Storage::disk('public')->delete(array_filter([$banner->gambar, $banner->gambar_mobile]));
-        $banner->delete();
+        $file = array_filter([$banner->gambar, $banner->gambar_mobile]);
+
+        DB::transaction(fn () => $banner->delete());
+
+        // File dihapus setelah datanya berhasil dihapus
+        Storage::disk('public')->delete($file);
 
         return redirect()->route('admin.banner.index')
             ->with('success', 'Banner berhasil dihapus.');

@@ -9,7 +9,9 @@ use App\Models\KategoriProduk;
 use App\Models\Produk;
 use App\Models\UkuranProduk;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class ProdukController extends Controller
 {
@@ -35,8 +37,9 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|max:2048',
-            'galeri.*'      => 'nullable|image|max:2048',
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'galeri'        => 'nullable|array',
+            'galeri.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $data = [
@@ -48,20 +51,37 @@ class ProdukController extends Controller
             'produk_kustom' => $request->has('produk_kustom'),
         ];
 
-        if ($request->hasFile('gambar')) {
-            $data['gambar'] = $request->file('gambar')->store('produk', 'public');
-        }
+        // File yang sudah terunggah dicatat agar bisa dihapus lagi bila penyimpanan gagal
+        $fileBaru = [];
 
-        $produk = Produk::create($data);
-
-        // ── Simpan galeri ── (INI YANG KURANG)
-        if ($request->hasFile('galeri')) {
-            foreach ($request->file('galeri') as $file) {
-                GaleriProduk::create([
-                    'produk_id' => $produk->id,
-                    'nama_file' => $file->store('galeri', 'public'),
-                ]);
+        try {
+            if ($request->hasFile('gambar')) {
+                $data['gambar'] = $fileBaru[] = $request->file('gambar')->store('produk', 'public');
             }
+
+            $galeri = [];
+            if ($request->hasFile('galeri')) {
+                foreach ($request->file('galeri') as $file) {
+                    $galeri[] = $fileBaru[] = $file->store('galeri', 'public');
+                }
+            }
+
+            // Produk & galeri disimpan sekaligus: gagal satu, batal semua
+            $produk = DB::transaction(function () use ($data, $galeri) {
+                $produk = Produk::create($data);
+
+                foreach ($galeri as $namaFile) {
+                    GaleriProduk::create([
+                        'produk_id' => $produk->id,
+                        'nama_file' => $namaFile,
+                    ]);
+                }
+
+                return $produk;
+            });
+        } catch (Throwable $e) {
+            Storage::disk('public')->delete($fileBaru);
+            throw $e;
         }
 
         // Bahan & finishing dipilih di halaman Kelola
@@ -83,7 +103,7 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|max:2048',
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $produk->nama_produk   = $request->nama_produk;
@@ -93,15 +113,29 @@ class ProdukController extends Controller
         $produk->minimal_pesan = $request->minimal_pesan;
         $produk->produk_kustom = $request->has('produk_kustom');
 
+        $gambarLama = null;
+        $gambarBaru = null;
+
         if ($request->hasFile('gambar')) {
-            // Hapus gambar lama jika ada
-            if ($produk->gambar) {
-                Storage::disk('public')->delete($produk->gambar);
-            }
-            $produk->gambar = $request->file('gambar')->store('produk', 'public');
+            $gambarLama     = $produk->gambar;
+            $gambarBaru     = $request->file('gambar')->store('produk', 'public');
+            $produk->gambar = $gambarBaru;
         }
 
-        $produk->save();
+        try {
+            $produk->save();
+        } catch (Throwable $e) {
+            // Simpan gagal: buang file baru, gambar lama tetap utuh
+            if ($gambarBaru) {
+                Storage::disk('public')->delete($gambarBaru);
+            }
+            throw $e;
+        }
+
+        // Hapus gambar lama hanya setelah data baru tersimpan
+        if ($gambarLama) {
+            Storage::disk('public')->delete($gambarLama);
+        }
 
         return redirect()->route('admin.produk.edit', $produk)
             ->with('success', 'Produk berhasil diperbarui.');
@@ -110,8 +144,12 @@ class ProdukController extends Controller
 
     public function destroy(Produk $produk)
     {
-        $produk->hapusFile();
-        $produk->delete();
+        // Catat file dulu, hapus data (galeri ikut terhapus lewat cascade), baru hapus file
+        $file = $produk->daftarFile();
+
+        DB::transaction(fn () => $produk->delete());
+
+        Storage::disk('public')->delete($file);
 
         return redirect()->route('admin.produk.index')
             ->with('success', 'Produk berhasil dihapus.');
@@ -126,14 +164,28 @@ class ProdukController extends Controller
         }
 
         $request->validate([
-            'gambar.*' => 'image|max:2048',
+            'gambar'   => 'array',
+            'gambar.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        foreach ($request->file('gambar') as $file) {
-            GaleriProduk::create([
-                'produk_id' => $produk->id,
-                'nama_file' => $file->store('galeri', 'public'),
-            ]);
+        $fileBaru = [];
+
+        try {
+            foreach ($request->file('gambar') as $file) {
+                $fileBaru[] = $file->store('galeri', 'public');
+            }
+
+            DB::transaction(function () use ($produk, $fileBaru) {
+                foreach ($fileBaru as $namaFile) {
+                    GaleriProduk::create([
+                        'produk_id' => $produk->id,
+                        'nama_file' => $namaFile,
+                    ]);
+                }
+            });
+        } catch (Throwable $e) {
+            Storage::disk('public')->delete($fileBaru);
+            throw $e;
         }
 
         return back()->with('success', 'Galeri berhasil ditambahkan.');
@@ -142,8 +194,10 @@ class ProdukController extends Controller
     public function hapusGaleri($id)
     {
         $galeri = GaleriProduk::findOrFail($id);
-        Storage::disk('public')->delete($galeri->nama_file);
         $galeri->delete();
+
+        // File dihapus setelah datanya berhasil dihapus
+        Storage::disk('public')->delete($galeri->nama_file);
 
         return back()->with('success', 'Foto berhasil dihapus.');
     }
@@ -151,7 +205,13 @@ class ProdukController extends Controller
     // ── Ukuran ────────────────────────────────────────────
     public function tambahUkuran(Request $request, Produk $produk)
     {
-        $request->validate(['nama_ukuran' => 'required|string|max:255']);
+        $request->validate([
+            'nama_ukuran' => 'required|string|max:255',
+            'panjang'     => 'nullable|numeric|min:0|max:999999',
+            'lebar'       => 'nullable|numeric|min:0|max:999999',
+            'tinggi'      => 'nullable|numeric|min:0|max:999999',
+            'keterangan'  => 'nullable|string|max:255',
+        ]);
 
         UkuranProduk::create([
             'produk_id'   => $produk->id,
