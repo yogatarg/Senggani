@@ -22,8 +22,7 @@
                             @if ($item->gambar_mobile)
                                 {{-- Fix: pakai max-width 767.98px sesuai Bootstrap breakpoint md --}}
                                 <source media="(max-width: 767.98px)"
-                                    srcset="{{ asset('storage/' . $item->gambar_mobile) }}"
-                                    type="image/webp, image/jpeg, image/png">
+                                    srcset="{{ asset('storage/' . $item->gambar_mobile) }}">
                             @endif
                             <img src="{{ asset('storage/' . $item->gambar) }}" class="d-block w-100"
                                 alt="{{ $item->judul }}" width="1920" height="550" loading="eager">
