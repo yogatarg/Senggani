@@ -31,6 +31,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
         ->name('dashboard');
 
     Route::resource('banner', BannerController::class);
+    Route::patch('banner/{banner}/aktif', [BannerController::class, 'toggleAktif'])
+        ->name('banner.aktif');
 
     Route::resource('kategori-produk', KategoriProdukController::class);
 

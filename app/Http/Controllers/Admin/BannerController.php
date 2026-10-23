@@ -44,7 +44,7 @@ class BannerController extends Controller
             'gambar'        => $gambar,
             'gambar_mobile' => $gambarMobile,
             'tautan'        => $request->tautan,
-            'aktif'         => true,
+            'aktif'         => $request->has('aktif'),
         ]);
 
         return redirect()->route('admin.banner.index')
@@ -86,15 +86,27 @@ class BannerController extends Controller
         $banner->judul     = $request->judul;
         $banner->deskripsi = $request->deskripsi;
         $banner->tautan    = $request->tautan;
+        $banner->aktif     = $request->has('aktif');
         $banner->save();
 
         return redirect()->route('admin.banner.index')
             ->with('success', 'Banner berhasil diperbarui.');
     }
 
+    // Aktif / nonaktifkan banner langsung dari daftar
+    public function toggleAktif(Banner $banner)
+    {
+        $banner->aktif = ! $banner->aktif;
+        $banner->save();
+
+        return back()->with('success', $banner->aktif
+            ? 'Banner ditampilkan di website.'
+            : 'Banner disembunyikan dari website.');
+    }
+
     public function destroy(Banner $banner)
     {
-        Storage::disk('public')->delete($banner->gambar);
+        Storage::disk('public')->delete(array_filter([$banner->gambar, $banner->gambar_mobile]));
         $banner->delete();
 
         return redirect()->route('admin.banner.index')

@@ -64,6 +64,15 @@
                         placeholder="https://...">
                 </div>
 
+                <div class="form-group">
+                    <div class="custom-control custom-switch">
+                        {{-- Default aktif; setelah gagal validasi ikuti pilihan sebelumnya --}}
+                        <input type="checkbox" name="aktif" class="custom-control-input" id="aktif"
+                            {{ (old('_token') ? old('aktif') : true) ? 'checked' : '' }}>
+                        <label class="custom-control-label" for="aktif">Tampilkan banner di website</label>
+                    </div>
+                </div>
+
                 <a href="{{ route('admin.banner.index') }}" class="btn btn-secondary">Batal</a>
                 <button type="submit" class="btn btn-primary">Simpan</button>
             </form>
