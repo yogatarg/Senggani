@@ -52,8 +52,11 @@
 
         <div class="form-group">
             <label>Deskripsi</label>
-            <textarea name="deskripsi" rows="4" class="form-control"
+            <textarea name="deskripsi" rows="4" class="form-control @error('deskripsi') is-invalid @enderror"
                       placeholder="Deskripsi lengkap produk...">{{ old('deskripsi') }}</textarea>
+            @error('deskripsi')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
         </div>
 
         <div class="form-group">
@@ -104,7 +107,10 @@
         <div class="form-group">
             <label>Upload Foto Galeri</label>
             <input type="file" name="galeri[]"
-                   class="form-control" accept="image/*" multiple>
+                   class="form-control @error('galeri.*') is-invalid @enderror" accept="image/*" multiple>
+            @error('galeri.*')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
             <small class="text-muted">
                 Bisa pilih lebih dari satu foto. Format: JPG, PNG, WEBP. Maks: 2MB per foto.
             </small>

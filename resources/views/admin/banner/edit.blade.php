@@ -21,7 +21,10 @@
                 <div class="form-group">
                     <label>Deskripsi</label>
 
-                    <textarea name="deskripsi" rows="4" class="form-control">{{ old('deskripsi', $banner->deskripsi) }}</textarea>
+                    <textarea name="deskripsi" rows="4" class="form-control @error('deskripsi') is-invalid @enderror">{{ old('deskripsi', $banner->deskripsi) }}</textarea>
+                    @error('deskripsi')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group">
@@ -47,7 +50,10 @@
                         </div>
                     @endif
 
-                    <input type="file" name="gambar_mobile" class="form-control">
+                    <input type="file" name="gambar_mobile" class="form-control @error('gambar_mobile') is-invalid @enderror">
+                    @error('gambar_mobile')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
 
                     <small class="text-muted">
                         Kosongkan jika tidak ingin mengganti gambar mobile.
@@ -56,8 +62,11 @@
 
                 <div class="form-group">
                     <label>Tautan (opsional)</label>
-                    <input type="url" name="tautan" class="form-control" value="{{ old('tautan', $banner->tautan) }}"
+                    <input type="url" name="tautan" class="form-control @error('tautan') is-invalid @enderror" value="{{ old('tautan', $banner->tautan) }}"
                         placeholder="https://...">
+                    @error('tautan')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group">

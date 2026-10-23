@@ -60,8 +60,11 @@
 
                 <div class="form-group">
                     <label>Tautan (opsional)</label>
-                    <input type="url" name="tautan" class="form-control" value="{{ old('tautan') }}"
+                    <input type="url" name="tautan" class="form-control @error('tautan') is-invalid @enderror" value="{{ old('tautan') }}"
                         placeholder="https://...">
+                    @error('tautan')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group">

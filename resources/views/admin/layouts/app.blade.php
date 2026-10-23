@@ -139,6 +139,19 @@
                         </div>
                     @endif
 
+                    {{-- Ringkasan Error Validasi --}}
+                    @if ($errors->any())
+                        <div class="alert alert-danger alert-dismissible" role="alert">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <i class="fas fa-exclamation-circle me-1"></i> Data belum tersimpan. Periksa kembali isian berikut:
+                            <ul class="mb-0 mt-2">
+                                @foreach ($errors->all() as $pesan)
+                                    <li>{{ $pesan }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
                     @yield('content')
                 </div>
             </div>
@@ -154,6 +167,29 @@
     <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
     <script src="{{ asset('vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('vendor/adminlte/dist/js/adminlte.min.js') }}"></script>
+    <script>
+        // Cegah kirim ganda: nonaktifkan tombol submit setelah form benar-benar dikirim.
+        // Listener di document (fase bubble) berjalan setelah onsubmit inline, jadi form
+        // yang dibatalkan lewat confirm() (defaultPrevented) tidak ikut dinonaktifkan.
+        document.addEventListener('submit', function (e) {
+            const tombol = e.submitter;
+            if (e.defaultPrevented || !tombol) return;
+            // Ditunda agar nilai tombol tetap ikut terkirim bersama data form.
+            setTimeout(function () {
+                tombol.disabled = true;
+                tombol.dataset.kirimGanda = '1';
+            }, 0);
+        });
+
+        // Aktifkan lagi bila halaman dipulihkan dari cache saat menekan tombol Kembali.
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted) return;
+            document.querySelectorAll('[data-kirim-ganda]').forEach(function (tombol) {
+                tombol.disabled = false;
+                delete tombol.dataset.kirimGanda;
+            });
+        });
+    </script>
     @stack('scripts')
 </body>
 

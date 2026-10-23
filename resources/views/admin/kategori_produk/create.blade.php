@@ -25,7 +25,10 @@
             <div class="form-group">
                 <label>Deskripsi</label>
                 <textarea name="deskripsi" rows="4"
-                          class="form-control">{{ old('deskripsi') }}</textarea>
+                          class="form-control @error('deskripsi') is-invalid @enderror">{{ old('deskripsi') }}</textarea>
+                @error('deskripsi')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
             </div>
 
             {{-- INPUT GAMBAR --}}

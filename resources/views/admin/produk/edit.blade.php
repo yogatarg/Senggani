@@ -16,33 +16,45 @@
                 <div class="row">
                     <div class="form-group col-md-6">
                         <label>Nama Produk</label>
-                        <input type="text" name="nama_produk" class="form-control"
+                        <input type="text" name="nama_produk" class="form-control @error('nama_produk') is-invalid @enderror"
                             value="{{ old('nama_produk', $produk->nama_produk) }}" required>
+                        @error('nama_produk')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
                     </div>
 
                     <div class="form-group col-md-6">
                         <label>Kategori</label>
-                        <select name="kategori_id" class="form-control" required>
+                        <select name="kategori_id" class="form-control @error('kategori_id') is-invalid @enderror" required>
                             @foreach ($kategori as $kat)
                                 <option value="{{ $kat->id }}"
-                                    {{ $produk->kategori_id == $kat->id ? 'selected' : '' }}>
+                                    {{ old('kategori_id', $produk->kategori_id) == $kat->id ? 'selected' : '' }}>
                                     {{ $kat->nama_kategori }}
                                 </option>
                             @endforeach
                         </select>
+                        @error('kategori_id')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Deskripsi</label>
-                    <textarea name="deskripsi" class="form-control" rows="4">{{ old('deskripsi', $produk->deskripsi) }}</textarea>
+                    <textarea name="deskripsi" class="form-control @error('deskripsi') is-invalid @enderror" rows="4">{{ old('deskripsi', $produk->deskripsi) }}</textarea>
+                    @error('deskripsi')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
                             <label>Minimal Pesan (pcs)</label>
-                            <input type="number" name="minimal_pesan" class="form-control"
+                            <input type="number" name="minimal_pesan" class="form-control @error('minimal_pesan') is-invalid @enderror"
                                 value="{{ old('minimal_pesan', $produk->minimal_pesan) }}" required>
+                            @error('minimal_pesan')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 </div>
@@ -54,7 +66,10 @@
                             <img src="{{ asset('storage/' . $produk->gambar) }}" height="80">
                         </div>
                     @endif
-                    <input type="file" name="gambar" class="form-control">
+                    <input type="file" name="gambar" class="form-control @error('gambar') is-invalid @enderror">
+                    @error('gambar')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group">
@@ -95,7 +110,10 @@
                 @csrf
                 <div class="form-group">
                     <label>Upload Foto (bisa lebih dari satu)</label>
-                    <input type="file" name="gambar[]" class="form-control" multiple>
+                    <input type="file" name="gambar[]" class="form-control @error('gambar.*') is-invalid @enderror" multiple>
+                    @error('gambar.*')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
                 <button type="submit" class="btn btn-success">Upload Galeri</button>
             </form>
