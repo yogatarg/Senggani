@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.admin' => \App\Http\Middleware\AuthAdmin::class,
         ]);
 
+        // Header keamanan di semua respons
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
