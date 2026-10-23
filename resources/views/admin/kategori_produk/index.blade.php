@@ -60,7 +60,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted">
+                            <td colspan="7" class="text-center text-muted">
                                 Belum ada kategori. <a href="{{ route('admin.kategori-produk.create') }}">Tambah
                                     sekarang</a>
                             </td>

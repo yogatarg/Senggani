@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\KategoriProduk;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 
 class KategoriProdukController extends Controller
@@ -31,7 +30,7 @@ class KategoriProdukController extends Controller
 
         $data = [
             'nama_kategori' => $request->nama_kategori,
-            'slug'          => Str::slug($request->nama_kategori),
+            'slug'          => KategoriProduk::slugUnik($request->nama_kategori),
             'deskripsi'     => $request->deskripsi,
         ];
 
@@ -61,7 +60,7 @@ class KategoriProdukController extends Controller
         ]);
 
         $kategoriProduk->nama_kategori = $request->nama_kategori;
-        $kategoriProduk->slug          = Str::slug($request->nama_kategori);
+        $kategoriProduk->slug          = KategoriProduk::slugUnik($request->nama_kategori, $kategoriProduk->id);
         $kategoriProduk->deskripsi     = $request->deskripsi;
 
         // Ganti gambar jika ada upload baru
@@ -85,6 +84,11 @@ class KategoriProdukController extends Controller
         // Hapus gambar saat kategori dihapus
         if ($kategoriProduk->gambar) {
             Storage::disk('public')->delete($kategoriProduk->gambar);
+        }
+
+        // Produk di kategori ini ikut terhapus (cascade), jadi hapus juga file-filenya
+        foreach ($kategoriProduk->produk as $produk) {
+            $produk->hapusFile();
         }
 
         $kategoriProduk->delete();

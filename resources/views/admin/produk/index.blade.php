@@ -92,7 +92,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted">
+                            <td colspan="9" class="text-center text-muted">
                                 Belum ada produk. <a href="{{ route('admin.produk.create') }}">Tambah sekarang</a>
                             </td>
                         </tr>

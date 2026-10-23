@@ -57,6 +57,16 @@
                     <input type="file" name="gambar" class="form-control">
                 </div>
 
+                <div class="form-group">
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" name="produk_kustom" class="custom-control-input" id="produk_kustom"
+                            {{ old('produk_kustom', $produk->produk_kustom) ? 'checked' : '' }}>
+                        <label class="custom-control-label" for="produk_kustom">
+                            Produk ini bisa dikustomisasi
+                        </label>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn btn-primary">Update Produk</button>
             </form>
         </div>

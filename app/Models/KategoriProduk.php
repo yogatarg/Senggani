@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SlugUnik;
 use Illuminate\Database\Eloquent\Model;
 
 class KategoriProduk extends Model
 {
+    use SlugUnik;
+
     protected $table = 'kategori_produk';
 
     protected $fillable = [

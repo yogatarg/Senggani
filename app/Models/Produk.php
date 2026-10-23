@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\SlugUnik;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Produk extends Model
 {
+    use SlugUnik;
+
     protected $table = 'produk';
 
     protected $fillable = [
@@ -17,6 +21,15 @@ class Produk extends Model
         'gambar',
         'produk_kustom',
     ];
+
+    // Hapus gambar utama & semua foto galeri dari storage
+    // (dipanggil sebelum produk dihapus)
+    public function hapusFile(): void
+    {
+        $file = $this->galeri()->pluck('nama_file')->push($this->gambar)->filter()->all();
+
+        Storage::disk('public')->delete($file);
+    }
 
     // Relasi ke kategori
     public function kategori()

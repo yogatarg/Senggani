@@ -10,7 +10,6 @@ use App\Models\Produk;
 use App\Models\UkuranProduk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class ProdukController extends Controller
 {
@@ -42,7 +41,7 @@ class ProdukController extends Controller
 
         $data = [
             'nama_produk'   => $request->nama_produk,
-            'slug'          => Str::slug($request->nama_produk),
+            'slug'          => Produk::slugUnik($request->nama_produk),
             'kategori_id'   => $request->kategori_id,
             'deskripsi'     => $request->deskripsi,
             'minimal_pesan' => $request->minimal_pesan,
@@ -88,7 +87,7 @@ class ProdukController extends Controller
         ]);
 
         $produk->nama_produk   = $request->nama_produk;
-        $produk->slug          = Str::slug($request->nama_produk);
+        $produk->slug          = Produk::slugUnik($request->nama_produk, $produk->id);
         $produk->kategori_id   = $request->kategori_id;
         $produk->deskripsi     = $request->deskripsi;
         $produk->minimal_pesan = $request->minimal_pesan;
@@ -111,9 +110,7 @@ class ProdukController extends Controller
 
     public function destroy(Produk $produk)
     {
-        if ($produk->gambar && Storage::disk('public')->exists($produk->gambar)) {
-            Storage::disk('public')->delete($produk->gambar);
-        }
+        $produk->hapusFile();
         $produk->delete();
 
         return redirect()->route('admin.produk.index')
