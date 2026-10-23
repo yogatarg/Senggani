@@ -2,8 +2,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\BahanProduk;
-use App\Models\FinishingProduk;
+use App\Models\Bahan;
+use App\Models\Finishing;
 use App\Models\GaleriProduk;
 use App\Models\KategoriProduk;
 use App\Models\Produk;
@@ -65,32 +65,9 @@ class ProdukController extends Controller
             }
         }
 
-        // ── Simpan bahan ──
-        if ($request->filled('bahan')) {
-            foreach ($request->bahan as $item) {
-                if (! empty($item['nama_bahan'])) {
-                    BahanProduk::create([
-                        'produk_id'  => $produk->id,
-                        'nama_bahan' => $item['nama_bahan'],
-                    ]);
-                }
-            }
-        }
-
-        // ── Simpan finishing ──
-        if ($request->filled('finishing')) {
-            foreach ($request->finishing as $item) {
-                if (! empty($item['nama_finishing'])) {
-                    FinishingProduk::create([
-                        'produk_id'      => $produk->id,
-                        'nama_finishing' => $item['nama_finishing'],
-                    ]);
-                }
-            }
-        }
-
-        return redirect()->route('admin.produk.index', $produk)
-            ->with('success', 'Produk berhasil dibuat. Silakan lengkapi data produk.');
+        // Bahan & finishing dipilih di halaman Kelola
+        return redirect()->route('admin.produk.atribut', $produk)
+            ->with('success', 'Produk berhasil dibuat. Silakan pilih bahan dan finishing produk.');
     }
 
     public function edit(Produk $produk)
@@ -197,49 +174,38 @@ class ProdukController extends Controller
         return back()->with('success', 'Ukuran berhasil dihapus.');
     }
 
-    // ── Bahan ─────────────────────────────────────────────
-    public function tambahBahan(Request $request, Produk $produk)
-    {
-        $request->validate(['nama_bahan' => 'required|string|max:255']);
-
-        BahanProduk::create([
-            'produk_id'  => $produk->id,
-            'nama_bahan' => $request->nama_bahan,
-            'deskripsi'  => $request->deskripsi,
-        ]);
-
-        return back()->with('success', 'Bahan berhasil ditambahkan.');
-    }
-
-    public function hapusBahan($id)
-    {
-        BahanProduk::findOrFail($id)->delete();
-        return back()->with('success', 'Bahan berhasil dihapus.');
-    }
-
-    // ── Finishing ─────────────────────────────────────────
-    public function tambahFinishing(Request $request, Produk $produk)
-    {
-        $request->validate(['nama_finishing' => 'required|string|max:255']);
-
-        FinishingProduk::create([
-            'produk_id'      => $produk->id,
-            'nama_finishing' => $request->nama_finishing,
-            'deskripsi'      => $request->deskripsi,
-        ]);
-
-        return back()->with('success', 'Finishing berhasil ditambahkan.');
-    }
-
-    public function hapusFinishing($id)
-    {
-        FinishingProduk::findOrFail($id)->delete();
-        return back()->with('success', 'Finishing berhasil dihapus.');
-    }
-
+    // ── Kelola Bahan & Finishing (centang dari master) ────
     public function atribut(Produk $produk)
     {
         $produk->load(['bahan', 'finishing']);
-        return view('admin.produk.atribut', compact('produk'));
+        $semuaBahan     = Bahan::orderBy('nama_bahan')->get();
+        $semuaFinishing = Finishing::orderBy('nama_finishing')->get();
+
+        return view('admin.produk.atribut', compact('produk', 'semuaBahan', 'semuaFinishing'));
+    }
+
+    public function simpanBahan(Request $request, Produk $produk)
+    {
+        $request->validate([
+            'bahan'   => 'nullable|array',
+            'bahan.*' => 'exists:bahan,id',
+        ]);
+
+        // sync(): yang dicentang ditambahkan, yang tidak dicentang dilepas
+        $produk->bahan()->sync($request->input('bahan', []));
+
+        return back()->with('success', 'Bahan produk berhasil disimpan.');
+    }
+
+    public function simpanFinishing(Request $request, Produk $produk)
+    {
+        $request->validate([
+            'finishing'   => 'nullable|array',
+            'finishing.*' => 'exists:finishing,id',
+        ]);
+
+        $produk->finishing()->sync($request->input('finishing', []));
+
+        return back()->with('success', 'Finishing produk berhasil disimpan.');
     }
 }

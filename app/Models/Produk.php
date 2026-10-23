@@ -36,15 +36,17 @@ class Produk extends Model
         return $this->hasMany(UkuranProduk::class, 'produk_id');
     }
 
-    // Relasi ke bahan
+    // Relasi ke bahan (dipilih dari master bahan)
     public function bahan()
     {
-        return $this->hasMany(BahanProduk::class, 'produk_id');
+        return $this->belongsToMany(Bahan::class, 'produk_bahan', 'produk_id', 'bahan_id')
+                    ->orderBy('nama_bahan');
     }
 
-    // Relasi ke finishing
+    // Relasi ke finishing (dipilih dari master finishing)
     public function finishing()
     {
-        return $this->hasMany(FinishingProduk::class, 'produk_id');
+        return $this->belongsToMany(Finishing::class, 'produk_finishing', 'produk_id', 'finishing_id')
+                    ->orderBy('nama_finishing');
     }
 }

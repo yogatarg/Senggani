@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\BahanController;
 use App\Http\Controllers\Admin\BannerController;
+use App\Http\Controllers\Admin\FinishingController;
 use App\Http\Controllers\Admin\KategoriProdukController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\KategoriController;
@@ -46,18 +48,18 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
     Route::delete('ukuran/{id}', [\App\Http\Controllers\Admin\ProdukController::class, 'hapusUkuran'])
         ->name('produk.ukuran.hapus');
 
-    // Bahan
-    Route::post('produk/{produk}/bahan', [\App\Http\Controllers\Admin\ProdukController::class, 'tambahBahan'])
-        ->name('produk.bahan.tambah');
-    Route::delete('bahan/{id}', [\App\Http\Controllers\Admin\ProdukController::class, 'hapusBahan'])
-        ->name('produk.bahan.hapus');
-
-    // Finishing
-    Route::post('produk/{produk}/finishing', [\App\Http\Controllers\Admin\ProdukController::class, 'tambahFinishing'])
-        ->name('produk.finishing.tambah');
-    Route::delete('finishing/{id}', [\App\Http\Controllers\Admin\ProdukController::class, 'hapusFinishing'])
-        ->name('produk.finishing.hapus');
-
+    // Kelola bahan & finishing produk (centang dari master)
     Route::get('/produk/{produk}/kelola', [\App\Http\Controllers\Admin\ProdukController::class, 'atribut'])
-    ->name('produk.atribut');
+        ->name('produk.atribut');
+    Route::put('produk/{produk}/bahan', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanBahan'])
+        ->name('produk.bahan.simpan');
+    Route::put('produk/{produk}/finishing', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanFinishing'])
+        ->name('produk.finishing.simpan');
+
+    // Master bahan & finishing
+    Route::resource('bahan', BahanController::class)
+        ->only(['index', 'store', 'edit', 'update', 'destroy'])
+        ->parameters(['bahan' => 'bahan']);
+    Route::resource('finishing', FinishingController::class)
+        ->only(['index', 'store', 'edit', 'update', 'destroy']);
 });

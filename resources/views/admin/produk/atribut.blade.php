@@ -5,108 +5,171 @@
 
 @section('content')
 
+<div class="mb-3">
+    <a href="{{ route('admin.produk.index') }}" class="btn btn-secondary btn-sm">
+        <i class="fas fa-arrow-left"></i> Kembali ke Daftar Produk
+    </a>
+</div>
+
 <div class="row">
 
     {{-- ================= BAHAN ================= --}}
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Bahan Produk</h3>
+                <span class="badge badge-primary ml-auto" data-counter="bahan">
+                    {{ $produk->bahan->count() }} dipilih
+                </span>
             </div>
-            <div class="card-body">
 
-                {{-- LIST --}}
-                <table class="table table-bordered table-sm mb-3">
-                    <thead>
-                        <tr>
-                            <th>Nama Bahan</th>
-                            <th width="80">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($produk->bahan as $item)
-                            <tr>
-                                <td>{{ $item->nama_bahan }}</td>
-                                <td>
-                                    <form action="{{ route('admin.produk.bahan.hapus', $item->id) }}" method="POST">
-                                        @csrf @method('DELETE')
-                                        <button class="btn btn-danger btn-xs">Hapus</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="2" class="text-center text-muted">Belum ada bahan</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-
-                {{-- FORM --}}
-                <form action="{{ route('admin.produk.bahan.tambah', $produk) }}" method="POST">
-                    @csrf
-                    <div class="input-group">
-                        <input type="text" name="nama_bahan" class="form-control" placeholder="Nama bahan" required>
-                        <div class="input-group-append">
-                            <button class="btn btn-success">Tambah</button>
+            <form action="{{ route('admin.produk.bahan.simpan', $produk) }}" method="POST" data-pilihan="bahan">
+                @csrf @method('PUT')
+                <div class="card-body">
+                    @if ($semuaBahan->isEmpty())
+                        <p class="text-muted text-center mb-0">
+                            Belum ada data bahan.
+                            <a href="{{ route('admin.bahan.index') }}">Tambah di Master Bahan</a>
+                        </p>
+                    @else
+                        <div class="d-flex mb-3">
+                            <input type="search" class="form-control form-control-sm mr-2"
+                                placeholder="Cari bahan..." data-cari>
+                            <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" data-pilih-semua>
+                                Pilih semua
+                            </button>
                         </div>
-                    </div>
-                </form>
 
-            </div>
+                        <div class="row">
+                            @php $dipilih = $produk->bahan->pluck('id')->all(); @endphp
+                            @foreach ($semuaBahan as $item)
+                                <div class="col-sm-6" data-item="{{ strtolower($item->nama_bahan) }}">
+                                    <div class="custom-control custom-checkbox mb-2">
+                                        <input type="checkbox" class="custom-control-input"
+                                            id="bahan{{ $item->id }}" name="bahan[]" value="{{ $item->id }}"
+                                            {{ in_array($item->id, $dipilih) ? 'checked' : '' }}>
+                                        <label class="custom-control-label font-weight-normal" for="bahan{{ $item->id }}">
+                                            {{ $item->nama_bahan }}
+                                        </label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <a href="{{ route('admin.bahan.index') }}" class="small">
+                        <i class="fas fa-cog"></i> Kelola Master Bahan
+                    </a>
+                    @if ($semuaBahan->isNotEmpty())
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Simpan Bahan
+                        </button>
+                    @endif
+                </div>
+            </form>
         </div>
     </div>
 
     {{-- ================= FINISHING ================= --}}
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Finishing Produk</h3>
+                <span class="badge badge-primary ml-auto" data-counter="finishing">
+                    {{ $produk->finishing->count() }} dipilih
+                </span>
             </div>
-            <div class="card-body">
 
-                {{-- LIST --}}
-                <table class="table table-bordered table-sm mb-3">
-                    <thead>
-                        <tr>
-                            <th>Nama Finishing</th>
-                            <th width="80">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($produk->finishing as $item)
-                            <tr>
-                                <td>{{ $item->nama_finishing }}</td>
-                                <td>
-                                    <form action="{{ route('admin.produk.finishing.hapus', $item->id) }}" method="POST">
-                                        @csrf @method('DELETE')
-                                        <button class="btn btn-danger btn-xs">Hapus</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="2" class="text-center text-muted">Belum ada finishing</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-
-                {{-- FORM --}}
-                <form action="{{ route('admin.produk.finishing.tambah', $produk) }}" method="POST">
-                    @csrf
-                    <div class="input-group">
-                        <input type="text" name="nama_finishing" class="form-control" placeholder="Nama finishing" required>
-                        <div class="input-group-append">
-                            <button class="btn btn-success">Tambah</button>
+            <form action="{{ route('admin.produk.finishing.simpan', $produk) }}" method="POST" data-pilihan="finishing">
+                @csrf @method('PUT')
+                <div class="card-body">
+                    @if ($semuaFinishing->isEmpty())
+                        <p class="text-muted text-center mb-0">
+                            Belum ada data finishing.
+                            <a href="{{ route('admin.finishing.index') }}">Tambah di Master Finishing</a>
+                        </p>
+                    @else
+                        <div class="d-flex mb-3">
+                            <input type="search" class="form-control form-control-sm mr-2"
+                                placeholder="Cari finishing..." data-cari>
+                            <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" data-pilih-semua>
+                                Pilih semua
+                            </button>
                         </div>
-                    </div>
-                </form>
 
-            </div>
+                        <div class="row">
+                            @php $dipilih = $produk->finishing->pluck('id')->all(); @endphp
+                            @foreach ($semuaFinishing as $item)
+                                <div class="col-sm-6" data-item="{{ strtolower($item->nama_finishing) }}">
+                                    <div class="custom-control custom-checkbox mb-2">
+                                        <input type="checkbox" class="custom-control-input"
+                                            id="finishing{{ $item->id }}" name="finishing[]" value="{{ $item->id }}"
+                                            {{ in_array($item->id, $dipilih) ? 'checked' : '' }}>
+                                        <label class="custom-control-label font-weight-normal" for="finishing{{ $item->id }}">
+                                            {{ $item->nama_finishing }}
+                                        </label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <a href="{{ route('admin.finishing.index') }}" class="small">
+                        <i class="fas fa-cog"></i> Kelola Master Finishing
+                    </a>
+                    @if ($semuaFinishing->isNotEmpty())
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Simpan Finishing
+                        </button>
+                    @endif
+                </div>
+            </form>
         </div>
     </div>
 
 </div>
 
 @endsection
+
+@push('scripts')
+<script>
+    document.querySelectorAll('form[data-pilihan]').forEach(form => {
+        const jenis     = form.dataset.pilihan;
+        const counter   = document.querySelector(`[data-counter="${jenis}"]`);
+        const items     = form.querySelectorAll('[data-item]');
+        const checkbox  = form.querySelectorAll('input[type="checkbox"]');
+        const cari      = form.querySelector('[data-cari]');
+        const pilihSemua = form.querySelector('[data-pilih-semua]');
+
+        // ── Hitung jumlah yang dicentang ──
+        function updateCounter() {
+            const jumlah = form.querySelectorAll('input[type="checkbox"]:checked').length;
+            counter.textContent = jumlah + ' dipilih';
+        }
+        checkbox.forEach(cb => cb.addEventListener('change', updateCounter));
+
+        // ── Pencarian ──
+        cari?.addEventListener('input', function () {
+            const kata = this.value.toLowerCase().trim();
+            items.forEach(el => {
+                el.style.display = el.dataset.item.includes(kata) ? '' : 'none';
+            });
+        });
+
+        // ── Pilih / batal pilih semua (yang sedang tampil) ──
+        pilihSemua?.addEventListener('click', function () {
+            const tampil = Array.from(items)
+                .filter(el => el.style.display !== 'none')
+                .map(el => el.querySelector('input'));
+            const semuaTercentang = tampil.every(cb => cb.checked);
+            tampil.forEach(cb => cb.checked = !semuaTercentang);
+            this.textContent = semuaTercentang ? 'Pilih semua' : 'Batal pilih';
+            updateCounter();
+        });
+    });
+</script>
+@endpush

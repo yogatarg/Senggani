@@ -158,11 +158,5 @@
                 reader.readAsDataURL(file);
             });
         });
-
-
-    // ── Hapus baris ──
-    function hapusBaris(btn) {
-        btn.closest('.bahan-row, .finishing-row').remove();
-    }
 </script>
 @endpush

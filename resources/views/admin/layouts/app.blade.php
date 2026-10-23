@@ -74,6 +74,22 @@
                         </li>
 
                         <li class="nav-item">
+                            <a href="{{ route('admin.bahan.index') }}"
+                                class="nav-link {{ request()->routeIs('admin.bahan*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-layer-group"></i>
+                                <p>Master Bahan</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="{{ route('admin.finishing.index') }}"
+                                class="nav-link {{ request()->routeIs('admin.finishing*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-paint-brush"></i>
+                                <p>Master Finishing</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <form action="{{ route('admin.logout') }}" method="POST">
                                 @csrf
                                 <button type="submit" class="nav-link btn btn-link text-danger"
