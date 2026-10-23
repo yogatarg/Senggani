@@ -112,7 +112,7 @@
         <i class="fab fa-whatsapp fa-3x mb-3" style="color:#25d366;"></i>
         <h4 class="fw-700 mb-2">Tidak menemukan yang Anda cari?</h4>
         <p class="opacity-75 mb-4">Konsultasikan kebutuhan packaging Anda langsung via WhatsApp</p>
-        <a href="https://wa.me/6285236987231?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20bertanya%20mengenai%20produk%20kategori%20{{ urlencode($kategori->nama_kategori) }}."
+        <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20bertanya%20mengenai%20produk%20kategori%20{{ urlencode($kategori->nama_kategori) }}."
            target="_blank"
            class="btn btn-success btn-lg rounded-pill px-5">
             <i class="fab fa-whatsapp me-2"></i> Konsultasi Sekarang

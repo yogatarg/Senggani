@@ -443,7 +443,7 @@
                         <a href="https://www.instagram.com/sengganipaperbag?igsh=MXNqMmVyMjJ2N2h4ZQ="><i
                                 class="fab fa-instagram fa-lg"></i></a>
                         <a href="#"><i class="fab fa-facebook fa-lg"></i></a>
-                        <a href="#"><i class="fab fa-whatsapp fa-lg"></i></a>
+                        <a href="https://wa.me/6283829208316" target="_blank"><i class="fab fa-whatsapp fa-lg"></i></a>
                         <a href="#"><i class="fab fa-tiktok fa-lg"></i></a>
                     </div>
                 </div>
@@ -461,7 +461,7 @@
                     <ul class="list-unstyled" style="font-size:0.9rem;">
                         <li class="mb-2">
                             <i class="fab fa-whatsapp me-2" style="color:#25d366;"></i>
-                            <a href="https://wa.me/6281234567890">+62 812-3456-7890</a>
+                            <a href="https://wa.me/6283829208316">+62 838-2920-8316</a>
                         </li>
                         <li class="mb-2">
                             <i class="fas fa-envelope me-2" style="color:var(--accent);"></i>

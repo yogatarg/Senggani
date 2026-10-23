@@ -238,7 +238,7 @@
 
     {{-- Scripts --}}
     <script>
-        const NOMOR_WA = '6285236987231';
+        const NOMOR_WA = '6283829208316';
         const NAMA_PRODUK = @json($produk->nama_produk);
         const URL_PRODUK = @json(url()->current());
 

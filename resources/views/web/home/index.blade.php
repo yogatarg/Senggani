@@ -39,7 +39,7 @@
                                 @endif
                             </div>
 
-                            <a href="https://wa.me/6285236987231" target="_blank" class="btn-banner-wa rounded-pill px-4">
+                            <a href="https://wa.me/6283829208316" target="_blank" class="btn-banner-wa rounded-pill px-4">
 
                                 <i class="fab fa-whatsapp me-2"></i>
                                 Pesan Sekarang
@@ -64,7 +64,7 @@
             <div class="container text-center text-white">
                 <h1 class="display-4 fw-bold mb-3">Senggani Paperbag</h1>
                 <p class="fs-5 mb-4 opacity-75">Spesialis Packaging Berkualitas untuk Bisnis Anda</p>
-                <a href="https://wa.me/6285236987231" target="_blank" class="btn btn-success btn-lg rounded-pill px-5">
+                <a href="https://wa.me/6283829208316" target="_blank" class="btn btn-success btn-lg rounded-pill px-5">
                     <i class="fab fa-whatsapp me-2"></i>Konsultasi Gratis
                 </a>
             </div>
@@ -277,7 +277,7 @@
                 Konsultasikan kebutuhan packaging bisnis Anda sekarang.<br>
                 Gratis konsultasi, tanpa biaya desain!
             </p>
-            <a href="https://wa.me/6285236987231?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20konsultasi%20mengenai%20packaging."
+            <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20konsultasi%20mengenai%20packaging."
                 target="_blank" class="btn btn-success btn-lg rounded-pill px-5 py-3 fs-5 fw-600">
                 <i class="fab fa-whatsapp me-2"></i>Konsultasi Sekarang via WhatsApp
             </a>
