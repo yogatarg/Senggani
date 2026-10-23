@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use App\Models\Concerns\SlugUnik;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class KategoriProduk extends Model
 {
-    use SlugUnik;
+    use HasFactory, SlugUnik;
 
     protected $table = 'kategori_produk';
 
