@@ -30,13 +30,13 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
     Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
         ->name('dashboard');
 
-    Route::resource('banner', BannerController::class);
+    Route::resource('banner', BannerController::class)->except(['show']);
     Route::patch('banner/{banner}/aktif', [BannerController::class, 'toggleAktif'])
         ->name('banner.aktif');
 
-    Route::resource('kategori-produk', KategoriProdukController::class);
+    Route::resource('kategori-produk', KategoriProdukController::class)->except(['show']);
 
-    Route::resource('produk', \App\Http\Controllers\Admin\ProdukController::class);
+    Route::resource('produk', \App\Http\Controllers\Admin\ProdukController::class)->except(['show']);
 
     // Galeri
     Route::post('produk/{produk}/galeri', [\App\Http\Controllers\Admin\ProdukController::class, 'tambahGaleri'])
