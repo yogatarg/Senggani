@@ -294,7 +294,7 @@
             }
 
             const pesan =
-                `Halo Senggani, saya tertarik dan ingin menanyakan produk:\n\n` +
+                `Halo Senggani Kemasan, saya tertarik dan ingin menanyakan produk:\n\n` +
                 `Nama Produk : ${NAMA_PRODUK}\n` +
                 `Bahan       : ${bahan}\n` +
                 `Finishing   : ${finishing}\n` +

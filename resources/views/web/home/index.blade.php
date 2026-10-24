@@ -64,7 +64,7 @@
         {{-- Fallback jika belum ada banner --}}
         <div style="background: linear-gradient(135deg, #6a3131, #4e2424); padding: 120px 0;">
             <div class="container text-center text-white">
-                <h1 class="display-4 fw-bold mb-3">Senggani Paperbag</h1>
+                <h1 class="display-4 fw-bold mb-3">Senggani Kemasan</h1>
                 <p class="fs-5 mb-4 opacity-75">Spesialis Packaging Berkualitas untuk Bisnis Anda</p>
                 <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5">
                     <i class="fab fa-whatsapp me-2"></i>Konsultasi Gratis

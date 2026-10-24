@@ -637,10 +637,8 @@
                     <div class="d-flex gap-3 mt-3">
                         <a href="https://www.instagram.com/sengganipaperbag/" target="_blank" rel="noopener"
                             aria-label="Instagram"><i class="fab fa-instagram fa-lg"></i></a>
-                        <a href="#"><i class="fab fa-facebook fa-lg"></i></a>
                         <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" aria-label="WhatsApp"><i
                                 class="fab fa-whatsapp fa-lg"></i></a>
-                        <a href="#"><i class="fab fa-tiktok fa-lg"></i></a>
                     </div>
                 </div>
                 <div class="col-md-3">
