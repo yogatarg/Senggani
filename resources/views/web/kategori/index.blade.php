@@ -12,6 +12,9 @@
                 <li class="breadcrumb-item">
                     <a href="{{ route('home') }}" class="text-white opacity-75">Home</a>
                 </li>
+                <li class="breadcrumb-item">
+                    <a href="{{ route('kategori.index') }}" class="text-white opacity-75">Kategori</a>
+                </li>
                 <li class="breadcrumb-item active text-white">
                     {{ $kategori->nama_kategori }}
                 </li>
@@ -34,7 +37,7 @@
                 Menampilkan <strong>{{ $produk->count() }}</strong> produk
                 dalam kategori <strong>{{ $kategori->nama_kategori }}</strong>
             </p>
-            <a href="{{ request()->routeIs('home') ? '#kategori' : route('home') . '#kategori' }}" class="btn btn-outline-primary btn-sm rounded-pill">
+            <a href="{{ route('kategori.index') }}" class="btn btn-outline-primary btn-sm rounded-pill">
                 <i class="fas fa-arrow-left me-1"></i> Semua Kategori
             </a>
         </div>
@@ -113,7 +116,7 @@
         <h4 class="fw-700 mb-2">Tidak menemukan yang Anda cari?</h4>
         <p class="opacity-75 mb-4">Konsultasikan kebutuhan packaging Anda langsung via WhatsApp</p>
         <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20bertanya%20mengenai%20produk%20kategori%20{{ urlencode($kategori->nama_kategori) }}."
-           target="_blank"
+           target="_blank" rel="noopener"
            class="btn btn-success btn-lg rounded-pill px-5">
             <i class="fab fa-whatsapp me-2"></i> Konsultasi Sekarang
         </a>

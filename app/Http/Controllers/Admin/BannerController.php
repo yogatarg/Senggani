@@ -27,9 +27,9 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'gambar_mobile' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072',
             'tautan'        => 'nullable|url',
-        ]);
+        ], $this->pesanGambar());
 
         $gambar       = null;
         $gambarMobile = null;
@@ -72,9 +72,15 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'gambar_mobile' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            // Wajib hanya bila banner belum punya gambar mobile
+            'gambar_mobile' => [
+                $banner->gambar_mobile ? 'nullable' : 'required',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:3072',
+            ],
             'tautan'        => 'nullable|url',
-        ]);
+        ], $this->pesanGambar());
 
         // File lama baru dihapus setelah data baru tersimpan;
         // file baru dibuang lagi bila penyimpanan gagal
@@ -108,6 +114,21 @@ class BannerController extends Controller
 
         return redirect()->route('admin.banner.index')
             ->with('success', 'Banner berhasil diperbarui.');
+    }
+
+    // Pesan validasi gambar desktop & mobile (wajib sejak banner memakai 2 foto)
+    private function pesanGambar(): array
+    {
+        return [
+            'gambar.required'        => 'Gambar desktop wajib diunggah.',
+            'gambar.image'           => 'Gambar desktop harus berupa file gambar.',
+            'gambar.mimes'           => 'Gambar desktop harus berformat JPG, JPEG, PNG, atau WEBP.',
+            'gambar.max'             => 'Ukuran gambar desktop maksimal 2 MB.',
+            'gambar_mobile.required' => 'Gambar mobile wajib diunggah.',
+            'gambar_mobile.image'    => 'Gambar mobile harus berupa file gambar.',
+            'gambar_mobile.mimes'    => 'Gambar mobile harus berformat JPG, JPEG, PNG, atau WEBP.',
+            'gambar_mobile.max'      => 'Ukuran gambar mobile maksimal 3 MB.',
+        ];
     }
 
     // Aktif / nonaktifkan banner langsung dari daftar

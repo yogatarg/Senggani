@@ -12,9 +12,11 @@ class HomeController extends Controller
     public function index()
     {
         $banner   = Banner::where('aktif', true)->get();
-        $kategori = KategoriProduk::withCount('produk')->get();
+        // Beranda hanya menampilkan 6 kategori pertama; sisanya di /kategori
+        $kategori      = KategoriProduk::withCount('produk')->orderBy('id')->take(6)->get();
+        $totalKategori = KategoriProduk::count();
         $produk   = Produk::with('kategori')->latest()->take(6)->get();
 
-        return view('web.home.index', compact('banner', 'kategori', 'produk'));
+        return view('web.home.index', compact('banner', 'kategori', 'produk', 'totalKategori'));
     }
 }

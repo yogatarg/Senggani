@@ -35,28 +35,37 @@
                             <p class="text-muted text-sm">Biarkan kosong jika tidak ingin mengganti gambar.</p>
                         </div>
                     @endif
-                    <input type="file" name="gambar" class="form-control @error('gambar') is-invalid @enderror">
+                    <input type="file" name="gambar" accept=".jpg,.jpeg,.png,.webp"
+                        class="form-control @error('gambar') is-invalid @enderror">
                     @error('gambar')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
 
                 <div class="form-group mt-3">
-                    <label>Gambar Mobile</label>
+                    <label for="gambar_mobile">Gambar Mobile
+                        @unless ($banner->gambar_mobile)
+                            <span class="text-danger">*</span>
+                        @endunless
+                    </label>
 
                     @if ($banner->gambar_mobile)
                         <div class="mb-2">
-                            <img src="{{ asset('storage/' . $banner->gambar_mobile) }}" height="80">
+                            <img src="{{ asset('storage/' . $banner->gambar_mobile) }}" height="80"
+                                alt="Gambar mobile {{ $banner->judul }}">
                         </div>
                     @endif
 
-                    <input type="file" name="gambar_mobile" class="form-control @error('gambar_mobile') is-invalid @enderror">
+                    <input type="file" name="gambar_mobile" id="gambar_mobile" accept=".jpg,.jpeg,.png,.webp"
+                        class="form-control @error('gambar_mobile') is-invalid @enderror"
+                        @unless ($banner->gambar_mobile) required @endunless>
                     @error('gambar_mobile')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
 
                     <small class="text-muted">
-                        Kosongkan jika tidak ingin mengganti gambar mobile.
+                        Tampil di HP. Rasio 4:3, disarankan 1080×810 px. Kosongkan jika tidak ingin mengganti;
+                        wajib diisi bila banner belum punya gambar mobile.
                     </small>
                 </div>
 

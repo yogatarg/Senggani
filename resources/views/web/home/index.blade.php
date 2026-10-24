@@ -11,7 +11,7 @@
         <div id="heroBanner" class="carousel slide hero-banner" data-bs-ride="carousel">
             <div class="carousel-indicators">
                 @foreach ($banner as $i => $item)
-                    <button type="button" data-bs-target="#heroBanner" data-bs-slide-to="{{ $i }}"
+                    <button type="button" data-bs-target="#heroBanner" data-bs-slide-to="{{ $i }}" aria-label="Banner {{ $i + 1 }}"
                         class="{{ $i === 0 ? 'active' : '' }}"></button>
                 @endforeach
             </div>
@@ -24,7 +24,8 @@
                                 <source media="(max-width: 767.98px)"
                                     srcset="{{ asset('storage/' . $item->gambar_mobile) }}">
                             @endif
-                            <img src="{{ asset('storage/' . $item->gambar) }}" class="d-block w-100"
+                            <img src="{{ asset('storage/' . $item->gambar) }}"
+                                class="d-block w-100 banner-img {{ $item->gambar_mobile ? 'banner-img-has-mobile' : '' }}"
                                 alt="{{ $item->judul }}" width="1920" height="550" loading="eager">
                         </picture>
                         <div class="carousel-caption custom-caption">
@@ -38,7 +39,7 @@
                                 @endif
                             </div>
 
-                            <a href="https://wa.me/6283829208316" target="_blank" class="btn-banner-wa rounded-pill px-4">
+                            <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn-banner-wa rounded-pill px-4">
 
                                 <i class="fab fa-whatsapp me-2"></i>
                                 Pesan Sekarang
@@ -51,10 +52,12 @@
                 @endforeach
             </div>
             <button class="carousel-control-prev" type="button" data-bs-target="#heroBanner" data-bs-slide="prev">
-                <span class="carousel-control-prev-icon"></span>
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Sebelumnya</span>
             </button>
             <button class="carousel-control-next" type="button" data-bs-target="#heroBanner" data-bs-slide="next">
-                <span class="carousel-control-next-icon"></span>
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Berikutnya</span>
             </button>
         </div>
     @else
@@ -63,7 +66,7 @@
             <div class="container text-center text-white">
                 <h1 class="display-4 fw-bold mb-3">Senggani Paperbag</h1>
                 <p class="fs-5 mb-4 opacity-75">Spesialis Packaging Berkualitas untuk Bisnis Anda</p>
-                <a href="https://wa.me/6283829208316" target="_blank" class="btn btn-success btn-lg rounded-pill px-5">
+                <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5">
                     <i class="fab fa-whatsapp me-2"></i>Konsultasi Gratis
                 </a>
             </div>
@@ -80,36 +83,18 @@
 
             <div class="row g-4 justify-content-center">
                 @forelse($kategori as $item)
-                    <div class="col-6 col-md-4 col-lg-2 fade-up">
-                        <a href="{{ route('kategori.show', $item->slug) }}" class="kategori-card">
-                            <div class="card text-center h-100">
-
-                                {{-- Gambar kategori --}}
-                                @if ($item->gambar)
-                                    <img src="{{ asset('storage/' . $item->gambar) }}" class="card-img-top"
-                                        style="height:120px; object-fit:cover;" alt="{{ $item->nama_kategori }}">
-                                @else
-                                    {{-- Default jika tidak ada gambar --}}
-                                    <div class="d-flex align-items-center justify-content-center"
-                                        style="height:120px; background: linear-gradient(135deg, #f5e6e6, #edd);">
-                                        <div class="kategori-icon" style="margin:0;">
-                                            <i class="fas fa-box"></i>
-                                        </div>
-                                    </div>
-                                @endif
-
-                                <div class="card-body py-3">
-                                    <h6 class="fw-600 mb-1">{{ $item->nama_kategori }}</h6>
-                                    <small class="text-muted">{{ $item->produk_count }} produk</small>
-                                </div>
-                            </div>
-                        </a>
-                    </div>
+                    @include('web.partials.kartu-kategori', ['item' => $item])
                 @empty
                     <div class="col-12 text-center text-muted">
                         <p>Belum ada kategori tersedia.</p>
                     </div>
                 @endforelse
+            </div>
+
+            <div class="text-center mt-5 fade-up">
+                <a href="{{ route('kategori.index') }}" class="btn btn-outline-primary rounded-pill px-4 py-2 fw-600">
+                    Lihat Semua Kategori <i class="fas fa-arrow-right ms-1"></i>
+                </a>
             </div>
         </div>
     </section>
@@ -126,36 +111,21 @@
 
             <div class="row g-4">
                 @forelse($produk as $item)
-                    <div class="col-md-6 col-lg-4 fade-up">
-                        <div class="card h-100">
-                            @if ($item->gambar)
-                                <img src="{{ asset('storage/' . $item->gambar) }}" class="card-img-top"
-                                    alt="{{ $item->nama_produk }}">
-                            @else
-                                <div class="card-img-top d-flex align-items-center justify-content-center"
-                                    style="height:200px; background: linear-gradient(135deg, #f5e6e6, #edd);">
-                                    <i class="fas fa-box fa-3x" style="color:#6a3131; opacity:0.4;"></i>
-                                </div>
-                            @endif
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title fw-600">{{ $item->nama_produk }}</h5>
-                                <p class="text-muted small mb-3">
-                                    Min. pesan {{ $item->minimal_pesan }} pcs
-                                </p>
-                                <div class="mt-auto">
-                                    <a href="{{ route('produk.show', $item->slug) }}" class="btn btn-primary w-100">
-                                        <i class="fas fa-eye me-1"></i> Lihat Detail
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    @include('web.partials.kartu-produk', ['item' => $item])
                 @empty
                     <div class="col-12 text-center text-muted">
                         <p>Belum ada produk tersedia.</p>
                     </div>
                 @endforelse
             </div>
+
+            @if ($produk->count() > 0)
+                <div class="text-center mt-5 fade-up">
+                    <a href="{{ route('produk.index') }}" class="btn btn-outline-primary rounded-pill px-4 py-2 fw-600">
+                        Lihat Semua Produk <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            @endif
         </div>
     </section>
 
@@ -277,7 +247,7 @@
                 Gratis konsultasi, tanpa biaya desain!
             </p>
             <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20konsultasi%20mengenai%20packaging."
-                target="_blank" class="btn btn-success btn-lg rounded-pill px-5 py-3 fs-5 fw-600">
+                target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5 py-3 fs-5 fw-600">
                 <i class="fab fa-whatsapp me-2"></i>Konsultasi Sekarang via WhatsApp
             </a>
         </div>

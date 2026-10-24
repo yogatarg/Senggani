@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Route;
 
 // ── Public Routes ──────────────────────────────────────
 Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::get('/kategori', [KategoriController::class, 'index'])->name('kategori.index');
 Route::get('/kategori/{slug}', [KategoriController::class, 'show'])->name('kategori.show');
+Route::get('/produk', [ProdukController::class, 'index'])->name('produk.index');
 Route::get('/produk/{slug}', [ProdukController::class, 'show'])->name('produk.show');
 
 // ── Admin Auth Routes (tanpa middleware) ───────────────

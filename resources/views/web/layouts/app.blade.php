@@ -317,49 +317,93 @@
             background: #600404;
         }
 
-        /* ── Mobile Carousel ── */
+        /* Desktop: area tombol prev/next dipersempit (Bootstrap default 15%)
+           agar ikon panah tidak menimpa awal teks caption (left 8%) */
+        @media (min-width: 768px) {
+            .hero-banner .carousel-control-prev,
+            .hero-banner .carousel-control-next {
+                width: 3rem;
+            }
+        }
+
+        /* ── Mobile Carousel (opsi B: foto di atas, teks & tombol di bawah, rata tengah) ── */
         @media (max-width: 767.98px) {
 
-            .carousel-item img {
-                height: 420px;
-                /* tinggi lebih besar agar foto mobile terlihat */
+            .hero-banner {
+                /* acuan lebar untuk menghitung tinggi area foto 4:3 (75cqw) */
+                container-type: inline-size;
+            }
+
+            /* Kotak foto 4:3 agar foto produk lebih besar dan tinggi stabil antar slide.
+               Fallback banner lama (hanya gambar desktop ±16:9, area kosong di kiri,
+               produk di kanan ±52–95% lebar) → rapat kanan agar produk utuh terlihat. */
+            .hero-banner .carousel-item img {
+                height: auto;
+                aspect-ratio: 4 / 3;
                 object-fit: cover;
+                object-position: right center;
+            }
+
+            /* Gambar khusus mobile sudah disiapkan 4:3 → cukup di tengah */
+            .hero-banner .carousel-item img.banner-img-has-mobile {
                 object-position: center;
             }
 
-            .carousel-caption {
-                left: 0;
-                right: 0;
-                top: auto;
-                bottom: 0;
+            /* Caption jadi blok teks biasa di bawah gambar */
+            .hero-banner .carousel-caption {
+                position: static;
                 transform: none;
                 max-width: 100%;
-                padding: 1rem 1.2rem 1.5rem;
-                background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, transparent 100%);
-                text-align: left;
+                min-height: 12.5rem;
+                padding: 1.25rem 1.25rem 1.5rem;
+                background: #f5e6e6;
+                text-align: center;
             }
 
-            .banner-content {
-                display: none;
-            }
-
-            .carousel-caption h2 {
-                font-size: 1.2rem;
-                margin-bottom: 0.25rem;
-                color: #fff;
-            }
-
-            .carousel-caption p {
-                font-size: 0.78rem;
-                -webkit-line-clamp: 2;
-                color: rgba(255, 255, 255, 0.85);
+            .hero-banner .banner-content {
                 margin-bottom: 0;
             }
 
-            .btn-banner-wa {
-                padding: 8px 16px;
-                font-size: 0.8rem;
+            .hero-banner .carousel-caption h2 {
+                font-size: 1.25rem;
+                line-height: 1.3;
+                margin-bottom: 0.5rem;
+                color: #6e0c0c;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+
+            .hero-banner .carousel-caption p {
+                font-size: 0.875rem;
+                line-height: 1.5;
+                font-weight: 400;
+                -webkit-line-clamp: 2;
+                color: var(--primary-dark);
+                margin-bottom: 0;
+            }
+
+            .hero-banner .btn-banner-wa {
+                padding: 8px 18px;
+                font-size: 0.875rem;
                 margin-top: 0.75rem;
+            }
+
+            /* Indikator & tombol prev/next tetap di area gambar */
+            .hero-banner .carousel-indicators {
+                bottom: auto;
+                top: calc(75vw - 2.5rem);
+                top: calc(75cqw - 2.5rem);
+                margin-bottom: 0;
+            }
+
+            .hero-banner .carousel-control-prev,
+            .hero-banner .carousel-control-next {
+                bottom: auto;
+                width: 15%;
+                height: 75vw;
+                height: 75cqw;
             }
         }
 
@@ -373,6 +417,14 @@
         .fade-up.visible {
             opacity: 1;
             transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .fade-up {
+                opacity: 1;
+                transform: none;
+                transition: none;
+            }
         }
     </style>
 
@@ -401,12 +453,12 @@
                             href="{{ route('home') }}">Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link"
-                            href="{{ request()->routeIs('home') ? '#kategori' : route('home') . '#kategori' }}">Kategori</a>
+                        <a class="nav-link {{ request()->routeIs('kategori.*') ? 'active' : '' }}"
+                            href="{{ route('kategori.index') }}">Kategori</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link"
-                            href="{{ request()->routeIs('home') ? '#produk' : route('home') . '#produk' }}">Produk</a>
+                        <a class="nav-link {{ request()->routeIs('produk.*') ? 'active' : '' }}"
+                            href="{{ route('produk.index') }}">Produk</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link"
@@ -440,10 +492,11 @@
                         Paperbag, dus kemasan, box, dan berbagai produk kemasan lainnya.
                     </p>
                     <div class="d-flex gap-3 mt-3">
-                        <a href="https://www.instagram.com/sengganipaperbag?igsh=MXNqMmVyMjJ2N2h4ZQ="><i
-                                class="fab fa-instagram fa-lg"></i></a>
+                        <a href="https://www.instagram.com/sengganipaperbag/" target="_blank" rel="noopener"
+                            aria-label="Instagram"><i class="fab fa-instagram fa-lg"></i></a>
                         <a href="#"><i class="fab fa-facebook fa-lg"></i></a>
-                        <a href="https://wa.me/6283829208316" target="_blank"><i class="fab fa-whatsapp fa-lg"></i></a>
+                        <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" aria-label="WhatsApp"><i
+                                class="fab fa-whatsapp fa-lg"></i></a>
                         <a href="#"><i class="fab fa-tiktok fa-lg"></i></a>
                     </div>
                 </div>
@@ -451,9 +504,14 @@
                     <h5>Menu</h5>
                     <ul class="list-unstyled" style="font-size:0.9rem;">
                         <li class="mb-1"><a href="{{ route('home') }}">Home</a></li>
-                        <li class="mb-1"><a href="#produk">Produk</a></li>
-                        <li class="mb-1"><a href="#tentang">Tentang Kami</a></li>
-                        <li class="mb-1"><a href="#kontak">Kontak</a></li>
+                        <li class="mb-1"><a href="{{ route('kategori.index') }}">Kategori</a></li>
+                        <li class="mb-1"><a href="{{ route('produk.index') }}">Produk</a></li>
+                        <li class="mb-1"><a
+                                href="{{ request()->routeIs('home') ? '#tentang' : route('home') . '#tentang' }}">Tentang
+                                Kami</a></li>
+                        <li class="mb-1"><a
+                                href="{{ request()->routeIs('home') ? '#kontak' : route('home') . '#kontak' }}">Kontak</a>
+                        </li>
                     </ul>
                 </div>
                 <div class="col-md-5">
@@ -465,11 +523,13 @@
                         </li>
                         <li class="mb-2">
                             <i class="fas fa-envelope me-2" style="color:var(--accent);"></i>
-                            <a href="mailto:info@senggani.com">info@senggani.com</a>
+                            <a href="mailto:sengganipaperbag@gmail.com">sengganipaperbag@gmail.com</a>
                         </li>
                         <li class="mb-2">
+                            @php($alamat = 'Pilahan, RT 40, RW 12, Rejowinangun, Kotagede, Yogyakarta 55171')
                             <i class="fas fa-map-marker-alt me-2" style="color:var(--accent);"></i>
-                            Jl. Contoh No. 123, Kota Anda
+                            <a href="https://www.google.com/maps/search/?api=1&query={{ urlencode($alamat) }}"
+                                target="_blank" rel="noopener">{{ $alamat }}</a>
                         </li>
                     </ul>
                 </div>

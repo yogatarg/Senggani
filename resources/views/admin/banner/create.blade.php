@@ -31,8 +31,9 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Gambar Desktop</label>
-                    <input type="file" name="gambar" class="form-control @error('gambar') is-invalid @enderror">
+                    <label for="gambar">Gambar Desktop <span class="text-danger">*</span></label>
+                    <input type="file" name="gambar" id="gambar" accept=".jpg,.jpeg,.png,.webp"
+                        class="form-control @error('gambar') is-invalid @enderror" required>
 
                     @error('gambar')
                         <div class="invalid-feedback">
@@ -42,13 +43,13 @@
                 </div>
 
                 <div class="form-group mt-3">
-                    <label>Gambar Mobile</label>
+                    <label for="gambar_mobile">Gambar Mobile <span class="text-danger">*</span></label>
 
-                    <input type="file" name="gambar_mobile"
-                        class="form-control @error('gambar_mobile') is-invalid @enderror">
+                    <input type="file" name="gambar_mobile" id="gambar_mobile" accept=".jpg,.jpeg,.png,.webp"
+                        class="form-control @error('gambar_mobile') is-invalid @enderror" required>
 
                     <small class="text-muted">
-                        Opsional. Jika kosong maka sistem akan memakai gambar desktop.
+                        Wajib. Tampil di HP. Rasio 4:3, disarankan 1080×810 px.
                     </small>
 
                     @error('gambar_mobile')
