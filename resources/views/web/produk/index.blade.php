@@ -85,7 +85,7 @@
             @endif
 
             {{-- Grid produk --}}
-            <div class="row g-4">
+            <div class="row g-3 g-md-4">
                 @forelse ($produk as $item)
                     @include('web.partials.kartu-produk', ['item' => $item])
                 @empty

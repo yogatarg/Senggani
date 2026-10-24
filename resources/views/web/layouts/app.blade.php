@@ -138,6 +138,93 @@
             object-fit: cover;
         }
 
+        /* ── Kartu Produk (partial kartu-produk + kartu di detail kategori) ──
+           ≥768px: sama seperti sebelumnya (gambar 200px / 220px di detail kategori).
+           <768px: grid 2 kolom → kartu versi ringkas di bawah. */
+        .kartu-produk-media {
+            height: 200px;
+            width: 100%;
+            object-fit: cover;
+        }
+
+        .kartu-produk-media-tinggi {
+            height: 220px;
+        }
+
+        .kartu-produk-placeholder {
+            background: linear-gradient(135deg, #f5e6e6, #edd);
+        }
+
+        .kartu-produk-badge {
+            background: #f5e6e6;
+            color: #6a3131;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 767.98px) {
+            .kartu-produk .kartu-produk-media {
+                height: auto;
+                aspect-ratio: 1 / 1;
+            }
+
+            .kartu-produk .kartu-produk-placeholder .fa-3x {
+                font-size: 2rem;
+            }
+
+            .kartu-produk .card-body {
+                padding: 0.75rem;
+            }
+
+            .kartu-produk .kartu-produk-judul {
+                font-size: 0.95rem;
+                line-height: 1.3;
+                margin-bottom: 0.375rem;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+                overflow: hidden;
+                overflow-wrap: anywhere;
+            }
+
+            .kartu-produk .kartu-produk-desk {
+                font-size: 0.8rem;
+                line-height: 1.4;
+                margin-bottom: 0.5rem !important;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+                overflow: hidden;
+            }
+
+            .kartu-produk .kartu-produk-badges {
+                margin-bottom: 0.5rem !important;
+            }
+
+            .kartu-produk .kartu-produk-badge {
+                font-size: 0.7rem;
+                line-height: 1.3;
+                padding: 0.3rem 0.5rem !important;
+                white-space: normal;
+                text-align: left;
+            }
+
+            .kartu-produk .kartu-produk-meta {
+                font-size: 0.78rem;
+                line-height: 1.35;
+                margin-bottom: 0.625rem !important;
+            }
+
+            /* setara .btn-sm */
+            .kartu-produk .kartu-produk-btn {
+                --bs-btn-padding-y: 0.375rem;
+                --bs-btn-padding-x: 0.5rem;
+                --bs-btn-font-size: 0.8125rem;
+                white-space: nowrap;
+            }
+        }
+
         /* ── Kategori Card ── */
         .kategori-card {
             cursor: pointer;
@@ -326,6 +413,23 @@
             }
         }
 
+        /* Tablet (768–991.98px): gambar banner 550px di-crop (object-fit: cover) sehingga
+           foto produk mulai ±52% lebar layar → caption dipersempit & huruf diperkecil
+           agar teks tidak menimpa foto. HP & desktop ≥992px tidak terpengaruh. */
+        @media (min-width: 768px) and (max-width: 991.98px) {
+            .hero-banner .carousel-caption {
+                max-width: 42%;
+            }
+
+            .hero-banner .carousel-caption h2 {
+                font-size: 2rem;
+            }
+
+            .hero-banner .carousel-caption p {
+                font-size: 1rem;
+            }
+        }
+
         /* ── Mobile Carousel (opsi B: foto di atas, teks & tombol di bawah, rata tengah) ── */
         @media (max-width: 767.98px) {
 
@@ -404,6 +508,45 @@
                 width: 15%;
                 height: 75vw;
                 height: 75cqw;
+            }
+        }
+
+        /* ── Header halaman detail kategori ── */
+        .kategori-header {
+            background: #4c0404;
+            padding: 48px 0;
+        }
+
+        .kategori-header .breadcrumb {
+            background: transparent;
+            padding: 0;
+            margin-bottom: 0.5rem;
+        }
+
+        .kategori-header h1 {
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 767.98px) {
+            .kategori-header {
+                padding: 28px 0;
+            }
+
+            .kategori-header .breadcrumb {
+                margin-bottom: 0.25rem;
+                font-size: 0.875rem;
+                line-height: 1.4;
+            }
+
+            .kategori-header h1 {
+                font-size: 1.6rem;
+                line-height: 1.2;
+                margin-bottom: 0.25rem;
+            }
+
+            .kategori-header p {
+                font-size: 0.9375rem;
+                line-height: 1.45;
             }
         }
 

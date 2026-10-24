@@ -5,10 +5,10 @@
 @section('content')
 
 {{-- ── Header Kategori ── --}}
-<div style="background: #4c0404; padding: 60px 0;">
+<div class="kategori-header">
     <div class="container text-white">
         <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-2" style="background:transparent; padding:0;">
+            <ol class="breadcrumb">
                 <li class="breadcrumb-item">
                     <a href="{{ route('home') }}" class="text-white opacity-75">Home</a>
                 </li>
@@ -20,7 +20,7 @@
                 </li>
             </ol>
         </nav>
-        <h1 class="fw-700 mb-2">{{ $kategori->nama_kategori }}</h1>
+        <h1 class="fw-700">{{ $kategori->nama_kategori }}</h1>
         @if($kategori->deskripsi)
             <p class="opacity-75 mb-0">{{ $kategori->deskripsi }}</p>
         @endif
@@ -42,49 +42,46 @@
             </a>
         </div>
 
-        <div class="row g-4">
+        <div class="row g-3 g-md-4">
             @forelse($produk as $item)
-            <div class="col-md-6 col-lg-4 fade-up">
-                <div class="card h-100">
+            <div class="col-6 col-md-6 col-lg-4 fade-up">
+                <div class="card h-100 kartu-produk">
 
                     {{-- Gambar Produk --}}
                     @if($item->gambar)
                         <img src="{{ asset('storage/' . $item->gambar) }}"
-                             class="card-img-top"
-                             style="height:220px; object-fit:cover;"
+                             class="card-img-top kartu-produk-media kartu-produk-media-tinggi"
                              alt="{{ $item->nama_produk }}">
                     @else
-                        <div class="d-flex align-items-center justify-content-center"
-                             style="height:220px; background: linear-gradient(135deg, #f5e6e6, #edd);">
-                            <i class="fas fa-box fa-3x" style="color:#6a3131; opacity:0.3;"></i>
+                        <div class="kartu-produk-media kartu-produk-media-tinggi kartu-produk-placeholder d-flex align-items-center justify-content-center">
+                            <i class="fas fa-box fa-3x" style="color:#6a3131; opacity:0.3;" aria-hidden="true"></i>
                         </div>
                     @endif
 
                     <div class="card-body d-flex flex-column">
-                        <h5 class="card-title fw-600 mb-2">{{ $item->nama_produk }}</h5>
+                        <h5 class="card-title fw-600 mb-2 kartu-produk-judul">{{ $item->nama_produk }}</h5>
 
                         @if($item->deskripsi)
-                            <p class="text-muted small mb-3">
+                            <p class="text-muted small mb-3 kartu-produk-desk">
                                 {{ Str::limit($item->deskripsi, 80, '...') }}
                             </p>
                         @endif
 
-                        <div class="d-flex align-items-center gap-2 mb-3">
-                            <span class="badge py-2 px-3"
-                                  style="background:#f5e6e6; color:#6a3131; font-size:0.8rem;">
-                                <i class="fas fa-tag me-1"></i> Harga Menyesuaikan
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3 kartu-produk-badges">
+                            <span class="badge py-2 px-3 kartu-produk-badge">
+                                <i class="fas fa-tag me-1" aria-hidden="true"></i> Harga Menyesuaikan
                             </span>
                         </div>
 
-                        <p class="text-muted small mb-3">
-                            <i class="fas fa-box me-1"></i>
+                        <p class="text-muted small mb-3 kartu-produk-meta">
+                            <i class="fas fa-box me-1" aria-hidden="true"></i>
                             Min. pesan {{ $item->minimal_pesan }} pcs
                         </p>
 
                         <div class="mt-auto">
                             <a href="{{ route('produk.show', $item->slug) }}"
-                               class="btn btn-primary w-100 rounded-pill">
-                                <i class="fas fa-eye me-1"></i> Lihat Detail
+                               class="btn btn-primary w-100 rounded-pill kartu-produk-btn">
+                                <i class="fas fa-eye me-1" aria-hidden="true"></i> Lihat Detail
                             </a>
                         </div>
                     </div>
