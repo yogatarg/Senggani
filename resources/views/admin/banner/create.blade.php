@@ -49,7 +49,7 @@
                         class="form-control @error('gambar_mobile') is-invalid @enderror" required>
 
                     <small class="text-muted">
-                        Wajib. Tampil di HP. Rasio 4:3, disarankan 1080×810 px.
+                        Wajib. Tampil di HP. Rasio 3:4 (tegak), disarankan 1080×1440 px.
                     </small>
 
                     @error('gambar_mobile')

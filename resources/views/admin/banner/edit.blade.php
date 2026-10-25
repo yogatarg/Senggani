@@ -64,7 +64,7 @@
                     @enderror
 
                     <small class="text-muted">
-                        Tampil di HP. Rasio 4:3, disarankan 1080×810 px. Kosongkan jika tidak ingin mengganti;
+                        Tampil di HP. Rasio 3:4 (tegak), disarankan 1080×1440 px. Kosongkan jika tidak ingin mengganti;
                         wajib diisi bila banner belum punya gambar mobile.
                     </small>
                 </div>

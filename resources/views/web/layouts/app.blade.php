@@ -161,24 +161,26 @@
             font-size: 0.8rem;
         }
 
+        /* HP: kartu ringkas — foto 4:3 (lebih pendek dari persegi), padding rapat,
+           huruf lebih kecil; tombol tetap ≥36px agar mudah disentuh. */
         @media (max-width: 767.98px) {
             .kartu-produk .kartu-produk-media {
                 height: auto;
-                aspect-ratio: 1 / 1;
+                aspect-ratio: 4 / 3;
             }
 
             .kartu-produk .kartu-produk-placeholder .fa-3x {
-                font-size: 2rem;
+                font-size: 1.75rem;
             }
 
             .kartu-produk .card-body {
-                padding: 0.75rem;
+                padding: 0.6rem;
             }
 
             .kartu-produk .kartu-produk-judul {
-                font-size: 0.95rem;
+                font-size: 0.88rem;
                 line-height: 1.3;
-                margin-bottom: 0.375rem;
+                margin-bottom: 0.25rem !important;
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 -webkit-line-clamp: 2;
@@ -188,9 +190,9 @@
             }
 
             .kartu-produk .kartu-produk-desk {
-                font-size: 0.8rem;
+                font-size: 0.72rem;
                 line-height: 1.4;
-                margin-bottom: 0.5rem !important;
+                margin-bottom: 0.4rem !important;
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 -webkit-line-clamp: 2;
@@ -199,29 +201,62 @@
             }
 
             .kartu-produk .kartu-produk-badges {
-                margin-bottom: 0.5rem !important;
+                margin-bottom: 0.4rem !important;
             }
 
             .kartu-produk .kartu-produk-badge {
-                font-size: 0.7rem;
+                font-size: 0.68rem;
                 line-height: 1.3;
-                padding: 0.3rem 0.5rem !important;
+                padding: 0.25rem 0.45rem !important;
                 white-space: normal;
                 text-align: left;
             }
 
             .kartu-produk .kartu-produk-meta {
-                font-size: 0.78rem;
+                font-size: 0.72rem;
                 line-height: 1.35;
-                margin-bottom: 0.625rem !important;
+                margin-bottom: 0.5rem !important;
             }
 
-            /* setara .btn-sm */
             .kartu-produk .kartu-produk-btn {
-                --bs-btn-padding-y: 0.375rem;
+                --bs-btn-padding-y: 0.3rem;
                 --bs-btn-padding-x: 0.5rem;
-                --bs-btn-font-size: 0.8125rem;
+                --bs-btn-font-size: 0.75rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 36px;
                 white-space: nowrap;
+            }
+
+            /* Kartu kategori: foto lebih pendek (inline 120px ditimpa) & isi rapat */
+            .kartu-kategori .kartu-kategori-media {
+                height: auto !important;
+                aspect-ratio: 16 / 10;
+            }
+
+            .kartu-kategori .kartu-kategori-icon {
+                width: 44px;
+                height: 44px;
+            }
+
+            .kartu-kategori .kartu-kategori-icon i {
+                font-size: 1.1rem;
+            }
+
+            .kategori-card.kartu-kategori .kartu-kategori-body {
+                padding: 0.6rem !important;
+            }
+
+            .kartu-kategori .kartu-kategori-judul {
+                font-size: 0.88rem;
+                line-height: 1.3;
+                margin-bottom: 0.15rem !important;
+                overflow-wrap: anywhere;
+            }
+
+            .kartu-kategori .kartu-kategori-meta {
+                font-size: 0.72rem;
             }
         }
 
@@ -430,51 +465,83 @@
             }
         }
 
-        /* ── Mobile Carousel (opsi B: foto di atas, teks & tombol di bawah, rata tengah) ── */
+        /* ── Mobile Carousel: banner setinggi layar pertama (dikurangi navbar sticky).
+           Foto mengisi sisa tinggi di atas panel putih bersudut bulat atas yang "naik"
+           menutupi bagian bawah foto (titik indikator, judul, deskripsi, tombol penuh
+           lebar). Panah prev/next disembunyikan; geser jari tetap aktif.
+           Efek foto diam saat scroll: lihat skrip "Parallax banner HP" di bawah. ── */
         @media (max-width: 767.98px) {
 
             .hero-banner {
-                /* acuan lebar untuk menghitung tinggi area foto 4:3 (75cqw) */
-                container-type: inline-size;
+                --panel-overlap: 26px;
+                /* tinggi panel tetap → indikator & tinggi foto stabil antar slide */
+                --panel-h: 16.5rem;
+                /* tinggi navbar sticky; diperbarui JS dari ukuran sebenarnya */
+                --nav-h: 56px;
+                --hero-vh: 100vh;
+                /* tinggi banner = layar - navbar, minimal panel + foto 50vw
+                   (mis. HP landscape yang sangat pendek) */
+                --hero-h: max(calc(var(--hero-vh) - var(--nav-h)), calc(var(--panel-h) + 50vw));
+                overflow: hidden;
             }
 
-            /* Kotak foto 4:3 agar foto produk lebih besar dan tinggi stabil antar slide.
-               Fallback banner lama (hanya gambar desktop ±16:9, area kosong di kiri,
+            /* svh = tinggi layar saat address bar tampil → tidak "melompat" di HP */
+            @supports (height: 100svh) {
+                .hero-banner {
+                    --hero-vh: 100svh;
+                }
+            }
+
+            /* Area foto = tinggi banner - panel + bagian yang tertutup panel */
+            .hero-banner .carousel-item picture {
+                height: calc(var(--hero-h) - var(--panel-h) + var(--panel-overlap));
+                overflow: hidden;
+            }
+
+            /* Fallback banner lama (hanya gambar desktop ±16:9, area kosong di kiri,
                produk di kanan ±52–95% lebar) → rapat kanan agar produk utuh terlihat. */
             .hero-banner .carousel-item img {
-                height: auto;
-                aspect-ratio: 4 / 3;
+                height: 100%;
                 object-fit: cover;
                 object-position: right center;
             }
 
-            /* Gambar khusus mobile sudah disiapkan 4:3 → cukup di tengah */
+            /* Gambar khusus mobile → cukup di tengah */
             .hero-banner .carousel-item img.banner-img-has-mobile {
                 object-position: center;
             }
 
-            /* Caption jadi blok teks biasa di bawah gambar.
-               Latar putih; garis tipis bernuansa merah muda (#edd, sama dengan
-               placeholder kartu produk) memisahkan banner dari section #kategori
-               yang juga putih. */
+            /* Panel putih: naik var(--panel-overlap) menutupi bawah foto.
+               Tinggi tetap + judul/deskripsi line-clamp 2 → tinggi slide stabil;
+               tombol selalu di dasar panel. Garis tipis #edd memisahkan banner
+               dari section #kategori yang juga putih. */
             .hero-banner .carousel-caption {
-                position: static;
+                position: relative;
+                z-index: 1;
                 transform: none;
+                left: auto;
+                top: auto;
+                display: flex;
+                flex-direction: column;
                 max-width: 100%;
-                min-height: 12.5rem;
-                padding: 1.25rem 1.25rem 1.5rem;
+                height: var(--panel-h);
+                margin-top: calc(-1 * var(--panel-overlap));
+                padding: 2.75rem 1.25rem 1.5rem;
                 background: #fff;
+                border-radius: 24px 24px 0 0;
+                box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
                 border-bottom: 1px solid #edd;
                 text-align: center;
             }
 
             .hero-banner .banner-content {
+                flex: 1 1 auto;
                 margin-bottom: 0;
             }
 
             .hero-banner .carousel-caption h2 {
-                font-size: 1.25rem;
-                line-height: 1.3;
+                font-size: 1.65rem;
+                line-height: 1.25;
                 margin-bottom: 0.5rem;
                 color: #6e0c0c;
                 display: -webkit-box;
@@ -484,34 +551,75 @@
             }
 
             .hero-banner .carousel-caption p {
-                font-size: 0.875rem;
+                font-size: 0.9rem;
                 line-height: 1.5;
                 font-weight: 400;
                 -webkit-line-clamp: 2;
-                color: var(--primary-dark);
+                color: #6c757d;
                 margin-bottom: 0;
             }
 
+            /* Tombol penuh lebar (rounded-pill dari markup tetap berlaku) */
             .hero-banner .btn-banner-wa {
-                padding: 8px 18px;
-                font-size: 0.875rem;
-                margin-top: 0.75rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                padding: 14px 20px;
+                font-size: 1rem;
+                margin-top: 1.25rem;
             }
 
-            /* Indikator & tombol prev/next tetap di area gambar */
+            .hero-banner .btn-banner-wa:focus-visible {
+                outline: 3px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            /* Titik indikator: tampil di dalam panel, di atas judul.
+               Satu set indikator bersama untuk semua slide (diposisikan relatif
+               terhadap .hero-banner), jadi tetap diam saat slide berganti. */
             .hero-banner .carousel-indicators {
-                bottom: auto;
-                top: calc(75vw - 2.5rem);
-                top: calc(75cqw - 2.5rem);
-                margin-bottom: 0;
+                z-index: 2;
+                /* tepi atas panel + 0.75rem (tombol titik setinggi 24px) */
+                top: auto;
+                bottom: calc(var(--panel-h) - 0.75rem - 24px);
+                margin: 0;
+                gap: 2px;
+            }
+
+            /* Titik 8px; border transparan 8px memperbesar area sentuh jadi 24px */
+            .hero-banner .carousel-indicators [data-bs-target] {
+                box-sizing: content-box;
+                width: 8px;
+                height: 8px;
+                margin: 0;
+                padding: 0;
+                border: 8px solid transparent;
+                border-radius: 50%;
+                background-color: #6e0c0c;
+                background-clip: content-box;
+                opacity: 0.2;
+            }
+
+            .hero-banner .carousel-indicators .active {
+                opacity: 1;
+            }
+
+            .hero-banner .carousel-indicators [data-bs-target]:focus-visible {
+                outline: 2px solid #6e0c0c;
+                outline-offset: -4px;
             }
 
             .hero-banner .carousel-control-prev,
             .hero-banner .carousel-control-next {
-                bottom: auto;
-                width: 15%;
-                height: 75vw;
-                height: 75cqw;
+                display: none;
+            }
+
+            /* Ruang samping konten lebih lega di HP (20px, Bootstrap default 12px).
+               Berlaku untuk semua .container (navbar, section, footer) agar tepi
+               konten tetap sejajar di seluruh halaman. Tablet/desktop tidak berubah. */
+            .container {
+                --bs-gutter-x: 2.5rem;
             }
         }
 
@@ -704,6 +812,80 @@
         });
 
         document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+        // Parallax banner HP (<768px): foto banner tetap diam saat halaman di-scroll,
+        // panel putih & konten di bawahnya naik menutupinya. Foto (picture) digeser
+        // translateY sebesar jarak scroll selama banner masih terlihat; bagian yang
+        // keluar dipotong overflow:hidden .carousel-inner. Hanya transform (tanpa
+        // ubah layout), listener passive + requestAnimationFrame. Tidak memakai
+        // position:fixed (rusak di dalam transform slide carousel) maupun
+        // background-attachment:fixed (tidak jalan di iOS). Geser slide & indikator
+        // tidak terpengaruh karena hanya lapisan foto yang digeser.
+        (() => {
+            const hero = document.getElementById('heroBanner');
+            const navbar = document.querySelector('.navbar-senggani');
+            if (!hero) return;
+
+            const mqMobile = window.matchMedia('(max-width: 767.98px)');
+            const mqReduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+            const fotos = hero.querySelectorAll('.carousel-item picture');
+            let heroStart = 0; // posisi scroll saat banner tepat di bawah navbar
+            let heroHeight = 0;
+            let ticking = false;
+            let aktif = false;
+
+            const ukur = () => {
+                // Tinggi navbar diukur saat menu tertutup (menu terbuka menambah tinggi)
+                if (navbar && !navbar.querySelector('.navbar-collapse.show, .navbar-collapse.collapsing')) {
+                    hero.style.setProperty('--nav-h', navbar.offsetHeight + 'px');
+                }
+                const navH = navbar ? navbar.offsetHeight : 0;
+                heroStart = hero.getBoundingClientRect().top + window.scrollY - navH;
+                heroHeight = hero.offsetHeight;
+            };
+
+            const geser = () => {
+                ticking = false;
+                if (!aktif) return;
+                const y = Math.min(Math.max(window.scrollY - heroStart, 0), heroHeight);
+                fotos.forEach(foto => {
+                    foto.style.transform = `translate3d(0, ${y}px, 0)`;
+                });
+            };
+
+            const onScroll = () => {
+                if (!ticking) {
+                    ticking = true;
+                    requestAnimationFrame(geser);
+                }
+            };
+
+            const atur = () => {
+                const boleh = mqMobile.matches && !mqReduce.matches;
+                if (mqMobile.matches) ukur();
+                else hero.style.removeProperty('--nav-h');
+
+                if (boleh && !aktif) {
+                    aktif = true;
+                    fotos.forEach(foto => foto.style.willChange = 'transform');
+                    window.addEventListener('scroll', onScroll, { passive: true });
+                } else if (!boleh && aktif) {
+                    aktif = false;
+                    window.removeEventListener('scroll', onScroll);
+                    fotos.forEach(foto => {
+                        foto.style.transform = '';
+                        foto.style.willChange = '';
+                    });
+                }
+                geser();
+            };
+
+            atur();
+            window.addEventListener('resize', atur, { passive: true });
+            window.addEventListener('load', atur);
+            mqMobile.addEventListener('change', atur);
+            mqReduce.addEventListener('change', atur);
+        })();
     </script>
 
     @stack('scripts')

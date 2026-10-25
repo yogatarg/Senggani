@@ -41,8 +41,8 @@
 
                             <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn-banner-wa rounded-pill px-4">
 
-                                <i class="fab fa-whatsapp me-2"></i>
-                                Pesan Sekarang
+                                <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>
+                                Konsultasi Sekarang
 
                             </a>
 
