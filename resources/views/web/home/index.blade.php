@@ -51,6 +51,13 @@
                     </div>
                 @endforeach
             </div>
+            {{-- HP (<768px): satu tombol bersama di panel statis, tidak ikut bergeser
+                 saat slide berganti. Tombol per slide di atas disembunyikan di HP. --}}
+            <a href="https://wa.me/6283829208316" target="_blank" rel="noopener"
+                class="btn-banner-wa btn-banner-wa-tetap rounded-pill px-4 d-md-none">
+                <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>
+                Konsultasi Sekarang
+            </a>
             <button class="carousel-control-prev" type="button" data-bs-target="#heroBanner" data-bs-slide="prev">
                 <span class="carousel-control-prev-icon" aria-hidden="true"></span>
                 <span class="visually-hidden">Sebelumnya</span>

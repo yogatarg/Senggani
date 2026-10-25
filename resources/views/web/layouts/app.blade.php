@@ -469,7 +469,7 @@
            Foto mengisi sisa tinggi di atas panel putih bersudut bulat atas yang "naik"
            menutupi bagian bawah foto (titik indikator, judul, deskripsi, tombol penuh
            lebar). Panah prev/next disembunyikan; geser jari tetap aktif.
-           Efek foto diam saat scroll: lihat skrip "Parallax banner HP" di bawah. ── */
+           Efek foto diam saat scroll: CSS scroll-driven animation di bawah. ── */
         @media (max-width: 767.98px) {
 
             .hero-banner {
@@ -492,10 +492,83 @@
                 }
             }
 
-            /* Area foto = tinggi banner - panel + bagian yang tertutup panel */
+            /* Area foto = tinggi banner - panel + bagian yang tertutup tepi atas panel */
             .hero-banner .carousel-item picture {
                 height: calc(var(--hero-h) - var(--panel-h) + var(--panel-overlap));
                 overflow: hidden;
+            }
+
+            /* Panel putih statis (tidak ikut bergeser saat slide berganti): latar
+               panel, titik indikator, dan tombol bersama .btn-banner-wa-tetap diam;
+               hanya foto, judul, dan deskripsi tiap slide yang bergeser (dipotong
+               overflow:hidden .carousel-inner).
+               ::before = latar panel, dilukis di bawah konten slide.
+               ::after  = tepi atas panel (bersudut 24px + bayangan tipis) di ATAS
+               slide, menutupi 26px bawah area foto; area ini hanya berisi padding
+               atas caption & indikator (z-index 2), bukan teks.
+               Garis tipis #edd memisahkan banner dari section #kategori. */
+            .hero-banner::before,
+            .hero-banner::after {
+                content: "";
+                position: absolute;
+                left: 0;
+                right: 0;
+                background: #fff;
+                pointer-events: none;
+            }
+
+            .hero-banner::before {
+                bottom: 0;
+                height: var(--panel-h);
+                border-bottom: 1px solid #edd;
+            }
+
+            .hero-banner::after {
+                z-index: 1;
+                bottom: calc(var(--panel-h) - var(--panel-overlap));
+                height: var(--panel-overlap);
+                border-radius: 24px 24px 0 0;
+                box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
+                /* bayangan hanya ke atas (tidak menggaris di atas isi panel) */
+                clip-path: inset(-24px 0 0 0);
+            }
+
+            /* Efek foto diam saat scroll (CSS scroll-driven animation, berjalan di
+               compositor sehingga sinkron dengan scroll; tanpa JS per frame).
+               Timeline = posisi .hero-banner terhadap viewport yang dipotong setinggi
+               navbar sticky (inset atas). Rentang exit-crossing: 0% saat tepi atas
+               banner tepat di bawah navbar, 100% saat tepi bawahnya lewat → panjang
+               rentang = tinggi banner, jadi translateY 0 → tinggi banner = 1:1 dengan
+               scroll. Yang dianimasikan gambar (img) di dalam picture, bukan
+               .carousel-item, jadi transform geser slide carousel tidak bentrok.
+               Bagian foto yang turun dipotong overflow:hidden picture dan
+               ditutup tepi atas panel (::after). Browser tanpa dukungan: foto ikut scroll biasa.
+               Mati bila prefers-reduced-motion: reduce. */
+            @supports (animation-timeline: view()) {
+                @media (prefers-reduced-motion: no-preference) {
+                    .hero-banner {
+                        view-timeline-name: --hero-banner;
+                        view-timeline-axis: block;
+                        view-timeline-inset: var(--nav-h) 0px;
+                    }
+
+                    .hero-banner .carousel-item img {
+                        animation: hero-foto-diam linear both;
+                        animation-duration: auto;
+                        animation-timeline: --hero-banner;
+                        animation-range: exit-crossing 0% exit-crossing 100%;
+                    }
+                }
+            }
+
+            @keyframes hero-foto-diam {
+                from {
+                    transform: translate3d(0, 0, 0);
+                }
+
+                to {
+                    transform: translate3d(0, var(--hero-h), 0);
+                }
             }
 
             /* Fallback banner lama (hanya gambar desktop ±16:9, area kosong di kiri,
@@ -511,10 +584,10 @@
                 object-position: center;
             }
 
-            /* Panel putih: naik var(--panel-overlap) menutupi bawah foto.
-               Tinggi tetap + judul/deskripsi line-clamp 2 → tinggi slide stabil;
-               tombol selalu di dasar panel. Garis tipis #edd memisahkan banner
-               dari section #kategori yang juga putih. */
+            /* Area teks per slide (transparan, di atas panel statis): naik
+               var(--panel-overlap) seperti panel. Tinggi tetap + judul/deskripsi
+               line-clamp 2 → tinggi slide stabil. Padding bawah menyisakan ruang
+               tombol bersama (1.5rem + garis 1px + tombol 52px + jarak 1.25rem). */
             .hero-banner .carousel-caption {
                 position: relative;
                 z-index: 1;
@@ -526,11 +599,7 @@
                 max-width: 100%;
                 height: var(--panel-h);
                 margin-top: calc(-1 * var(--panel-overlap));
-                padding: 2.75rem 1.25rem 1.5rem;
-                background: #fff;
-                border-radius: 24px 24px 0 0;
-                box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
-                border-bottom: 1px solid #edd;
+                padding: 2.75rem 1.25rem calc(1.5rem + 1px + 52px + 1.25rem);
                 text-align: center;
             }
 
@@ -568,6 +637,22 @@
                 padding: 14px 20px;
                 font-size: 1rem;
                 margin-top: 1.25rem;
+            }
+
+            /* Tombol per slide disembunyikan di HP (tidak bisa difokus);
+               gantinya satu tombol bersama yang diam di dasar panel statis. */
+            .hero-banner .carousel-item .btn-banner-wa {
+                display: none;
+            }
+
+            .hero-banner .btn-banner-wa-tetap {
+                position: absolute;
+                z-index: 2;
+                left: 1.25rem;
+                right: 1.25rem;
+                bottom: calc(1.5rem + 1px);
+                width: auto;
+                margin-top: 0;
             }
 
             .hero-banner .btn-banner-wa:focus-visible {
@@ -813,78 +898,33 @@
 
         document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
 
-        // Parallax banner HP (<768px): foto banner tetap diam saat halaman di-scroll,
-        // panel putih & konten di bawahnya naik menutupinya. Foto (picture) digeser
-        // translateY sebesar jarak scroll selama banner masih terlihat; bagian yang
-        // keluar dipotong overflow:hidden .carousel-inner. Hanya transform (tanpa
-        // ubah layout), listener passive + requestAnimationFrame. Tidak memakai
-        // position:fixed (rusak di dalam transform slide carousel) maupun
-        // background-attachment:fixed (tidak jalan di iOS). Geser slide & indikator
-        // tidak terpengaruh karena hanya lapisan foto yang digeser.
+        // Banner HP (<768px): efek foto diam saat scroll murni CSS (scroll-driven
+        // animation, lihat CSS .hero-banner). Skrip ini hanya menyetel --nav-h dari
+        // tinggi navbar sticky sebenarnya (dipakai tinggi banner & inset timeline),
+        // saat load/resize/menu ditutup. Tidak ada kerja per frame scroll.
         (() => {
             const hero = document.getElementById('heroBanner');
             const navbar = document.querySelector('.navbar-senggani');
-            if (!hero) return;
+            if (!hero || !navbar) return;
 
             const mqMobile = window.matchMedia('(max-width: 767.98px)');
-            const mqReduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-            const fotos = hero.querySelectorAll('.carousel-item picture');
-            let heroStart = 0; // posisi scroll saat banner tepat di bawah navbar
-            let heroHeight = 0;
-            let ticking = false;
-            let aktif = false;
 
             const ukur = () => {
-                // Tinggi navbar diukur saat menu tertutup (menu terbuka menambah tinggi)
-                if (navbar && !navbar.querySelector('.navbar-collapse.show, .navbar-collapse.collapsing')) {
+                if (!mqMobile.matches) {
+                    hero.style.removeProperty('--nav-h');
+                    return;
+                }
+                // Diukur saat menu tertutup (menu terbuka menambah tinggi navbar)
+                if (!navbar.querySelector('.navbar-collapse.show, .navbar-collapse.collapsing')) {
                     hero.style.setProperty('--nav-h', navbar.offsetHeight + 'px');
                 }
-                const navH = navbar ? navbar.offsetHeight : 0;
-                heroStart = hero.getBoundingClientRect().top + window.scrollY - navH;
-                heroHeight = hero.offsetHeight;
             };
 
-            const geser = () => {
-                ticking = false;
-                if (!aktif) return;
-                const y = Math.min(Math.max(window.scrollY - heroStart, 0), heroHeight);
-                fotos.forEach(foto => {
-                    foto.style.transform = `translate3d(0, ${y}px, 0)`;
-                });
-            };
-
-            const onScroll = () => {
-                if (!ticking) {
-                    ticking = true;
-                    requestAnimationFrame(geser);
-                }
-            };
-
-            const atur = () => {
-                const boleh = mqMobile.matches && !mqReduce.matches;
-                if (mqMobile.matches) ukur();
-                else hero.style.removeProperty('--nav-h');
-
-                if (boleh && !aktif) {
-                    aktif = true;
-                    fotos.forEach(foto => foto.style.willChange = 'transform');
-                    window.addEventListener('scroll', onScroll, { passive: true });
-                } else if (!boleh && aktif) {
-                    aktif = false;
-                    window.removeEventListener('scroll', onScroll);
-                    fotos.forEach(foto => {
-                        foto.style.transform = '';
-                        foto.style.willChange = '';
-                    });
-                }
-                geser();
-            };
-
-            atur();
-            window.addEventListener('resize', atur, { passive: true });
-            window.addEventListener('load', atur);
-            mqMobile.addEventListener('change', atur);
-            mqReduce.addEventListener('change', atur);
+            ukur();
+            window.addEventListener('resize', ukur, { passive: true });
+            window.addEventListener('load', ukur);
+            mqMobile.addEventListener('change', ukur);
+            navbar.addEventListener('hidden.bs.collapse', ukur);
         })();
     </script>
 
