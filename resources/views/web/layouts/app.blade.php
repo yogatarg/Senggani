@@ -453,14 +453,18 @@
                 object-position: center;
             }
 
-            /* Caption jadi blok teks biasa di bawah gambar */
+            /* Caption jadi blok teks biasa di bawah gambar.
+               Latar putih; garis tipis bernuansa merah muda (#edd, sama dengan
+               placeholder kartu produk) memisahkan banner dari section #kategori
+               yang juga putih. */
             .hero-banner .carousel-caption {
                 position: static;
                 transform: none;
                 max-width: 100%;
                 min-height: 12.5rem;
                 padding: 1.25rem 1.25rem 1.5rem;
-                background: #f5e6e6;
+                background: #fff;
+                border-bottom: 1px solid #edd;
                 text-align: center;
             }
 
