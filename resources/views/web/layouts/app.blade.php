@@ -523,10 +523,15 @@
                 border-bottom: 1px solid #edd;
             }
 
+            /* Turun 2px melewati dasar foto: tepi bawah foto dan tepi bawah ::after
+               berada di koordinat yang sama, dan pada skala pecahan (DPR 2.75, pratinjau
+               HP yang diskalakan) keduanya di-anti-alias → foto merembes jadi garis 1px
+               setinggi titik indikator. Lebih 2px (putih di atas latar putih ::before
+               dan padding atas caption) menutup sambungan itu. */
             .hero-banner::after {
                 z-index: 1;
-                bottom: calc(var(--panel-h) - var(--panel-overlap));
-                height: var(--panel-overlap);
+                bottom: calc(var(--panel-h) - var(--panel-overlap) - 2px);
+                height: calc(var(--panel-overlap) + 2px);
                 border-radius: 24px 24px 0 0;
                 box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
                 /* bayangan hanya ke atas (tidak menggaris di atas isi panel) */
