@@ -40,6 +40,10 @@
                     @error('gambar')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+                    <small class="text-muted">
+                        Tampil di layar ≥768 px (tinggi 550 px, terpotong mengikuti lebar layar). Rasio 12:5 (melebar), disarankan 1920×800 px. Kosongkan ±50% bagian kiri untuk teks; letakkan produk di kanan ±52–85% lebar dan jauhi tepi atas-bawah ±15%.
+                        Gambar otomatis dikompres; maks 2 MB.
+                    </small>
                 </div>
 
                 <div class="form-group mt-3">

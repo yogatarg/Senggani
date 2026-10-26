@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login Admin — Senggani Kemasan</title>
+    <title>Login Admin — Senggani Paperbag &amp; Packaging</title>
     <link rel="stylesheet" href="{{ asset('vendor/adminlte/dist/css/adminlte.min.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -33,7 +33,7 @@
 
     {{-- Logo --}}
     <div class="login-logo text-center mb-3">
-        <a href="#">Senggani <span>Kemasan</span></a>
+        <a href="#">Senggani <span>Paperbag &amp; Packaging</span></a>
         <p class="text-muted" style="font-size: 0.85rem;">Admin Dashboard</p>
     </div>
 

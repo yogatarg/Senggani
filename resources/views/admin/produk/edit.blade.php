@@ -51,7 +51,8 @@
                         <div class="form-group">
                             <label>Minimal Pesan (pcs)</label>
                             <input type="number" name="minimal_pesan" class="form-control @error('minimal_pesan') is-invalid @enderror"
-                                value="{{ old('minimal_pesan', $produk->minimal_pesan) }}" required>
+                                value="{{ old('minimal_pesan', $produk->minimal_pesan) }}" min="1" required>
+                            <small class="form-text text-muted">Isi 1 bila tanpa minimum order.</small>
                             @error('minimal_pesan')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -70,6 +71,10 @@
                     @error('gambar')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+                    <small class="text-muted d-block">
+                        Rasio 4:3 (mendatar), disarankan 1200×900 px, produk di tengah dengan sedikit ruang kosong di sekeliling (tepi atas-bawah atau kiri-kanan bisa terpotong di kartu & halaman detail).
+                        Format: JPG, PNG, WEBP. Gambar otomatis dikompres; maks 2 MB.
+                    </small>
                 </div>
 
                 <div class="form-group">
@@ -114,6 +119,10 @@
                     @error('gambar.*')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+                    <small class="text-muted d-block">
+                        Rasio 4:3 (mendatar), disarankan 1200×900 px, produk di tengah dengan sedikit ruang kosong di sekeliling (tepi atas-bawah atau kiri-kanan bisa terpotong di kartu & halaman detail).
+                        Format: JPG, PNG, WEBP. Gambar otomatis dikompres; maks 2 MB per foto.
+                    </small>
                 </div>
                 <button type="submit" class="btn btn-success">Upload Galeri</button>
             </form>

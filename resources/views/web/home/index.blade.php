@@ -1,6 +1,92 @@
 @extends('web.layouts.app')
 
-@section('title', 'Home')
+@php $judulHalaman = 'Paperbag & Dus Custom | ' . (config('usaha.nama') ?: 'Senggani Paperbag & Packaging'); @endphp
+@section('title', mb_strlen($judulHalaman . ' Yogyakarta') <= 60 ? $judulHalaman . ' Yogyakarta' : $judulHalaman)
+@section('meta_description', 'Paperbag, dus, tas furing, dan undangan custom dari Kotagede, Yogyakarta. Ukuran, bahan, dan finishing sesuai pesanan. Konsultasi harga via WhatsApp.')
+
+@php
+    // FAQ dari config/faq.php; item tanpa tanya/jawab dilewati. Kosong = section & FAQPage tidak dirender.
+    $faq = collect((array) config('faq.items', []))
+        ->filter(fn ($f) => is_array($f) && filled($f['tanya'] ?? null) && filled($f['jawab'] ?? null))
+        ->values();
+@endphp
+
+@if ($faq->isNotEmpty())
+    @php
+        $faqSchema = [
+            '@context' => 'https://schema.org',
+            '@type' => 'FAQPage',
+            'mainEntity' => $faq->map(fn ($f) => [
+                '@type' => 'Question',
+                'name' => $f['tanya'],
+                'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f['jawab']],
+            ])->all(),
+        ];
+    @endphp
+    @push('jsonld')
+        <script type="application/ld+json">{!! json_encode($faqSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+    @endpush
+
+    @push('styles')
+        <style>
+            /* ── FAQ beranda ── */
+            .faq-list {
+                max-width: 820px;
+                margin: 0 auto;
+                --bs-accordion-border-color: #eee2e2;
+                --bs-accordion-border-radius: 12px;
+                --bs-accordion-inner-border-radius: 11px;
+                --bs-accordion-btn-color: #333;
+                --bs-accordion-active-color: var(--primary);
+                --bs-accordion-active-bg: #f9f3f3;
+                --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem rgba(76, 4, 4, 0.2);
+                --bs-accordion-btn-active-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234c0404' stroke-linecap='round' stroke-linejoin='round'%3e%3cpath d='M2 5L8 11L14 5'/%3e%3c/svg%3e");
+            }
+
+            .faq-list .accordion-item + .accordion-item {
+                margin-top: 0.75rem;
+            }
+
+            .faq-list .accordion-item {
+                border-radius: var(--bs-accordion-border-radius) !important;
+                border-top: var(--bs-accordion-border-width) solid var(--bs-accordion-border-color) !important;
+                overflow: hidden;
+            }
+
+            .faq-list .accordion-button {
+                font-weight: 600;
+                font-size: 1rem;
+                line-height: 1.45;
+                gap: 0.75rem;
+                border-radius: var(--bs-accordion-inner-border-radius) !important;
+            }
+
+            .faq-list .accordion-button:not(.collapsed) {
+                box-shadow: none;
+                border-bottom-left-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+            }
+
+            .faq-list .accordion-body {
+                color: #555;
+                font-size: 0.95rem;
+                line-height: 1.7;
+            }
+
+            @media (max-width: 767.98px) {
+                .faq-list .accordion-button {
+                    font-size: 0.95rem;
+                    padding: 0.9rem 1rem;
+                }
+
+                .faq-list .accordion-body {
+                    padding: 0.9rem 1rem 1rem;
+                    font-size: 0.9rem;
+                }
+            }
+        </style>
+    @endpush
+@endif
 
 @section('content')
 
@@ -30,7 +116,12 @@
                         </picture>
                         <div class="carousel-caption custom-caption">
                             <div class="banner-content">
-                                <h2>{{ $item->judul }}</h2>
+                                {{-- Slide pertama = judul utama halaman (h1); slide lain h2. Gaya sama (.carousel-caption h1, h2). --}}
+                                @if ($i === 0)
+                                    <h1>{{ $item->judul }}</h1>
+                                @else
+                                    <h2>{{ $item->judul }}</h2>
+                                @endif
 
                                 @if ($item->deskripsi)
                                     <p>
@@ -39,7 +130,7 @@
                                 @endif
                             </div>
 
-                            <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn-banner-wa rounded-pill px-4">
+                            <a href="https://wa.me/{{ config('usaha.whatsapp') }}" target="_blank" rel="noopener" class="btn-banner-wa rounded-pill px-4">
 
                                 <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>
                                 Konsultasi Sekarang
@@ -53,7 +144,7 @@
             </div>
             {{-- HP (<768px): satu tombol bersama di panel statis, tidak ikut bergeser
                  saat slide berganti. Tombol per slide di atas disembunyikan di HP. --}}
-            <a href="https://wa.me/6283829208316" target="_blank" rel="noopener"
+            <a href="https://wa.me/{{ config('usaha.whatsapp') }}" target="_blank" rel="noopener"
                 class="btn-banner-wa btn-banner-wa-tetap rounded-pill px-4 d-md-none">
                 <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>
                 Konsultasi Sekarang
@@ -71,9 +162,9 @@
         {{-- Fallback jika belum ada banner --}}
         <div style="background: linear-gradient(135deg, #6a3131, #4e2424); padding: 120px 0;">
             <div class="container text-center text-white">
-                <h1 class="display-4 fw-bold mb-3">Senggani Kemasan</h1>
+                <h1 class="display-4 fw-bold mb-3">{{ config('usaha.nama') ?: 'Senggani Paperbag & Packaging' }}</h1>
                 <p class="fs-5 mb-4 opacity-75">Spesialis Packaging Berkualitas untuk Bisnis Anda</p>
-                <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5">
+                <a href="https://wa.me/{{ config('usaha.whatsapp') }}" target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5">
                     <i class="fab fa-whatsapp me-2"></i>Konsultasi Gratis
                 </a>
             </div>
@@ -141,7 +232,7 @@
     <section class="py-5" style="background: #ffffff" id="tentang">
         <div class="container">
             <div class="text-center mb-5 fade-up">
-                <h2 class="section-title">Mengapa Senggani Kemasan?</h2>
+                <h2 class="section-title">Mengapa Senggani?</h2>
                 <p class="text-muted mt-3">Kami hadir untuk memenuhi kebutuhan packaging bisnis Anda</p>
             </div>
 
@@ -151,8 +242,8 @@
                         <i class="fas fa-pencil-ruler"></i>
                     </div>
                     <h5 class="fw-600">Konsultasi Desain Gratis</h5>
-                    <p class="text-muted small">Tim kami siap membantu mewujudkan desain kemasan impian Anda tanpa biaya
-                        tambahan.</p>
+                    <p class="text-muted small">Gratis desain untuk layout sederhana (teks &amp; logo). Desain lebih kompleks
+                        mulai Rp50.000.</p>
                 </div>
                 <div class="col-md-3 fade-up">
                     <div class="keunggulan-icon">
@@ -243,7 +334,38 @@
     </section>
 
     {{-- ═══════════════════════════════════════
-     6. CTA WHATSAPP
+     6. FAQ (dari config/faq.php; tidak dirender bila kosong)
+═══════════════════════════════════════ --}}
+    @if ($faq->isNotEmpty())
+        <section class="py-5" id="faq" aria-labelledby="faq-judul">
+            <div class="container">
+                <div class="text-center mb-5 fade-up">
+                    <h2 class="section-title" id="faq-judul">Pertanyaan yang Sering Diajukan</h2>
+                </div>
+
+                <div class="accordion faq-list fade-up" id="faqAccordion">
+                    @foreach ($faq as $i => $f)
+                        <div class="accordion-item">
+                            <h3 class="accordion-header" id="faq-tanya-{{ $i }}">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#faq-jawab-{{ $i }}" aria-expanded="false"
+                                    aria-controls="faq-jawab-{{ $i }}">
+                                    {{ $f['tanya'] }}
+                                </button>
+                            </h3>
+                            <div id="faq-jawab-{{ $i }}" class="accordion-collapse collapse"
+                                aria-labelledby="faq-tanya-{{ $i }}" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">{!! nl2br(e($f['jawab'])) !!}</div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+    @endif
+
+    {{-- ═══════════════════════════════════════
+     7. CTA WHATSAPP
 ═══════════════════════════════════════ --}}
     <section class="cta-section text-center text-white fade-up" id="kontak">
         <div class="container">
@@ -251,9 +373,9 @@
             <h2 class="fw-700 mb-3">Siap Memesan Kemasan Impian Anda?</h2>
             <p class="fs-5 opacity-75 mb-5">
                 Konsultasikan kebutuhan packaging bisnis Anda sekarang.<br>
-                Gratis konsultasi, tanpa biaya desain!
+                Gratis konsultasi &amp; desain layout sederhana!
             </p>
-            <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20konsultasi%20mengenai%20packaging."
+            <a href="https://wa.me/{{ config('usaha.whatsapp') }}?text=Halo%20Senggani%20Paperbag%20%26%20Packaging%2C%20saya%20ingin%20konsultasi%20mengenai%20packaging."
                 target="_blank" rel="noopener" class="btn btn-success btn-lg rounded-pill px-5 py-3 fs-5 fw-600">
                 <i class="fab fa-whatsapp me-2"></i>Konsultasi Sekarang via WhatsApp
             </a>

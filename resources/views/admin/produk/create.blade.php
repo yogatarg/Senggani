@@ -64,6 +64,7 @@
             <input type="number" name="minimal_pesan"
                    class="form-control @error('minimal_pesan') is-invalid @enderror"
                    value="{{ old('minimal_pesan', 100) }}" min="1" required>
+            <small class="form-text text-muted">Isi 1 bila tanpa minimum order.</small>
             @error('minimal_pesan')
                 <div class="invalid-feedback">{{ $message }}</div>
             @enderror
@@ -77,7 +78,10 @@
             @error('gambar')
                 <div class="invalid-feedback">{{ $message }}</div>
             @enderror
-            <small class="text-muted">Format: JPG, PNG, WEBP. Maks: 2MB.</small>
+            <small class="text-muted d-block">
+                Rasio 4:3 (mendatar), disarankan 1200×900 px, produk di tengah dengan sedikit ruang kosong di sekeliling (tepi atas-bawah atau kiri-kanan bisa terpotong di kartu & halaman detail).
+                Format: JPG, PNG, WEBP. Gambar otomatis dikompres; maks 2 MB.
+            </small>
             <div id="previewUtama" class="mt-2" style="display:none;">
                 <img id="previewUtamaImg" src="" height="100"
                      class="rounded border" alt="Preview">
@@ -112,7 +116,8 @@
                 <div class="invalid-feedback">{{ $message }}</div>
             @enderror
             <small class="text-muted">
-                Bisa pilih lebih dari satu foto. Format: JPG, PNG, WEBP. Maks: 2MB per foto.
+                Bisa pilih lebih dari satu foto. Rasio 4:3 (mendatar), disarankan 1200×900 px, produk di tengah dengan sedikit ruang kosong di sekeliling (tepi atas-bawah atau kiri-kanan bisa terpotong di kartu & halaman detail).
+                Format: JPG, PNG, WEBP. Gambar otomatis dikompres; maks 2 MB per foto.
             </small>
         </div>
         <div id="previewGaleri" class="d-flex flex-wrap gap-2 mt-2"></div>

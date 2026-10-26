@@ -5,7 +5,7 @@
     <div class="card h-100 kartu-produk">
         @if ($item->gambar)
             <img src="{{ asset('storage/' . $item->gambar) }}" class="card-img-top kartu-produk-media"
-                alt="{{ $item->nama_produk }}">
+                alt="{{ $item->nama_produk }}" width="400" height="300" loading="lazy" decoding="async">
         @else
             <div class="card-img-top kartu-produk-media kartu-produk-placeholder d-flex align-items-center justify-content-center">
                 <i class="fas fa-box fa-3x" style="color:#6a3131; opacity:0.4;" aria-hidden="true"></i>
@@ -14,7 +14,11 @@
         <div class="card-body d-flex flex-column">
             <h5 class="card-title fw-600 kartu-produk-judul">{{ $item->nama_produk }}</h5>
             <p class="text-muted small mb-3 kartu-produk-meta">
-                Min. pesan {{ $item->minimal_pesan }} pcs
+                @if ((int) $item->minimal_pesan > 1)
+                    Min. pesan {{ number_format((int) $item->minimal_pesan, 0, ',', '.') }} pcs
+                @else
+                    Tanpa minimum order
+                @endif
             </p>
             <div class="mt-auto">
                 <a href="{{ route('produk.show', $item->slug) }}" class="btn btn-primary w-100 kartu-produk-btn">

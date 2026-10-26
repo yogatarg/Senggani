@@ -1,6 +1,79 @@
 @extends('web.layouts.app')
 
-@section('title', $produk->nama_produk)
+@php
+    $namaUsahaSeo = config('usaha.nama') ?: 'Senggani Paperbag & Packaging';
+    $keAbsolut = fn (string $u) => rtrim(\Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u), '/') === rtrim(config('app.url'), '/')
+        ? rtrim(config('app.url'), '/') . '/'
+        : \Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u);
+    $namaProdukSeo = trim($produk->nama_produk);
+    // Judul maks. 60 karakter: "{Produk} | {Usaha} Yogyakarta" bila muat, lalu tanpa " Yogyakarta",
+    // terakhir nama produk dipotong (…) agar tetap ≤60.
+    $judulProduk = $namaProdukSeo . ' | ' . $namaUsahaSeo . ' Yogyakarta';
+    if (mb_strlen($judulProduk) > 60) {
+        $sisaJudul = 60 - mb_strlen(' | ' . $namaUsahaSeo);
+        $judulProduk = (mb_strlen($namaProdukSeo) > $sisaJudul
+            ? rtrim(mb_substr($namaProdukSeo, 0, $sisaJudul - 1)) . '…'
+            : $namaProdukSeo) . ' | ' . $namaUsahaSeo;
+    }
+    // minimal_pesan ≤ 1 atau kosong = tanpa minimum order
+    $minPesan = max(1, (int) $produk->minimal_pesan);
+    $adaMinimum = $minPesan > 1;
+    $minPesanTeks = number_format($minPesan, 0, ',', '.');
+    $adaPilihan = $produk->bahan->count() > 0 || $produk->finishing->count() > 0;
+    $metaEkor = '. ' . ($adaMinimum ? 'Minimal ' . $minPesanTeks . ' pcs, ' : 'Tanpa minimal order, ')
+        . ($adaPilihan ? 'pilih bahan dan finishing, ' : 'ukuran custom, ')
+        . 'harga sesuai spesifikasi. Pesan via WhatsApp.';
+    $metaProduk = $namaProdukSeo . ' dari ' . $namaUsahaSeo . ' Yogyakarta' . $metaEkor;
+    if (mb_strlen($metaProduk) > 160) {
+        $metaProduk = $namaProdukSeo . ' dari ' . $namaUsahaSeo . $metaEkor;
+    }
+
+    // Semua foto produk (absolut) untuk og:image & JSON-LD
+    $fotoSeo = collect([$produk->gambar])
+        ->merge($produk->galeri->pluck('nama_file'))
+        ->filter()
+        ->unique()
+        ->map(fn ($f) => $keAbsolut(asset('storage/' . $f)))
+        ->values();
+
+    // Deskripsi polos (tanpa **tebal** dan baris baru) untuk data terstruktur
+    $deskripsiPolos = trim(preg_replace('/\s+/u', ' ', str_replace('**', '', (string) $produk->deskripsi)));
+
+    $produkSchema = array_filter([
+        '@context' => 'https://schema.org',
+        '@type' => 'Product',
+        'name' => $namaProdukSeo,
+        'description' => $deskripsiPolos !== '' ? $deskripsiPolos : $metaProduk,
+        'image' => $fotoSeo->all() ?: null,
+        'url' => $keAbsolut(route('produk.show', $produk->slug)),
+        'brand' => ['@type' => 'Brand', 'name' => $namaUsahaSeo],
+        'category' => $produk->kategori?->nama_kategori,
+        // Tanpa offers: harga custom sesuai spesifikasi
+    ], fn ($v) => $v !== null);
+
+    $remah = [['name' => 'Home', 'item' => $keAbsolut(route('home'))]];
+    if ($produk->kategori) {
+        $remah[] = ['name' => $produk->kategori->nama_kategori, 'item' => $keAbsolut(route('kategori.show', $produk->kategori->slug))];
+    }
+    $remah[] = ['name' => $namaProdukSeo, 'item' => $keAbsolut(route('produk.show', $produk->slug))];
+    $breadcrumbSchema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'BreadcrumbList',
+        'itemListElement' => collect($remah)->map(fn ($r, $i) => ['@type' => 'ListItem', 'position' => $i + 1] + $r)->all(),
+    ];
+@endphp
+
+@section('title', $judulProduk)
+@section('meta_description', $metaProduk)
+@section('og_type', 'product')
+@if ($fotoSeo->isNotEmpty())
+    @section('og_image', $fotoSeo->first())
+@endif
+
+@push('jsonld')
+    <script type="application/ld+json">{!! json_encode($produkSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+    <script type="application/ld+json">{!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+@endpush
 
 @section('content')
 
@@ -24,7 +97,8 @@
                     @if ($fotoUtama)
                         <img id="fotoUtama" src="{{ $fotoUtama }}" class="w-100 h-100"
                             style="object-fit:cover; cursor:zoom-in; transition: opacity 0.2s;"
-                            alt="{{ $produk->nama_produk }}" onclick="bukaLightbox(this.src)">
+                            alt="{{ $produk->nama_produk }}" fetchpriority="high" decoding="async"
+                            onclick="bukaLightbox(this.src)">
                     @else
                         <div class="w-100 h-100 d-flex align-items-center justify-content-center">
                             <i class="fas fa-box fa-5x" style="color:#6a3131; opacity:0.3;"></i>
@@ -56,7 +130,7 @@
                 border: 2px solid {{ $i === 0 ? '#6a3131' : '#ddd' }};
                 transition: border 0.2s; flex-shrink:0;">
                                 <img src="{{ $foto['src'] }}" class="w-100 h-100" style="object-fit:cover;"
-                                    alt="{{ $foto['alt'] }}">
+                                    alt="{{ $foto['alt'] }}" width="70" height="70" loading="lazy" decoding="async">
                             </div>
                         @endforeach
                     </div>
@@ -99,7 +173,7 @@
                         <i class="fas fa-tag me-1"></i> Harga sesuai spesifikasi
                     </span>
                     <span class="text-muted small">
-                        <i class="fas fa-box me-1"></i>Min. {{ $produk->minimal_pesan }} pcs
+                        <i class="fas fa-box me-1" aria-hidden="true"></i>{{ $adaMinimum ? 'Min. ' . $minPesanTeks . ' pcs' : 'Tanpa minimum order' }}
                     </span>
                 </div>
 
@@ -199,10 +273,10 @@
                         <label class="form-label fw-bold" style="font-size:0.9rem;">
                             Jumlah (pcs)
                         </label>
-                        <input type="number" id="inputJumlah" class="form-control" min="{{ $produk->minimal_pesan }}"
-                            value="{{ $produk->minimal_pesan }}">
+                        <input type="number" id="inputJumlah" class="form-control" min="{{ $minPesan }}"
+                            value="{{ $minPesan }}">
                         <div class="form-text">
-                            Minimal pemesanan {{ $produk->minimal_pesan }} pcs
+                            {{ $adaMinimum ? 'Minimal pemesanan ' . $minPesanTeks . ' pcs' : 'Tanpa minimum order' }}
                         </div>
                     </div>
 
@@ -228,7 +302,8 @@
     <div id="lightbox" onclick="tutupLightbox()"
         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85);
             z-index:9999; align-items:center; justify-content:center; cursor:zoom-out;">
-        <img id="lightboxImg" src=""
+        {{-- Tanpa atribut src sampai dibuka (src kosong memicu permintaan ke halaman ini sendiri) --}}
+        <img id="lightboxImg" alt="Foto {{ $produk->nama_produk }} diperbesar"
             style="max-width:90vw; max-height:90vh;
                 object-fit:contain; border-radius:8px; box-shadow:0 0 40px rgba(0,0,0,0.5);">
         <button onclick="tutupLightbox()"
@@ -240,7 +315,7 @@
 
     {{-- Scripts --}}
     <script>
-        const NOMOR_WA = '6283829208316';
+        const NOMOR_WA = @json((string) config('usaha.whatsapp'));
         const NAMA_PRODUK = @json($produk->nama_produk);
         const URL_PRODUK = @json(url()->current());
 
@@ -286,7 +361,7 @@
             const finishing = document.getElementById('pilihFinishing')?.value || '-';
             const jumlah = document.getElementById('inputJumlah').value || '-';
 
-            const minPesan = {{ $produk->minimal_pesan }};
+            const minPesan = {{ $minPesan }};
             if (parseInt(jumlah) < minPesan) {
                 alert(`Minimal pemesanan adalah ${minPesan} pcs.`);
                 document.getElementById('inputJumlah').focus();
@@ -294,7 +369,7 @@
             }
 
             const pesan =
-                `Halo Senggani Kemasan, saya tertarik dan ingin menanyakan produk:\n\n` +
+                `Halo Senggani Paperbag & Packaging, saya tertarik dan ingin menanyakan produk:\n\n` +
                 `Nama Produk : ${NAMA_PRODUK}\n` +
                 `Bahan       : ${bahan}\n` +
                 `Finishing   : ${finishing}\n` +

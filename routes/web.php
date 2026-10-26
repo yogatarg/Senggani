@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\KategoriProdukController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\KategoriController;
 use App\Http\Controllers\Web\ProdukController;
+use App\Http\Controllers\Web\SeoController;
 use Illuminate\Support\Facades\Route;
 
 // ── Public Routes ──────────────────────────────────────
@@ -15,6 +16,11 @@ Route::get('/kategori', [KategoriController::class, 'index'])->name('kategori.in
 Route::get('/kategori/{slug}', [KategoriController::class, 'show'])->name('kategori.show');
 Route::get('/produk', [ProdukController::class, 'index'])->name('produk.index');
 Route::get('/produk/{slug}', [ProdukController::class, 'show'])->name('produk.show');
+
+// ── SEO & AI (dinamis agar URL absolut mengikuti APP_URL) ──
+Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])->name('sitemap');
+Route::get('/robots.txt', [SeoController::class, 'robots'])->name('robots');
+Route::get('/llms.txt', [SeoController::class, 'llms'])->name('llms');
 
 // ── Admin Auth Routes (tanpa middleware) ───────────────
 Route::prefix('admin')->name('admin.')->group(function () {

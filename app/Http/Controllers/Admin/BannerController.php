@@ -1,8 +1,10 @@
 <?php
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
+use App\Services\OlahGambar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -10,6 +12,12 @@ use Throwable;
 
 class BannerController extends Controller
 {
+    use UnggahGambar;
+
+    public function __construct(private OlahGambar $olahGambar)
+    {
+    }
+
     public function index()
     {
         $banner = Banner::latest()->get();
@@ -26,8 +34,8 @@ class BannerController extends Controller
         $request->validate([
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
-            'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'gambar_mobile' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar_mobile' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072|' . self::ATURAN_DIMENSI,
             'tautan'        => 'nullable|url',
         ], $this->pesanGambar());
 
@@ -35,12 +43,12 @@ class BannerController extends Controller
         $gambarMobile = null;
 
         try {
-            $gambar = $request->file('gambar')->store('banner', 'public');
+            $gambar = $this->simpanGambar($request->file('gambar'), 'banner', OlahGambar::BANNER_DESKTOP, 'gambar');
 
             if ($request->hasFile('gambar_mobile')) {
-                $gambarMobile = $request
-                    ->file('gambar_mobile')
-                    ->store('banner', 'public');
+                $gambarMobile = $this->simpanGambar(
+                    $request->file('gambar_mobile'), 'banner', OlahGambar::BANNER_MOBILE, 'gambar_mobile'
+                );
             }
 
             Banner::create([
@@ -71,13 +79,14 @@ class BannerController extends Controller
         $request->validate([
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             // Wajib hanya bila banner belum punya gambar mobile
             'gambar_mobile' => [
                 $banner->gambar_mobile ? 'nullable' : 'required',
                 'image',
                 'mimes:jpg,jpeg,png,webp',
                 'max:3072',
+                self::ATURAN_DIMENSI,
             ],
             'tautan'        => 'nullable|url',
         ], $this->pesanGambar());
@@ -90,14 +99,16 @@ class BannerController extends Controller
         try {
             if ($request->hasFile('gambar')) {
                 $fileLama[]     = $banner->gambar;
-                $banner->gambar = $fileBaru[] = $request->file('gambar')->store('banner', 'public');
+                $banner->gambar = $fileBaru[] = $this->simpanGambar(
+                    $request->file('gambar'), 'banner', OlahGambar::BANNER_DESKTOP, 'gambar'
+                );
             }
 
             if ($request->hasFile('gambar_mobile')) {
                 $fileLama[]            = $banner->gambar_mobile;
-                $banner->gambar_mobile = $fileBaru[] = $request
-                    ->file('gambar_mobile')
-                    ->store('banner', 'public');
+                $banner->gambar_mobile = $fileBaru[] = $this->simpanGambar(
+                    $request->file('gambar_mobile'), 'banner', OlahGambar::BANNER_MOBILE, 'gambar_mobile'
+                );
             }
 
             $banner->judul     = $request->judul;
@@ -128,7 +139,7 @@ class BannerController extends Controller
             'gambar_mobile.image'    => 'Gambar mobile harus berupa file gambar.',
             'gambar_mobile.mimes'    => 'Gambar mobile harus berformat JPG, JPEG, PNG, atau WEBP.',
             'gambar_mobile.max'      => 'Ukuran gambar mobile maksimal 3 MB.',
-        ];
+        ] + $this->pesanDimensi(['gambar' => 'Gambar desktop', 'gambar_mobile' => 'Gambar mobile']);
     }
 
     // Aktif / nonaktifkan banner langsung dari daftar

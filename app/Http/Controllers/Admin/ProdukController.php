@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Models\Bahan;
 use App\Models\Finishing;
@@ -8,6 +9,7 @@ use App\Models\GaleriProduk;
 use App\Models\KategoriProduk;
 use App\Models\Produk;
 use App\Models\UkuranProduk;
+use App\Services\OlahGambar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -15,6 +17,12 @@ use Throwable;
 
 class ProdukController extends Controller
 {
+    use UnggahGambar;
+
+    public function __construct(private OlahGambar $olahGambar)
+    {
+    }
+
     public function index()
     {
         $produk = Produk::with('kategori')
@@ -37,10 +45,10 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             'galeri'        => 'nullable|array',
-            'galeri.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+            'galeri.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+        ], $this->pesanDimensi(['gambar' => 'Gambar produk', 'galeri.*' => 'Foto galeri']));
 
         $data = [
             'nama_produk'   => $request->nama_produk,
@@ -56,13 +64,13 @@ class ProdukController extends Controller
 
         try {
             if ($request->hasFile('gambar')) {
-                $data['gambar'] = $fileBaru[] = $request->file('gambar')->store('produk', 'public');
+                $data['gambar'] = $fileBaru[] = $this->simpanGambar($request->file('gambar'), 'produk', OlahGambar::UMUM, 'gambar');
             }
 
             $galeri = [];
             if ($request->hasFile('galeri')) {
-                foreach ($request->file('galeri') as $file) {
-                    $galeri[] = $fileBaru[] = $file->store('galeri', 'public');
+                foreach ($request->file('galeri') as $i => $file) {
+                    $galeri[] = $fileBaru[] = $this->simpanGambar($file, 'galeri', OlahGambar::UMUM, "galeri.$i");
                 }
             }
 
@@ -103,8 +111,8 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+        ], $this->pesanDimensi(['gambar' => 'Gambar produk']));
 
         $produk->nama_produk   = $request->nama_produk;
         $produk->slug          = Produk::slugUnik($request->nama_produk, $produk->id);
@@ -118,7 +126,7 @@ class ProdukController extends Controller
 
         if ($request->hasFile('gambar')) {
             $gambarLama     = $produk->gambar;
-            $gambarBaru     = $request->file('gambar')->store('produk', 'public');
+            $gambarBaru     = $this->simpanGambar($request->file('gambar'), 'produk', OlahGambar::UMUM, 'gambar');
             $produk->gambar = $gambarBaru;
         }
 
@@ -165,14 +173,14 @@ class ProdukController extends Controller
 
         $request->validate([
             'gambar'   => 'array',
-            'gambar.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+            'gambar.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+        ], $this->pesanDimensi(['gambar.*' => 'Foto galeri']));
 
         $fileBaru = [];
 
         try {
-            foreach ($request->file('gambar') as $file) {
-                $fileBaru[] = $file->store('galeri', 'public');
+            foreach ($request->file('gambar') as $i => $file) {
+                $fileBaru[] = $this->simpanGambar($file, 'galeri', OlahGambar::UMUM, "gambar.$i");
             }
 
             DB::transaction(function () use ($produk, $fileBaru) {

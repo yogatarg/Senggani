@@ -1,10 +1,208 @@
+@php
+    /* ── Data usaha (NAP) dari config/usaha.php; default aman bila config belum ada ── */
+    $namaUsaha = config('usaha.nama') ?: 'Senggani Paperbag & Packaging';
+    $deskripsiUsaha = config('usaha.deskripsi') ?: 'Paperbag, dus, tas furing, dan undangan custom dari Kotagede, Yogyakarta. Ukuran, bahan, dan finishing sesuai pesanan. Konsultasi harga via WhatsApp.';
+    $teleponUsaha = config('usaha.telepon') ?: '+62 838-2920-8316';
+    $waUsaha = preg_replace('/\D+/', '', (string) (config('usaha.whatsapp') ?: '6283829208316'));
+    $emailUsaha = config('usaha.email') ?: 'sengganipaperbag@gmail.com';
+    $alamatUsaha = array_merge([
+        'jalan' => 'Pilahan, RT 40, RW 12',
+        'kelurahan' => 'Rejowinangun',
+        'kecamatan' => 'Kotagede',
+        'kota' => 'Yogyakarta',
+        'provinsi' => 'DI Yogyakarta',
+        'kode_pos' => '55171',
+        'negara' => 'ID',
+    ], array_filter((array) config('usaha.alamat', []), fn ($v) => filled($v)));
+    // Teks alamat yang tampil = sumber yang sama dengan JSON-LD (NAP konsisten)
+    $alamatTeks = trim(implode(', ', array_filter([
+        $alamatUsaha['jalan'], $alamatUsaha['kelurahan'], $alamatUsaha['kecamatan'], $alamatUsaha['kota'],
+    ])) . ' ' . $alamatUsaha['kode_pos']);
+    $geoUsaha = (array) config('usaha.geo', []);
+    $sosialUsaha = array_values(array_filter((array) config('usaha.sosial', ['https://www.instagram.com/sengganipaperbag/']), fn ($u) => is_string($u) && filter_var($u, FILTER_VALIDATE_URL)));
+    $areaLayanan = array_values(array_filter((array) config('usaha.area_layanan', []), 'filled'));
+
+    /* Jam buka: format schema.org openingHours dari config, mis. "Mo-Sa 08:00-17:00".
+       Item yang cocok pola → masuk JSON-LD + tampil versi Indonesia ("Senin–Sabtu 08.00–17.00").
+       Item lain hanya ditampilkan apa adanya. */
+    $petaHari = ['Mo' => 'Senin', 'Tu' => 'Selasa', 'We' => 'Rabu', 'Th' => 'Kamis', 'Fr' => 'Jumat', 'Sa' => 'Sabtu', 'Su' => 'Minggu'];
+    $polaJamBuka = '/^(Mo|Tu|We|Th|Fr|Sa|Su)([-,](Mo|Tu|We|Th|Fr|Sa|Su))*\s+\d{2}:\d{2}-\d{2}:\d{2}$/';
+    $urutanHari = array_keys($petaHari);
+    $hariSchema = ['Mo' => 'Monday', 'Tu' => 'Tuesday', 'We' => 'Wednesday', 'Th' => 'Thursday', 'Fr' => 'Friday', 'Sa' => 'Saturday', 'Su' => 'Sunday'];
+    $jamBukaTampil = [];
+    $jamBukaSpesifikasi = []; // openingHoursSpecification (schema.org)
+    $hariBuka = [];
+    $semuaJamValid = true;
+    foreach ((array) config('usaha.jam_buka', []) as $jb) {
+        if (! is_string($jb) || trim($jb) === '') {
+            continue;
+        }
+        $jb = trim($jb);
+        if (preg_match($polaJamBuka, $jb)) {
+            [$bagianHari, $bagianJam] = preg_split('/\s+/', $jb, 2);
+            [$jamMulai, $jamTutup] = explode('-', $bagianJam);
+            // Uraikan "Mo-Fr" / "Mo,We" menjadi daftar hari (rentang boleh melewati Minggu, mis. "Sa-Mo")
+            $hariItem = [];
+            foreach (explode(',', $bagianHari) as $potong) {
+                $ujung = explode('-', $potong);
+                $awal = array_search($ujung[0], $urutanHari, true);
+                $akhir = array_search(end($ujung), $urutanHari, true);
+                for ($i = $awal; $i <= ($akhir >= $awal ? $akhir : $akhir + 7); $i++) {
+                    $hariItem[] = $urutanHari[$i % 7];
+                }
+            }
+            $hariItem = array_values(array_unique($hariItem));
+            $hariBuka = array_merge($hariBuka, $hariItem);
+            $jamBukaSpesifikasi[] = [
+                '@type' => 'OpeningHoursSpecification',
+                'dayOfWeek' => array_map(fn ($h) => $hariSchema[$h], $hariItem),
+                'opens' => $jamMulai,
+                'closes' => $jamTutup,
+            ];
+            $jb = preg_replace_callback('/\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/', fn ($m) => $petaHari[$m[1]], $jb);
+            $jb = preg_replace('/(\d{2}):(\d{2})/', '$1.$2', $jb);
+            $jb = str_replace(['-', ','], ['–', ', '], $jb);
+        } else {
+            $semuaJamValid = false;
+        }
+        $jamBukaTampil[] = $jb;
+    }
+    // Hari yang tidak disebut tampil "Libur" (hanya bila semua baris jam buka terbaca polanya)
+    if ($jamBukaSpesifikasi && $semuaJamValid) {
+        foreach (array_diff($urutanHari, $hariBuka) as $hariLibur) {
+            $jamBukaTampil[] = $petaHari[$hariLibur] . ' Libur';
+        }
+    }
+    // Listing Google Maps (Google Business Profile) dari config
+    $petaUsaha = filter_var(config('usaha.peta'), FILTER_VALIDATE_URL) ?: null;
+
+    // Telepon tampil: dari config, dikelompokkan agar mudah dibaca (+62 838-2920-8316)
+    $teleponTampil = preg_match('/^\+62(\d{3})(\d{4})(\d{3,5})$/', preg_replace('/[^\d+]/', '', $teleponUsaha), $m)
+        ? "+62 {$m[1]}-{$m[2]}-{$m[3]}"
+        : $teleponUsaha;
+
+    /* ── SEO per halaman ── */
+    // URL absolut mengikuti APP_URL (sama dengan sitemap/llms.txt), bukan host permintaan
+    $keAbsolut = fn (string $u) => rtrim(\Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u), '/') === rtrim(config('app.url'), '/')
+        ? rtrim(config('app.url'), '/') . '/'
+        : \Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u);
+    $teksSection = fn (string $nama, string $default = '') => trim(html_entity_decode($__env->yieldContent($nama, $default), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $judulSeo = $teksSection('title') ?: $namaUsaha;
+    $deskripsiSeo = $teksSection('meta_description') ?: $deskripsiUsaha;
+    $robotsSeo = $teksSection('robots');
+    $ogType = $teksSection('og_type') ?: 'website';
+    $ogImage = $teksSection('og_image');
+    $ogImageDefault = $ogImage === '';
+    $ogImageJpg = $keAbsolut(asset('og-image.jpg'));
+    $ogImage = $ogImageDefault ? $ogImageJpg : $ogImage;
+    // Gambar halaman berformat WebP (foto produk) belum tentu dipratinjau WhatsApp/sebagian aplikasi chat,
+    // yang umumnya memakai og:image pertama. Maka JPG default ditaruh pertama, foto WebP sebagai og:image kedua.
+    // twitter:image tetap foto halaman (X mendukung WebP).
+    $ogImageWebp = ! $ogImageDefault && preg_match('/\.webp(\?.*)?$/i', $ogImage);
+
+    // Canonical: URL tanpa query, kecuali ?page (>1) dan, di /produk, ?kategori (halaman berbeda)
+    $izinQuery = request()->routeIs('produk.index') ? ['kategori', 'page'] : ['page'];
+    $queryCanonical = collect(request()->query())
+        ->only($izinQuery)
+        ->filter(fn ($v, $k) => is_string($v) && $v !== '' && ! ($k === 'page' && (int) $v <= 1))
+        ->all();
+    $canonical = $teksSection('canonical') ?: $keAbsolut(url()->current() . ($queryCanonical ? '?' . http_build_query($queryCanonical) : ''));
+
+    /* ── JSON-LD: LocalBusiness (Store) + WebSite di semua halaman ── */
+    $urlBeranda = $keAbsolut(route('home'));
+    $usahaSchema = array_filter([
+        '@type' => 'Store',
+        '@id' => $urlBeranda . '#usaha',
+        'name' => $namaUsaha,
+        'description' => $deskripsiUsaha,
+        'url' => $urlBeranda,
+        'logo' => $keAbsolut(asset('icon-512.png')),
+        'image' => $keAbsolut(asset('og-image.jpg')),
+        'telephone' => $teleponUsaha,
+        'email' => $emailUsaha,
+        'address' => array_filter([
+            '@type' => 'PostalAddress',
+            'streetAddress' => implode(', ', array_filter([$alamatUsaha['jalan'], $alamatUsaha['kelurahan'], $alamatUsaha['kecamatan']])),
+            'addressLocality' => $alamatUsaha['kota'],
+            'addressRegion' => $alamatUsaha['provinsi'],
+            'postalCode' => $alamatUsaha['kode_pos'],
+            'addressCountry' => $alamatUsaha['negara'],
+        ]),
+        'geo' => is_numeric($geoUsaha['lat'] ?? null) && is_numeric($geoUsaha['lng'] ?? null)
+            ? ['@type' => 'GeoCoordinates', 'latitude' => (float) $geoUsaha['lat'], 'longitude' => (float) $geoUsaha['lng']]
+            : null,
+        'openingHoursSpecification' => $jamBukaSpesifikasi ?: null,
+        'hasMap' => $petaUsaha,
+        'sameAs' => array_values(array_unique(array_filter([...$sosialUsaha, $petaUsaha]))) ?: null,
+        'areaServed' => $areaLayanan ? array_map(fn ($a) => ['@type' => 'Place', 'name' => $a], $areaLayanan) : null,
+    ], fn ($v) => $v !== null);
+    $jsonLdGlobal = [
+        '@context' => 'https://schema.org',
+        '@graph' => [
+            $usahaSchema,
+            [
+                '@type' => 'WebSite',
+                '@id' => $urlBeranda . '#website',
+                'name' => $namaUsaha,
+                'url' => $urlBeranda,
+                'inLanguage' => 'id-ID',
+                'publisher' => ['@id' => $urlBeranda . '#usaha'],
+            ],
+        ],
+    ];
+    // Flag aman: </script> dari data admin di-escape jadi </script>
+    $jsonLdFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG;
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Senggani Kemasan') — Packaging Berkualitas</title>
+    <title>{{ $judulSeo }}</title>
+    <meta name="description" content="{{ $deskripsiSeo }}">
+    @if ($robotsSeo)
+        <meta name="robots" content="{{ $robotsSeo }}">
+    @else
+        <link rel="canonical" href="{{ $canonical }}">
+    @endif
+    <meta name="theme-color" content="#4c0404">
+
+    {{-- Ikon --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="48x48">
+    <link rel="icon" href="{{ asset('favicon-32.png') }}" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ asset('site.webmanifest') }}">
+
+    {{-- Open Graph & Twitter --}}
+    <meta property="og:site_name" content="{{ $namaUsaha }}">
+    <meta property="og:locale" content="id_ID">
+    <meta property="og:type" content="{{ $ogType }}">
+    <meta property="og:title" content="{{ $judulSeo }}">
+    <meta property="og:description" content="{{ $deskripsiSeo }}">
+    <meta property="og:url" content="{{ $canonical }}">
+    @if ($ogImageDefault || $ogImageWebp)
+        <meta property="og:image" content="{{ $ogImageJpg }}">
+        <meta property="og:image:type" content="image/jpeg">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:image:alt" content="{{ $namaUsaha }}: spesialis packaging custom untuk bisnis Anda">
+    @endif
+    @if (! $ogImageDefault)
+        <meta property="og:image" content="{{ $ogImage }}">
+        @if ($ogImageWebp)
+            <meta property="og:image:type" content="image/webp">
+        @endif
+        <meta property="og:image:alt" content="{{ $judulSeo }}">
+    @endif
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ $judulSeo }}">
+    <meta name="twitter:description" content="{{ $deskripsiSeo }}">
+    <meta name="twitter:image" content="{{ $ogImage }}">
+
+    {{-- Data terstruktur --}}
+    <script type="application/ld+json">{!! json_encode($jsonLdGlobal, $jsonLdFlags) !!}</script>
+    @stack('jsonld')
 
     {{-- Bootstrap CSS --}}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -33,6 +231,7 @@
         /* ── Navbar ── */
         .navbar-brand img {
             height: 28px;
+            width: auto;
         }
 
         .navbar-senggani {
@@ -405,6 +604,7 @@
             margin-bottom: 1rem;
         }
 
+        .carousel-caption h1,
         .carousel-caption h2 {
         
             font-size: 2.8rem;
@@ -456,6 +656,7 @@
                 max-width: 42%;
             }
 
+            .hero-banner .carousel-caption h1,
             .hero-banner .carousel-caption h2 {
                 font-size: 2rem;
             }
@@ -613,6 +814,7 @@
                 margin-bottom: 0;
             }
 
+            .hero-banner .carousel-caption h1,
             .hero-banner .carousel-caption h2 {
                 font-size: 1.65rem;
                 line-height: 1.25;
@@ -784,7 +986,7 @@
     <nav class="navbar navbar-expand-lg navbar-senggani sticky-top">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center gap-2" href="{{ route('home') }}">
-                <img src="{{ asset('images/logo.png') }}" class="logo-navbar">
+                <img src="{{ asset('images/logo.png') }}" class="logo-navbar" alt="{{ $namaUsaha }}" width="144" height="28">
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse"
                 data-bs-target="#navbarMain">
@@ -831,16 +1033,31 @@
         <div class="container">
             <div class="row g-4">
                 <div class="col-md-4">
-                    <h5><i class="fas fa-box-open me-2"></i>Senggani Kemasan</h5>
+                    <h5><i class="fas fa-box-open me-2" aria-hidden="true"></i>{{ $namaUsaha }}</h5>
                     <p style="font-size:0.9rem;">
                         Spesialis packaging berkualitas untuk bisnis Anda.
                         Paperbag, dus kemasan, box, dan berbagai produk kemasan lainnya.
                     </p>
                     <div class="d-flex gap-3 mt-3">
-                        <a href="https://www.instagram.com/sengganipaperbag/" target="_blank" rel="noopener"
-                            aria-label="Instagram"><i class="fab fa-instagram fa-lg"></i></a>
-                        <a href="https://wa.me/6283829208316" target="_blank" rel="noopener" aria-label="WhatsApp"><i
-                                class="fab fa-whatsapp fa-lg"></i></a>
+                        @foreach ($sosialUsaha as $urlSosial)
+                            @php
+                                $hostSosial = strtolower((string) parse_url($urlSosial, PHP_URL_HOST));
+                                [$ikonSosial, $labelSosial] = match (true) {
+                                    str_contains($hostSosial, 'instagram') => ['fab fa-instagram', 'Instagram'],
+                                    str_contains($hostSosial, 'facebook') => ['fab fa-facebook', 'Facebook'],
+                                    str_contains($hostSosial, 'tiktok') => ['fab fa-tiktok', 'TikTok'],
+                                    str_contains($hostSosial, 'youtube') => ['fab fa-youtube', 'YouTube'],
+                                    str_contains($hostSosial, 'threads') => ['fab fa-threads', 'Threads'],
+                                    str_contains($hostSosial, 'shopee') => ['fas fa-shopping-bag', 'Shopee'],
+                                    str_contains($hostSosial, 'tokopedia') => ['fas fa-store', 'Tokopedia'],
+                                    default => ['fas fa-link', $hostSosial],
+                                };
+                            @endphp
+                            <a href="{{ $urlSosial }}" target="_blank" rel="noopener" aria-label="{{ $labelSosial }}"><i
+                                    class="{{ $ikonSosial }} fa-lg" aria-hidden="true"></i></a>
+                        @endforeach
+                        <a href="https://wa.me/{{ $waUsaha }}" target="_blank" rel="noopener" aria-label="WhatsApp"><i
+                                class="fab fa-whatsapp fa-lg" aria-hidden="true"></i></a>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -859,22 +1076,35 @@
                 </div>
                 <div class="col-md-5">
                     <h5>Hubungi Kami</h5>
-                    <ul class="list-unstyled" style="font-size:0.9rem;">
-                        <li class="mb-2">
-                            <i class="fab fa-whatsapp me-2" style="color:#25d366;"></i>
-                            <a href="https://wa.me/6283829208316">+62 838-2920-8316</a>
-                        </li>
-                        <li class="mb-2">
-                            <i class="fas fa-envelope me-2" style="color:var(--accent);"></i>
-                            <a href="mailto:sengganipaperbag@gmail.com">sengganipaperbag@gmail.com</a>
-                        </li>
-                        <li class="mb-2">
-                            @php($alamat = 'Pilahan, RT 40, RW 12, Rejowinangun, Kotagede, Yogyakarta 55171')
-                            <i class="fas fa-map-marker-alt me-2" style="color:var(--accent);"></i>
-                            <a href="https://www.google.com/maps/search/?api=1&query={{ urlencode($alamat) }}"
-                                target="_blank" rel="noopener">{{ $alamat }}</a>
-                        </li>
-                    </ul>
+                    {{-- NAP dirender dari config/usaha.php (sama dengan JSON-LD) --}}
+                    <address class="mb-0">
+                        <ul class="list-unstyled footer-kontak" style="font-size:0.9rem;">
+                            <li class="mb-2">
+                                <i class="fab fa-whatsapp me-2" style="color:#25d366;" aria-hidden="true"></i>
+                                <a href="https://wa.me/{{ $waUsaha }}">{{ $teleponTampil }}</a>
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-envelope me-2" style="color:var(--accent);" aria-hidden="true"></i>
+                                <a href="mailto:{{ $emailUsaha }}">{{ $emailUsaha }}</a>
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-map-marker-alt me-2" style="color:var(--accent);" aria-hidden="true"></i>
+                                <a href="{{ $petaUsaha ?: 'https://www.google.com/maps/search/?api=1&query=' . urlencode($namaUsaha . ', ' . $alamatTeks) }}"
+                                    target="_blank" rel="noopener">{{ $alamatTeks }}</a>
+                            </li>
+                            @if ($jamBukaTampil)
+                                <li class="mb-2 d-flex">
+                                    <i class="fas fa-clock me-2 mt-1" style="color:var(--accent);" aria-hidden="true"></i>
+                                    <div>
+                                        <span class="visually-hidden">Jam buka:</span>
+                                        @foreach ($jamBukaTampil as $baris)
+                                            <span class="d-block">{{ $baris }}</span>
+                                        @endforeach
+                                    </div>
+                                </li>
+                            @endif
+                        </ul>
+                    </address>
                 </div>
             </div>
             <hr style="border-color: rgba(255,255,255,0.1); margin-top: 2rem;">
@@ -882,7 +1112,7 @@
     </footer>
     <div class="footer-bottom text-center">
         <div class="container">
-            <p class="mb-0">&copy; {{ date('Y') }} Senggani Kemasan. All rights reserved.</p>
+            <p class="mb-0">&copy; {{ date('Y') }} {{ $namaUsaha }}. All rights reserved.</p>
         </div>
     </div>
 

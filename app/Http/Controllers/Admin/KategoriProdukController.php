@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Models\KategoriProduk;
+use App\Services\OlahGambar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -11,6 +13,12 @@ use Throwable;
 
 class KategoriProdukController extends Controller
 {
+    use UnggahGambar;
+
+    public function __construct(private OlahGambar $olahGambar)
+    {
+    }
+
     public function index()
     {
         $kategori = KategoriProduk::withCount('produk')->latest()->get();
@@ -27,8 +35,8 @@ class KategoriProdukController extends Controller
         $request->validate([
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+        ], $this->pesanDimensi(['gambar' => 'Gambar kategori']));
 
         $data = [
             'nama_kategori' => $request->nama_kategori,
@@ -38,8 +46,9 @@ class KategoriProdukController extends Controller
 
         // Upload gambar jika ada
         if ($request->hasFile('gambar')) {
-            $data['gambar'] = $request->file('gambar')
-                                      ->store('uploads/kategori', 'public');
+            $data['gambar'] = $this->simpanGambar(
+                $request->file('gambar'), 'uploads/kategori', OlahGambar::UMUM, 'gambar'
+            );
         }
 
         try {
@@ -66,8 +75,8 @@ class KategoriProdukController extends Controller
         $request->validate([
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+        ], $this->pesanDimensi(['gambar' => 'Gambar kategori']));
 
         $kategoriProduk->nama_kategori = $request->nama_kategori;
         $kategoriProduk->slug          = KategoriProduk::slugUnik($request->nama_kategori, $kategoriProduk->id);
@@ -79,8 +88,9 @@ class KategoriProdukController extends Controller
         // Ganti gambar jika ada upload baru
         if ($request->hasFile('gambar')) {
             $gambarLama = $kategoriProduk->gambar;
-            $gambarBaru = $request->file('gambar')
-                                  ->store('uploads/kategori', 'public');
+            $gambarBaru = $this->simpanGambar(
+                $request->file('gambar'), 'uploads/kategori', OlahGambar::UMUM, 'gambar'
+            );
             $kategoriProduk->gambar = $gambarBaru;
         }
 

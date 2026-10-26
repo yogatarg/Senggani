@@ -47,6 +47,16 @@ return [
             'report' => false,
         ],
 
+        // Cadangan file asli sebelum dikompres (php artisan gambar:kompres).
+        // Di luar disk public sehingga tidak bisa diakses dari web; diabaikan git.
+        'cadangan' => [
+            'driver' => 'local',
+            'root' => storage_path('app/cadangan-gambar-asli'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

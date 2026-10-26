@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Admin') — Senggani Kemasan</title>
+    <title>@yield('title', 'Admin') — Senggani Paperbag &amp; Packaging</title>
 
     {{-- AdminLTE CSS --}}
     <link rel="stylesheet" href="{{ asset('vendor/adminlte/dist/css/adminlte.min.css') }}">
@@ -34,7 +34,7 @@
         {{-- SIDEBAR --}}
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
             <a href="{{ route('admin.dashboard') }}" class="brand-link text-center">
-                <span class="brand-text font-weight-bold">Senggani Kemasan</span>
+                <span class="brand-text font-weight-bold" style="font-size: .95rem;">Senggani Paperbag &amp; Packaging</span>
             </a>
 
             <div class="sidebar">
@@ -158,7 +158,7 @@
         </div>
 
         <footer class="main-footer text-center">
-            <strong>Senggani Kemasan</strong> &copy; {{ date('Y') }}
+            <strong>Senggani Paperbag &amp; Packaging</strong> &copy; {{ date('Y') }}
         </footer>
 
     </div>

@@ -1,6 +1,46 @@
 @extends('web.layouts.app')
 
-@section('title', $kategori->nama_kategori)
+@php
+    $namaUsahaSeo = config('usaha.nama') ?: 'Senggani Paperbag & Packaging';
+    $namaKat = trim($kategori->nama_kategori);
+    $adaCustom = str_contains(mb_strtolower($namaKat), 'custom');
+    // Judul: "Kategori {Nama} | Senggani Paperbag & Packaging Yogyakarta" (maks. 60 karakter), berbeda dari judul produk.
+    // Huruf awal tiap kata dibesarkan hanya di judul (kata tugas tetap kecil, singkatan seperti PVC tetap).
+    $kataKecil = ['dan', 'atau', 'untuk', 'dari', 'di', 'ke', 'yang', 'dengan', '&'];
+    $namaJudulKat = collect(preg_split('/\s+/u', $namaKat))
+        ->map(fn ($kata, $i) => $i > 0 && in_array(mb_strtolower($kata), $kataKecil, true)
+            ? $kata
+            : mb_strtoupper(mb_substr($kata, 0, 1)) . mb_substr($kata, 1))
+        ->implode(' ');
+    $judulKat = 'Kategori ' . $namaJudulKat . ' | ' . $namaUsahaSeo . ' Yogyakarta';
+    if (mb_strlen($judulKat) > 60) {
+        $sisa = 60 - mb_strlen('Kategori  | ' . $namaUsahaSeo);
+        $judulKat = 'Kategori ' . (mb_strlen($namaJudulKat) > $sisa ? rtrim(mb_substr($namaJudulKat, 0, $sisa - 1)) . '…' : $namaJudulKat) . ' | ' . $namaUsahaSeo;
+    }
+    $metaKat = $namaKat . (mb_strlen($namaKat) <= 24 && ! $adaCustom ? ' custom' : '')
+        . ' dari ' . $namaUsahaSeo . ', Kotagede, Yogyakarta. Ukuran, bahan, dan finishing sesuai kebutuhan. Konsultasi harga via WhatsApp.';
+@endphp
+
+@section('title', $judulKat)
+@section('meta_description', $metaKat)
+
+@php
+    $keAbsolut = fn (string $u) => rtrim(\Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u), '/') === rtrim(config('app.url'), '/')
+        ? rtrim(config('app.url'), '/') . '/'
+        : \Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), $u);
+    $breadcrumbSchema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'BreadcrumbList',
+        'itemListElement' => [
+            ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => $keAbsolut(route('home'))],
+            ['@type' => 'ListItem', 'position' => 2, 'name' => 'Kategori', 'item' => $keAbsolut(route('kategori.index'))],
+            ['@type' => 'ListItem', 'position' => 3, 'name' => $kategori->nama_kategori, 'item' => $keAbsolut(route('kategori.show', $kategori->slug))],
+        ],
+    ];
+@endphp
+@push('jsonld')
+    <script type="application/ld+json">{!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+@endpush
 
 @section('content')
 
@@ -51,7 +91,7 @@
                     @if($item->gambar)
                         <img src="{{ asset('storage/' . $item->gambar) }}"
                              class="card-img-top kartu-produk-media kartu-produk-media-tinggi"
-                             alt="{{ $item->nama_produk }}">
+                             alt="{{ $item->nama_produk }}" width="400" height="300" loading="lazy" decoding="async">
                     @else
                         <div class="kartu-produk-media kartu-produk-media-tinggi kartu-produk-placeholder d-flex align-items-center justify-content-center">
                             <i class="fas fa-box fa-3x" style="color:#6a3131; opacity:0.3;" aria-hidden="true"></i>
@@ -75,7 +115,11 @@
 
                         <p class="text-muted small mb-3 kartu-produk-meta">
                             <i class="fas fa-box me-1" aria-hidden="true"></i>
-                            Min. pesan {{ $item->minimal_pesan }} pcs
+                            @if ((int) $item->minimal_pesan > 1)
+                                Min. pesan {{ number_format((int) $item->minimal_pesan, 0, ',', '.') }} pcs
+                            @else
+                                Tanpa minimum order
+                            @endif
                         </p>
 
                         <div class="mt-auto">
@@ -112,7 +156,7 @@
         <i class="fab fa-whatsapp fa-3x mb-3" style="color:#25d366;"></i>
         <h4 class="fw-700 mb-2">Tidak menemukan yang Anda cari?</h4>
         <p class="opacity-75 mb-4">Konsultasikan kebutuhan packaging Anda langsung via WhatsApp</p>
-        <a href="https://wa.me/6283829208316?text=Halo%20Senggani%20Kemasan%2C%20saya%20ingin%20bertanya%20mengenai%20produk%20kategori%20{{ urlencode($kategori->nama_kategori) }}."
+        <a href="https://wa.me/{{ config('usaha.whatsapp') }}?text=Halo%20Senggani%20Paperbag%20%26%20Packaging%2C%20saya%20ingin%20bertanya%20mengenai%20produk%20kategori%20{{ urlencode($kategori->nama_kategori) }}."
            target="_blank" rel="noopener"
            class="btn btn-success btn-lg rounded-pill px-5">
             <i class="fab fa-whatsapp me-2"></i> Konsultasi Sekarang

@@ -1,6 +1,8 @@
 @extends('web.layouts.app')
 
-@section('title', 'Kategori Produk')
+@php $judulHalaman = 'Kategori Kemasan | ' . (config('usaha.nama') ?: 'Senggani Paperbag & Packaging'); @endphp
+@section('title', mb_strlen($judulHalaman . ' Yogyakarta') <= 60 ? $judulHalaman . ' Yogyakarta' : $judulHalaman)
+@section('meta_description', 'Kategori kemasan custom di Senggani Paperbag & Packaging Yogyakarta: paperbag, dus/box, tas furing, undangan, dan lainnya. Pilih kategori untuk melihat produknya.')
 
 @section('content')
 

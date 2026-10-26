@@ -1,6 +1,36 @@
 @extends('web.layouts.app')
 
-@section('title', $kategoriAktif ? 'Produk ' . $kategoriAktif->nama_kategori : 'Produk')
+@if ($kategoriAktif)
+@php
+    $namaUsahaSeo = config('usaha.nama') ?: 'Senggani Paperbag & Packaging';
+    $namaKat = trim($kategoriAktif->nama_kategori);
+    $adaCustom = str_contains(mb_strtolower($namaKat), 'custom');
+    // Judul: "Kategori {Nama} | Senggani Paperbag & Packaging Yogyakarta" (maks. 60 karakter), berbeda dari judul produk.
+    // Huruf awal tiap kata dibesarkan hanya di judul (kata tugas tetap kecil, singkatan seperti PVC tetap).
+    $kataKecil = ['dan', 'atau', 'untuk', 'dari', 'di', 'ke', 'yang', 'dengan', '&'];
+    $namaJudulKat = collect(preg_split('/\s+/u', $namaKat))
+        ->map(fn ($kata, $i) => $i > 0 && in_array(mb_strtolower($kata), $kataKecil, true)
+            ? $kata
+            : mb_strtoupper(mb_substr($kata, 0, 1)) . mb_substr($kata, 1))
+        ->implode(' ');
+    $judulKat = 'Kategori ' . $namaJudulKat . ' | ' . $namaUsahaSeo . ' Yogyakarta';
+    if (mb_strlen($judulKat) > 60) {
+        $sisa = 60 - mb_strlen('Kategori  | ' . $namaUsahaSeo);
+        $judulKat = 'Kategori ' . (mb_strlen($namaJudulKat) > $sisa ? rtrim(mb_substr($namaJudulKat, 0, $sisa - 1)) . '…' : $namaJudulKat) . ' | ' . $namaUsahaSeo;
+    }
+    $metaKat = $namaKat . (mb_strlen($namaKat) <= 24 && ! $adaCustom ? ' custom' : '')
+        . ' dari ' . $namaUsahaSeo . ', Kotagede, Yogyakarta. Ukuran, bahan, dan finishing sesuai kebutuhan. Konsultasi harga via WhatsApp.';
+@endphp
+    @section('title', $judulKat)
+    @section('meta_description', $metaKat)
+    {{-- /produk?kategori=x (semua halaman) isinya bagian dari /kategori/x yang memuat semua produk kategori itu:
+         halaman kategori adalah versi utama, jadi canonical menunjuk ke sana (judul dibiarkan sama agar sinyal konsisten). --}}
+    @section('canonical', \Illuminate\Support\Str::replaceStart(request()->root(), rtrim(config('app.url'), '/'), route('kategori.show', $kategoriAktif->slug)))
+@else
+    @php $judulHalaman = 'Produk Kemasan Custom | ' . (config('usaha.nama') ?: 'Senggani Paperbag & Packaging'); @endphp
+    @section('title', mb_strlen($judulHalaman . ' Yogyakarta') <= 60 ? $judulHalaman . ' Yogyakarta' : $judulHalaman)
+    @section('meta_description', 'Lihat produk kemasan custom Senggani Paperbag & Packaging: paperbag, dus, tas furing, undangan, dan lainnya. Pilih bahan dan finishing, lalu pesan via WhatsApp.')
+@endif
 
 @push('styles')
     <style>

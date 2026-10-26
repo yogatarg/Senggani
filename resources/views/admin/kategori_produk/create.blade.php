@@ -41,7 +41,10 @@
                 @error('gambar')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
-                <small class="text-muted">Format: JPG, PNG, WEBP. Maks: 2MB.</small>
+                <small class="text-muted d-block">
+                    Rasio 3:2 (mendatar), disarankan 1200×800 px, objek di tengah (tepi bisa terpotong di kartu kategori).
+                    Format: JPG, PNG, WEBP. Gambar otomatis dikompres; maks 2 MB.
+                </small>
 
                 {{-- Preview gambar sebelum upload --}}
                 <div id="previewContainer" class="mt-2" style="display:none;">

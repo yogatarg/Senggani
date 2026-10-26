@@ -6,7 +6,8 @@
             {{-- Gambar kategori --}}
             @if ($item->gambar)
                 <img src="{{ asset('storage/' . $item->gambar) }}" class="card-img-top kartu-kategori-media"
-                    style="height:120px; object-fit:cover;" alt="{{ $item->nama_kategori }}">
+                    style="height:120px; object-fit:cover;" alt="{{ $item->nama_kategori }}" width="320" height="200"
+                    loading="lazy" decoding="async">
             @else
                 {{-- Default jika tidak ada gambar --}}
                 <div class="d-flex align-items-center justify-content-center kartu-kategori-media"
