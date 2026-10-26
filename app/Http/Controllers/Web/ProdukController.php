@@ -54,6 +54,7 @@ class ProdukController extends Controller
             'ukuran',
             'bahan',
             'finishing',
+            'cetak',
         ])->where('slug', $slug)->firstOrFail();
 
         return view('web.produk.detail', compact('produk'));

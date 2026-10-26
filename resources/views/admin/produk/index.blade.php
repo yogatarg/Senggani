@@ -22,6 +22,7 @@
                         <th>Min. Pesan</th>
                         <th>Bahan</th>
                         <th>Finishing</th>
+                        <th>Cetak</th>
                         <th>Status</th>
                         <th>Aksi</th>
                     </tr>
@@ -66,6 +67,14 @@
                             </td>
 
                             <td>
+                                @if ($item->cetak_count > 0)
+                                    <span class="text-success">✔ {{ $item->cetak_count }}</span>
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            </td>
+
+                            <td>
                                 @if ($item->bahan_count > 0 && $item->finishing_count > 0)
                                     <span class="badge badge-success">Lengkap</span>
                                 @else
@@ -92,7 +101,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="text-center text-muted">
+                            <td colspan="10" class="text-center text-muted">
                                 Belum ada produk. <a href="{{ route('admin.produk.create') }}">Tambah sekarang</a>
                             </td>
                         </tr>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\BahanController;
 use App\Http\Controllers\Admin\BannerController;
+use App\Http\Controllers\Admin\CetakController;
 use App\Http\Controllers\Admin\FinishingController;
 use App\Http\Controllers\Admin\KategoriProdukController;
 use App\Http\Controllers\Web\HomeController;
@@ -65,6 +66,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
         ->name('produk.bahan.simpan');
     Route::put('produk/{produk}/finishing', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanFinishing'])
         ->name('produk.finishing.simpan');
+    Route::put('produk/{produk}/cetak', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanCetak'])
+        ->name('produk.cetak.simpan');
 
     // Master bahan & finishing
     Route::resource('bahan', BahanController::class)
@@ -72,4 +75,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
         ->parameters(['bahan' => 'bahan']);
     Route::resource('finishing', FinishingController::class)
         ->only(['index', 'store', 'edit', 'update', 'destroy']);
+    Route::resource('cetak', CetakController::class)
+        ->only(['index', 'store', 'edit', 'update', 'destroy'])
+        ->parameters(['cetak' => 'cetak']);
 });

@@ -90,6 +90,14 @@
                         </li>
 
                         <li class="nav-item">
+                            <a href="{{ route('admin.cetak.index') }}"
+                                class="nav-link {{ request()->routeIs('admin.cetak*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-print"></i>
+                                <p>Master Cetak</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <form action="{{ route('admin.logout') }}" method="POST">
                                 @csrf
                                 <button type="submit" class="nav-link btn btn-link text-danger"

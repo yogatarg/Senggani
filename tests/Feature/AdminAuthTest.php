@@ -104,7 +104,7 @@ class AdminAuthTest extends TestCase
 
     public function test_route_show_admin_tidak_terdaftar(): void
     {
-        foreach (['admin.banner.show', 'admin.kategori-produk.show', 'admin.produk.show', 'admin.bahan.show', 'admin.finishing.show'] as $nama) {
+        foreach (['admin.banner.show', 'admin.kategori-produk.show', 'admin.produk.show', 'admin.bahan.show', 'admin.finishing.show', 'admin.cetak.show'] as $nama) {
             $this->assertFalse(Route::has($nama), "Route {$nama} seharusnya tidak ada");
         }
     }

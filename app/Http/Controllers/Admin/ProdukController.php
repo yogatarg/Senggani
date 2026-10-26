@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Models\Bahan;
+use App\Models\Cetak;
 use App\Models\Finishing;
 use App\Models\GaleriProduk;
 use App\Models\KategoriProduk;
@@ -26,7 +27,7 @@ class ProdukController extends Controller
     public function index()
     {
         $produk = Produk::with('kategori')
-            ->withCount(['bahan', 'finishing'])
+            ->withCount(['bahan', 'finishing', 'cetak'])
             ->latest()
             ->get();
         return view('admin.produk.index', compact('produk'));
@@ -242,11 +243,12 @@ class ProdukController extends Controller
     // ── Kelola Bahan & Finishing (centang dari master) ────
     public function atribut(Produk $produk)
     {
-        $produk->load(['bahan', 'finishing']);
+        $produk->load(['bahan', 'finishing', 'cetak']);
         $semuaBahan     = Bahan::orderBy('nama_bahan')->get();
         $semuaFinishing = Finishing::orderBy('nama_finishing')->get();
+        $semuaCetak     = Cetak::orderBy('nama_cetak')->get();
 
-        return view('admin.produk.atribut', compact('produk', 'semuaBahan', 'semuaFinishing'));
+        return view('admin.produk.atribut', compact('produk', 'semuaBahan', 'semuaFinishing', 'semuaCetak'));
     }
 
     public function simpanBahan(Request $request, Produk $produk)
@@ -272,5 +274,17 @@ class ProdukController extends Controller
         $produk->finishing()->sync($request->input('finishing', []));
 
         return back()->with('success', 'Finishing produk berhasil disimpan.');
+    }
+
+    public function simpanCetak(Request $request, Produk $produk)
+    {
+        $request->validate([
+            'cetak'   => 'nullable|array',
+            'cetak.*' => 'exists:cetak,id',
+        ]);
+
+        $produk->cetak()->sync($request->input('cetak', []));
+
+        return back()->with('success', 'Jenis cetak produk berhasil disimpan.');
     }
 }

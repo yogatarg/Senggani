@@ -131,7 +131,7 @@ class SeoController extends Controller
         $md[] = '## Cara Memesan';
         $md[] = '';
         $md[] = '1. Pilih produk atau kategori di website (' . $this->url('produk.index') . ').';
-        $md[] = '2. Hubungi kami lewat WhatsApp (' . $wa . ') dengan menyebutkan produk, ukuran, bahan, finishing, dan jumlah.';
+        $md[] = '2. Hubungi kami lewat WhatsApp (' . $wa . ') dengan menyebutkan produk, ukuran, bahan, jenis cetak, finishing, dan jumlah.';
         $md[] = '3. Kami kirimkan penawaran harga; harga menyesuaikan karena setiap pesanan custom.';
         $md[] = '4. Perhatikan jumlah minimal pemesanan yang tertera di setiap produk.';
         $md[] = '';

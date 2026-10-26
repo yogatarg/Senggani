@@ -67,4 +67,11 @@ class Produk extends Model
         return $this->belongsToMany(Finishing::class, 'produk_finishing', 'produk_id', 'finishing_id')
                     ->orderBy('nama_finishing');
     }
+
+    // Relasi ke cetak (dipilih dari master cetak)
+    public function cetak()
+    {
+        return $this->belongsToMany(Cetak::class, 'produk_cetak', 'produk_id', 'cetak_id')
+                    ->orderBy('nama_cetak');
+    }
 }

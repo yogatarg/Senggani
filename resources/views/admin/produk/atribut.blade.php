@@ -14,7 +14,7 @@
 <div class="row">
 
     {{-- ================= BAHAN ================= --}}
-    <div class="col-md-6">
+    <div class="col-lg-4 col-md-6">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Bahan Produk</h3>
@@ -73,7 +73,7 @@
     </div>
 
     {{-- ================= FINISHING ================= --}}
-    <div class="col-md-6">
+    <div class="col-lg-4 col-md-6">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Finishing Produk</h3>
@@ -124,6 +124,65 @@
                     @if ($semuaFinishing->isNotEmpty())
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Simpan Finishing
+                        </button>
+                    @endif
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- ================= CETAK ================= --}}
+    <div class="col-lg-4 col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Jenis Cetak Produk</h3>
+                <span class="badge badge-primary ml-auto" data-counter="cetak">
+                    {{ $produk->cetak->count() }} dipilih
+                </span>
+            </div>
+
+            <form action="{{ route('admin.produk.cetak.simpan', $produk) }}" method="POST" data-pilihan="cetak">
+                @csrf @method('PUT')
+                <div class="card-body">
+                    @if ($semuaCetak->isEmpty())
+                        <p class="text-muted text-center mb-0">
+                            Belum ada data jenis cetak.
+                            <a href="{{ route('admin.cetak.index') }}">Tambah di Master Cetak</a>
+                        </p>
+                    @else
+                        <div class="d-flex mb-3">
+                            <input type="search" class="form-control form-control-sm mr-2"
+                                placeholder="Cari jenis cetak..." data-cari>
+                            <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" data-pilih-semua>
+                                Pilih semua
+                            </button>
+                        </div>
+
+                        <div class="row">
+                            @php $dipilih = $produk->cetak->pluck('id')->all(); @endphp
+                            @foreach ($semuaCetak as $item)
+                                <div class="col-sm-6" data-item="{{ strtolower($item->nama_cetak) }}">
+                                    <div class="custom-control custom-checkbox mb-2">
+                                        <input type="checkbox" class="custom-control-input"
+                                            id="cetak{{ $item->id }}" name="cetak[]" value="{{ $item->id }}"
+                                            {{ in_array($item->id, $dipilih) ? 'checked' : '' }}>
+                                        <label class="custom-control-label font-weight-normal" for="cetak{{ $item->id }}">
+                                            {{ $item->nama_cetak }}
+                                        </label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <a href="{{ route('admin.cetak.index') }}" class="small">
+                        <i class="fas fa-cog"></i> Kelola Master Cetak
+                    </a>
+                    @if ($semuaCetak->isNotEmpty())
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Simpan Cetak
                         </button>
                     @endif
                 </div>

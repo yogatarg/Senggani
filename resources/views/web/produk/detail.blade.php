@@ -19,7 +19,7 @@
     $minPesan = max(1, (int) $produk->minimal_pesan);
     $adaMinimum = $minPesan > 1;
     $minPesanTeks = number_format($minPesan, 0, ',', '.');
-    $adaPilihan = $produk->bahan->count() > 0 || $produk->finishing->count() > 0;
+    $adaPilihan = $produk->bahan->count() > 0 || $produk->finishing->count() > 0 || $produk->cetak->count() > 0;
     $metaEkor = '. ' . ($adaMinimum ? 'Minimal ' . $minPesanTeks . ' pcs, ' : 'Tanpa minimal order, ')
         . ($adaPilihan ? 'pilih bahan dan finishing, ' : 'ukuran custom, ')
         . 'harga sesuai spesifikasi. Pesan via WhatsApp.';
@@ -209,6 +209,26 @@
                         </div>
                     @endif
 
+                    @if ($produk->cetak->count() > 0)
+                        <div class="col-12">
+                            <div class="p-3 rounded-3" style="background:#f9f3f3; border-left:4px solid #6a3131;">
+                                <h6 class="fw-bold mb-2" style="color:#6a3131; font-size:0.9rem;">
+                                    <i class="fas fa-print me-2"></i>Pilihan Cetak
+                                </h6>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach ($produk->cetak as $item)
+                                        <span class="badge py-2 px-3"
+                                            style="background:#fff; color:#6a3131;
+                                         border:1px solid #6a3131;
+                                         font-size:0.8rem; font-weight:500;">
+                                            {{ $item->nama_cetak }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     @if ($produk->finishing->count() > 0)
                         <div class="col-12">
                             <div class="p-3 rounded-3" style="background:#f9f3f3; border-left:4px solid #d4a853;">
@@ -251,21 +271,44 @@
                         </div>
                     @endif
 
-                    {{-- Finishing Dropdown --}}
-                    @if ($produk->finishing->count() > 0)
+                    {{-- Cetak Dropdown (satu pilihan) --}}
+                    @if ($produk->cetak->count() > 0)
                         <div class="mb-3">
-                            <label class="form-label fw-bold" style="font-size:0.9rem;">
-                                Pilih Finishing
+                            <label class="form-label fw-bold" for="pilihCetak" style="font-size:0.9rem;">
+                                Pilih Cetak
                             </label>
-                            <select id="pilihFinishing" class="form-select">
-                                <option value="">-- Pilih Finishing --</option>
-                                @foreach ($produk->finishing as $item)
-                                    <option value="{{ $item->nama_finishing }}">
-                                        {{ $item->nama_finishing }}
+                            <select id="pilihCetak" class="form-select">
+                                <option value="">-- Pilih Cetak --</option>
+                                @foreach ($produk->cetak as $item)
+                                    <option value="{{ $item->nama_cetak }}">
+                                        {{ $item->nama_cetak }}
                                     </option>
                                 @endforeach
                             </select>
                         </div>
+                    @endif
+
+                    {{-- Finishing Checkbox (boleh lebih dari satu) --}}
+                    @if ($produk->finishing->count() > 0)
+                        <fieldset class="mb-3">
+                            <legend class="form-label fw-bold mb-1" style="font-size:0.9rem;">
+                                Pilih Finishing
+                                <span class="fw-normal text-muted small">(boleh lebih dari satu)</span>
+                            </legend>
+                            <div class="row g-1" id="pilihFinishing">
+                                @foreach ($produk->finishing as $item)
+                                    <div class="col-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                id="finishing{{ $item->id }}" value="{{ $item->nama_finishing }}">
+                                            <label class="form-check-label small" for="finishing{{ $item->id }}">
+                                                {{ $item->nama_finishing }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </fieldset>
                     @endif
 
                     {{-- Jumlah --}}
@@ -358,7 +401,9 @@
         // ── Pesan WhatsApp ──
         function pesanWhatsApp() {
             const bahan = document.getElementById('pilihBahan')?.value || '-';
-            const finishing = document.getElementById('pilihFinishing')?.value || '-';
+            const cetak = document.getElementById('pilihCetak')?.value || '-';
+            const finishing = Array.from(document.querySelectorAll('#pilihFinishing input:checked'))
+                .map(cb => cb.value).join(', ') || '-';
             const jumlah = document.getElementById('inputJumlah').value || '-';
 
             const minPesan = {{ $minPesan }};
@@ -372,6 +417,7 @@
                 `Halo Senggani Paperbag & Packaging, saya tertarik dan ingin menanyakan produk:\n\n` +
                 `Nama Produk : ${NAMA_PRODUK}\n` +
                 `Bahan       : ${bahan}\n` +
+                `Cetak       : ${cetak}\n` +
                 `Finishing   : ${finishing}\n` +
                 `Jumlah      : ${jumlah} pcs\n\n` +
                 `Mohon info estimasi harga dan proses pemesanannya. Terima kasih.`;
