@@ -62,12 +62,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
     // Kelola bahan & finishing produk (centang dari master)
     Route::get('/produk/{produk}/kelola', [\App\Http\Controllers\Admin\ProdukController::class, 'atribut'])
         ->name('produk.atribut');
-    Route::put('produk/{produk}/bahan', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanBahan'])
-        ->name('produk.bahan.simpan');
-    Route::put('produk/{produk}/finishing', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanFinishing'])
-        ->name('produk.finishing.simpan');
-    Route::put('produk/{produk}/cetak', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanCetak'])
-        ->name('produk.cetak.simpan');
+    Route::put('produk/{produk}/atribut', [\App\Http\Controllers\Admin\ProdukController::class, 'simpanAtribut'])
+        ->name('produk.atribut.simpan');
 
     // Master bahan & finishing
     Route::resource('bahan', BahanController::class)

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Admin;
+use App\Models\Bahan;
 use App\Models\Cetak;
 use App\Models\Finishing;
 use App\Models\Produk;
@@ -48,19 +49,60 @@ class CetakFinishingTest extends TestCase
         $full   = Cetak::create(['nama_cetak' => 'Cetak Full Color']);
         $satu   = Cetak::create(['nama_cetak' => 'Cetak 1 Warna']);
 
-        $this->get(route('admin.produk.atribut', $produk))->assertOk()->assertSee('Jenis Cetak Produk');
+        $this->get(route('admin.produk.atribut', $produk))
+            ->assertOk()
+            ->assertSee('Jenis Cetak Produk')
+            ->assertSee('Simpan Semua');
 
-        $this->put(route('admin.produk.cetak.simpan', $produk), ['cetak' => [$full->id, $satu->id]])
+        $this->put(route('admin.produk.atribut.simpan', $produk), ['cetak' => [$full->id, $satu->id]])
             ->assertSessionHas('success');
         $this->assertCount(2, $produk->fresh()->cetak);
 
         // Yang tidak dicentang dilepas
-        $this->put(route('admin.produk.cetak.simpan', $produk), ['cetak' => [$satu->id]]);
+        $this->put(route('admin.produk.atribut.simpan', $produk), ['cetak' => [$satu->id]]);
         $this->assertSame(['Cetak 1 Warna'], $produk->fresh()->cetak->pluck('nama_cetak')->all());
 
-        // Id yang tidak ada ditolak
-        $this->put(route('admin.produk.cetak.simpan', $produk), ['cetak' => [9999]])
+        // Id yang tidak ada ditolak, data lama tetap
+        $this->put(route('admin.produk.atribut.simpan', $produk), ['cetak' => [9999]])
             ->assertSessionHasErrors('cetak.0');
+        $this->assertCount(1, $produk->fresh()->cetak);
+    }
+
+    public function test_bahan_cetak_finishing_disimpan_sekaligus_satu_tombol(): void
+    {
+        $this->loginAdmin();
+        $produk    = Produk::factory()->create();
+        $bahan     = Bahan::create(['nama_bahan' => 'Kraft']);
+        $cetak     = Cetak::create(['nama_cetak' => 'Cetak Full Color']);
+        $finishing = [
+            Finishing::create(['nama_finishing' => 'Laminasi Doff'])->id,
+            Finishing::create(['nama_finishing' => 'Tali Jinjing'])->id,
+        ];
+
+        $this->put(route('admin.produk.atribut.simpan', $produk), [
+            'bahan'     => [$bahan->id],
+            'cetak'     => [$cetak->id],
+            'finishing' => $finishing,
+        ])->assertSessionHas('success');
+
+        $produk->refresh();
+        $this->assertCount(1, $produk->bahan);
+        $this->assertCount(1, $produk->cetak);
+        $this->assertCount(2, $produk->finishing);
+
+        // Semua tidak dicentang → semua dilepas
+        $this->put(route('admin.produk.atribut.simpan', $produk), []);
+        $produk->refresh();
+        $this->assertCount(0, $produk->bahan);
+        $this->assertCount(0, $produk->cetak);
+        $this->assertCount(0, $produk->finishing);
+
+        // Satu id tidak valid → tidak ada yang tersimpan sebagian
+        $this->put(route('admin.produk.atribut.simpan', $produk), [
+            'bahan'     => [$bahan->id],
+            'finishing' => [9999],
+        ])->assertSessionHasErrors('finishing.0');
+        $this->assertCount(0, $produk->fresh()->bahan);
     }
 
     public function test_detail_produk_cetak_satu_pilihan_finishing_boleh_banyak(): void

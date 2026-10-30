@@ -251,40 +251,25 @@ class ProdukController extends Controller
         return view('admin.produk.atribut', compact('produk', 'semuaBahan', 'semuaFinishing', 'semuaCetak'));
     }
 
-    public function simpanBahan(Request $request, Produk $produk)
+    // Bahan, jenis cetak, dan finishing disimpan sekaligus (satu tombol)
+    public function simpanAtribut(Request $request, Produk $produk)
     {
         $request->validate([
-            'bahan'   => 'nullable|array',
-            'bahan.*' => 'exists:bahan,id',
-        ]);
-
-        // sync(): yang dicentang ditambahkan, yang tidak dicentang dilepas
-        $produk->bahan()->sync($request->input('bahan', []));
-
-        return back()->with('success', 'Bahan produk berhasil disimpan.');
-    }
-
-    public function simpanFinishing(Request $request, Produk $produk)
-    {
-        $request->validate([
+            'bahan'       => 'nullable|array',
+            'bahan.*'     => 'exists:bahan,id',
+            'cetak'       => 'nullable|array',
+            'cetak.*'     => 'exists:cetak,id',
             'finishing'   => 'nullable|array',
             'finishing.*' => 'exists:finishing,id',
         ]);
 
-        $produk->finishing()->sync($request->input('finishing', []));
+        // sync(): yang dicentang ditambahkan, yang tidak dicentang dilepas
+        DB::transaction(function () use ($request, $produk) {
+            $produk->bahan()->sync($request->input('bahan', []));
+            $produk->cetak()->sync($request->input('cetak', []));
+            $produk->finishing()->sync($request->input('finishing', []));
+        });
 
-        return back()->with('success', 'Finishing produk berhasil disimpan.');
-    }
-
-    public function simpanCetak(Request $request, Produk $produk)
-    {
-        $request->validate([
-            'cetak'   => 'nullable|array',
-            'cetak.*' => 'exists:cetak,id',
-        ]);
-
-        $produk->cetak()->sync($request->input('cetak', []));
-
-        return back()->with('success', 'Jenis cetak produk berhasil disimpan.');
+        return back()->with('success', 'Bahan, jenis cetak, dan finishing produk berhasil disimpan.');
     }
 }
