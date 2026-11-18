@@ -50,6 +50,20 @@
                         </li>
 
                         <li class="nav-item">
+                            <a href="{{ route('admin.pesanan.index') }}" class="nav-link">
+                                <i class="nav-icon fas fa-box-open"></i>
+                                <p>Pesanan</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="{{ route('admin.pengguna.index') }}" class="nav-link">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>Kelola Pengguna</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <a href="{{ route('admin.banner.index') }}"
                                 class="nav-link {{ request()->routeIs('admin.banner*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-image"></i>

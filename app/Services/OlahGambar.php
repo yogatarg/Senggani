@@ -22,6 +22,7 @@ class OlahGambar
     public const BANNER_DESKTOP = [1920, null];
     public const BANNER_MOBILE  = [1080, 1440];
     public const UMUM           = [1200, 1200]; // produk, galeri, kategori
+    public const PESANAN        = [2000, 2000]; // mockup/referensi order (detail perlu terbaca produksi)
 
     public const KUALITAS = 80;
 

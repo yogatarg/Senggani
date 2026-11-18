@@ -5,6 +5,10 @@ use App\Http\Controllers\Admin\BannerController;
 use App\Http\Controllers\Admin\CetakController;
 use App\Http\Controllers\Admin\FinishingController;
 use App\Http\Controllers\Admin\KategoriProdukController;
+use App\Http\Controllers\Admin\PasswordController;
+use App\Http\Controllers\Admin\PenggunaController;
+use App\Http\Controllers\Admin\PesananController;
+use App\Http\Controllers\Admin\PesananFileController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\KategoriController;
 use App\Http\Controllers\Web\ProdukController;
@@ -33,8 +37,45 @@ Route::prefix('admin')->name('admin.')->group(function () {
         ->name('logout');
 });
 
-// ── Admin Routes (wajib login) ─────────────────────────
+// ── Panel (wajib login): admin & produksi ───────────
+// Hak akses per aksi diperiksa lagi di Policy/Form Request (App\Policies\PesananPolicy).
 Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function () {
+
+    // Pesanan
+    Route::get('/pesanan', [PesananController::class, 'index'])->name('pesanan.index');
+    Route::get('/pesanan/jumlah', [PesananController::class, 'jumlah'])->name('pesanan.jumlah');
+    Route::get('/pesanan/tambah', [PesananController::class, 'create'])->name('pesanan.create');
+    Route::post('/pesanan', [PesananController::class, 'store'])->name('pesanan.store');
+    Route::get('/pesanan/{pesanan}', [PesananController::class, 'show'])->name('pesanan.show');
+    Route::get('/pesanan/{pesanan}/edit', [PesananController::class, 'edit'])->name('pesanan.edit');
+    Route::put('/pesanan/{pesanan}', [PesananController::class, 'update'])->name('pesanan.update');
+    Route::delete('/pesanan/{pesanan}', [PesananController::class, 'destroy'])->name('pesanan.destroy');
+
+    Route::post('/pesanan/{pesanan}/status', [PesananController::class, 'ubahStatus'])->name('pesanan.status');
+    Route::post('/pesanan/{pesanan}/batal', [PesananController::class, 'batalkan'])->name('pesanan.batal');
+    Route::post('/pesanan/{pesanan}/pulihkan', [PesananController::class, 'pulihkan'])->name('pesanan.pulihkan');
+    Route::post('/pesanan/{pesanan}/catatan', [PesananController::class, 'tambahCatatan'])->name('pesanan.catatan');
+    Route::post('/pesanan/{pesanan}/lunas', [PesananController::class, 'catatLunas'])->name('pesanan.lunas');
+
+    Route::get('/pesanan/{pesanan}/file/{file}', [PesananFileController::class, 'lihat'])->name('pesanan.file.lihat');
+    Route::delete('/pesanan/{pesanan}/file/{file}', [PesananFileController::class, 'hapus'])->name('pesanan.file.hapus');
+
+    // Ubah password sendiri
+    Route::get('/password', [PasswordController::class, 'edit'])->name('password.edit');
+    Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
+});
+
+// ── Admin Routes (wajib login, khusus peran admin) ─────
+Route::prefix('admin')->name('admin.')->middleware(['auth.admin', 'peran:admin'])->group(function () {
+
+    // Kelola pengguna
+    Route::get('/pengguna', [PenggunaController::class, 'index'])->name('pengguna.index');
+    Route::get('/pengguna/tambah', [PenggunaController::class, 'create'])->name('pengguna.create');
+    Route::post('/pengguna', [PenggunaController::class, 'store'])->name('pengguna.store');
+    Route::get('/pengguna/{pengguna}/edit', [PenggunaController::class, 'edit'])->name('pengguna.edit');
+    Route::put('/pengguna/{pengguna}', [PenggunaController::class, 'update'])->name('pengguna.update');
+    Route::put('/pengguna/{pengguna}/password', [PenggunaController::class, 'resetPassword'])->name('pengguna.password');
+    Route::patch('/pengguna/{pengguna}/aktif', [PenggunaController::class, 'ubahAktif'])->name('pengguna.aktif');
 
     Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
         ->name('dashboard');

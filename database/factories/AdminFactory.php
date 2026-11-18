@@ -19,6 +19,18 @@ class AdminFactory extends Factory
             'nama'     => fake()->name(),
             'email'    => fake()->unique()->safeEmail(),
             'password' => Hash::make('password'),
+            'peran'    => 'admin',
+            'aktif'    => true,
         ];
+    }
+
+    public function produksi(): static
+    {
+        return $this->state(fn () => ['peran' => 'produksi']);
+    }
+
+    public function nonaktif(): static
+    {
+        return $this->state(fn () => ['aktif' => false]);
     }
 }

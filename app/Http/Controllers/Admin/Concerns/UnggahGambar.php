@@ -35,11 +35,12 @@ trait UnggahGambar
      * Simpan gambar lewat OlahGambar. Bila GD gagal (format rusak, resolusi terlalu
      * besar, memori tidak cukup), lempar ValidationException pada $field sehingga
      * Laravel mengembalikan ke form dengan input lama dan pesan error.
+     * $disk "local" dipakai untuk file privat (mis. mockup pesanan).
      */
-    protected function simpanGambar(UploadedFile $file, string $folder, array $batas, string $field): string
+    protected function simpanGambar(UploadedFile $file, string $folder, array $batas, string $field, string $disk = 'public'): string
     {
         try {
-            return $this->olahGambar->simpan($file, $folder, $batas);
+            return $this->olahGambar->simpan($file, $folder, $batas, $disk);
         } catch (RuntimeException $e) {
             report($e);
 

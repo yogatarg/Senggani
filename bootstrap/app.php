@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Daftarkan middleware auth.admin
         $middleware->alias([
             'auth.admin' => \App\Http\Middleware\AuthAdmin::class,
+            'peran'      => \App\Http\Middleware\CekPeran::class,
         ]);
 
         // Header keamanan di semua respons

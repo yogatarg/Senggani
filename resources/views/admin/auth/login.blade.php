@@ -64,19 +64,20 @@
             <form action="{{ route('admin.login.post') }}" method="POST">
                 @csrf
 
-                {{-- Email --}}
+                {{-- Email atau username --}}
                 <div class="input-group mb-3">
-                    <input type="email" name="email"
-                           class="form-control @error('email') is-invalid @enderror"
-                           placeholder="Email Admin"
-                           value="{{ old('email') }}"
+                    <input type="text" name="login"
+                           class="form-control @error('login') is-invalid @enderror"
+                           placeholder="Email atau username"
+                           value="{{ old('login') }}"
+                           autocomplete="username" autocapitalize="none"
                            autofocus required>
                     <div class="input-group-append">
                         <div class="input-group-text">
-                            <span class="fas fa-envelope"></span>
+                            <span class="fas fa-user"></span>
                         </div>
                     </div>
-                    @error('email')
+                    @error('login')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
