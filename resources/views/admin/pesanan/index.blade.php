@@ -52,7 +52,7 @@
 
 <div class="sg-alert sg-alert-info" id="ada-perubahan" role="status" hidden>
     <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-    <p>Ada perubahan SPP. <a href="{{ request()->fullUrl() }}">Muat ulang</a></p>
+    <p>Ada perubahan SPP. <a href="{{ request()->fullUrl() }}" class="sg-alert-aksi">Muat ulang</a></p>
 </div>
 
 <nav class="sg-tab-wadah" aria-label="Tab status pesanan">

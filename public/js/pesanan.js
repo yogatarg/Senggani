@@ -70,6 +70,41 @@
 
     $$('[data-toast-otomatis]').forEach(function (el) { pasangToast(el, 5000); });
 
+    // ── Sheet Akun: kurung fokus, Esc dari mana pun, fokus kembali ke pembuka ──
+    var sheetAkun = $('#sheetAkun');
+    if (sheetAkun && window.bootstrap && window.bootstrap.Offcanvas) {
+        var pembukaSheet = null;
+        var bisaFokus = function () {
+            return $$('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', sheetAkun)
+                .filter(function (el) { return el.getClientRects().length > 0; });
+        };
+        var kunciSheet = function (e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                window.bootstrap.Offcanvas.getOrCreateInstance(sheetAkun).hide();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            var daftar = bisaFokus();
+            if (!daftar.length) { e.preventDefault(); sheetAkun.focus(); return; }
+            var awal = daftar[0], akhir = daftar[daftar.length - 1], kini = document.activeElement;
+            if (!sheetAkun.contains(kini)) { e.preventDefault(); (e.shiftKey ? akhir : awal).focus(); }
+            else if (e.shiftKey && (kini === awal || kini === sheetAkun)) { e.preventDefault(); akhir.focus(); }
+            else if (!e.shiftKey && kini === akhir) { e.preventDefault(); awal.focus(); }
+        };
+        sheetAkun.addEventListener('show.bs.offcanvas', function (e) {
+            pembukaSheet = e.relatedTarget || document.activeElement;
+            document.addEventListener('keydown', kunciSheet, true);
+        });
+        sheetAkun.addEventListener('hide.bs.offcanvas', function () {
+            document.removeEventListener('keydown', kunciSheet, true);
+        });
+        sheetAkun.addEventListener('hidden.bs.offcanvas', function () {
+            if (pembukaSheet && document.contains(pembukaSheet) && pembukaSheet.getClientRects().length) pembukaSheet.focus();
+            pembukaSheet = null;
+        });
+    }
+
     // ── Modal konfirmasi (pengganti window.confirm) ─────
     // konfirmasi({ judul, isi, tombol, bahaya }) → Promise<boolean>
     var elKonfirmasi = $('#modalKonfirmasi');
@@ -824,6 +859,7 @@
         if (wadahPilih) {
             var urlCari = wadahPilih.getAttribute('data-url');
             var idCustomer = $('[data-customer-id]', form);
+            var inputLepas = $('[data-lepas-customer-input]', form);
             var chip = $('[data-chip-customer]', wadahPilih);
             var wadahCari = $('[data-cari-customer-wadah]', wadahPilih);
             var inputCustomer = $('[data-input-cari-customer]', wadahPilih);
@@ -926,6 +962,7 @@
                 var c = hasil[i];
                 if (!c) return;
                 idCustomer.value = c.id;
+                if (inputLepas) inputLepas.value = '';
                 isian.nama.value = c.nama || '';
                 isian.wa.value = waLokal(c.nomor_whatsapp);
                 if (c.alamat) isian.alamat.value = c.alamat;
@@ -989,8 +1026,9 @@
             });
             $('[data-lepas-customer]', chip).addEventListener('click', function () {
                 lepas(isian.nama);
-                umumkan('Customer dilepas. Saat disimpan, customer baru dibuat dari isian, kecuali nomor WA sudah terdaftar.');
-                toast('Customer dilepas. SPP akan memakai customer baru dari isian (atau customer dengan nomor WA yang sama).', { durasi: 6000 });
+                if (inputLepas) inputLepas.value = '1';
+                umumkan('Customer dilepas. SPP akan memakai customer dari isian: customer baru atau pemilik nomor WA ini.');
+                toast('Customer dilepas. SPP akan memakai customer dari isian: customer baru atau pemilik nomor WA ini.', { durasi: 6000 });
             });
         }
 

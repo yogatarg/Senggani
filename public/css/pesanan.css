@@ -184,7 +184,7 @@ button.sg-avatar { background: transparent; }
 .sg-btn-utama { background: var(--sg-brand); color: #fff; }
 .sg-btn-utama:active { background: var(--sg-brand-deep); color: #fff; }
 .sg-btn-sekunder { background: var(--sg-surface); color: var(--sg-text); border-color: var(--sg-border-strong); }
-.sg-btn-wa { background: #0F7A3A; color: #fff; min-height: 44px; }
+.sg-btn-wa { background: #0F7A3A; color: #fff; }
 .sg-btn-bahaya { background: var(--sg-surface); color: var(--sg-danger); border-color: #FECDCA; }
 .sg-btn-bahaya-isi { background: var(--sg-danger); color: #fff; }
 .sg-btn-teks {
@@ -216,6 +216,8 @@ button.sg-avatar { background: transparent; }
 .sg-alert p { margin: 0; }
 .sg-alert ul { margin: 6px 0 0; padding-left: 20px; }
 .sg-alert a { color: inherit; font-weight: 600; text-underline-offset: 3px; }
+/* Tautan aksi di dalam alert: area sentuh 48 px tanpa menambah tinggi alert */
+.sg-alert a.sg-alert-aksi { display: inline-flex; align-items: center; min-height: 48px; padding: 0 8px; margin: -12px 0 -12px -4px; border-radius: var(--sg-r-sm); }
 .sg-alert-galat { background: #FEF3F2; border-color: #FECDCA; color: var(--sg-danger); }
 .sg-alert-sukses { background: #ECFDF3; border-color: #ABEFC6; color: var(--sg-success); }
 .sg-alert-info { background: #EFF6FF; border-color: #BFDBFE; color: var(--sg-info); }
@@ -292,7 +294,7 @@ button.sg-avatar { background: transparent; }
 .sg-tab::-webkit-scrollbar { display: none; }
 .sg-tab li { flex: none; scroll-snap-align: start; position: relative; }
 .sg-tab a {
-    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
+    display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 14px;
     border-radius: var(--sg-r-md); background: var(--sg-surface); border: 1px solid var(--sg-border);
     color: var(--sg-text-2); font-weight: 500; text-decoration: none; white-space: nowrap;
     transition: background-color 150ms ease-out, color 150ms ease-out;
@@ -333,7 +335,7 @@ button.sg-avatar { background: transparent; }
 
 .sg-info-baris { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 12px; color: var(--sg-text-2); }
 .sg-segar {
-    width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
     color: var(--sg-text-2); border-radius: var(--sg-r-sm); text-decoration: none;
 }
 .sg-tak-tersambung { color: var(--sg-warning); font-weight: 500; }
@@ -522,7 +524,7 @@ button.sg-avatar { background: transparent; }
 .sg-chip input:checked + span, .sg-chip-btn[aria-pressed="true"] { background: var(--sg-brand-tint); border-color: var(--sg-brand); color: var(--sg-brand); }
 .sg-chip input:checked + span .fa-check { display: inline-block; }
 .sg-chip input:focus-visible + span { box-shadow: var(--sg-ring); }
-.sg-chip-btn.sg-saran { min-height: 44px; text-align: left; line-height: 1.3; }
+.sg-chip-btn.sg-saran { min-height: 48px; text-align: left; line-height: 1.3; }
 @media (hover: hover) { .sg-chip span:hover, .sg-chip-btn:hover { background: var(--sg-bg); } .sg-chip input:checked + span:hover { background: var(--sg-brand-tint); } }
 
 /* Kontrol segmen (status approval) */
@@ -567,7 +569,7 @@ button.sg-avatar { background: transparent; }
 .sg-sandi { position: relative; }
 .sg-sandi .form-control { padding-right: 52px; }
 .sg-sandi button {
-    position: absolute; right: 2px; top: 2px; width: 44px; height: 44px; border: 0; background: transparent;
+    position: absolute; right: 0; top: 0; width: 48px; height: 48px; border: 0; background: transparent;
     color: var(--sg-text-muted); border-radius: var(--sg-r-sm);
 }
 
@@ -688,7 +690,8 @@ button.sg-avatar { background: transparent; }
 .sg-o-status { order: 1; } .sg-o-item { order: 2; } .sg-o-teks { order: 3; } .sg-o-desain { order: 4; } .sg-o-catatan { order: 5; }
 .sg-o-bayar { order: 6; } .sg-o-riwayat { order: 7; } .sg-o-admin { order: 8; }
 @media (min-width: 1200px) {
-    .sg-detail { display: grid; grid-template-columns: minmax(0,8fr) minmax(0,4fr); gap: 24px; align-items: start; }
+    /* Kolom samping minimal 360 px supaya tombol status ("Pindahkan ke Selesai Produksi") muat satu baris di 1280 px */
+    .sg-detail { display: grid; grid-template-columns: minmax(0,8fr) minmax(360px,4fr); gap: 24px; align-items: start; }
     .sg-detail-utama, .sg-detail-samping { display: flex; flex-direction: column; gap: 16px; }
     .sg-detail-samping { position: sticky; top: 24px; }
 }
@@ -705,9 +708,9 @@ button.sg-avatar { background: transparent; }
 
 /* Teks SPP siap salin */
 .sg-teks-spp-aksi { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.sg-teks-spp-aksi .sg-btn { flex: 1 1 auto; min-height: 44px; }
+.sg-teks-spp-aksi .sg-btn { flex: 1 1 auto; min-height: 48px; }
 .sg-teks-spp {
-    white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; color: var(--sg-text);
+    white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; max-width: 100%; min-width: 0; font-size: 15px; line-height: 1.6; color: var(--sg-text);
     background: var(--sg-bg); border: 1px solid var(--sg-border); border-radius: var(--sg-r-md);
     padding: 12px 14px; max-height: 360px; overflow-y: auto;
 }

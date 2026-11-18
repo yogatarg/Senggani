@@ -13,6 +13,12 @@
     $hargaTampil = $v('harga_satuan');
     // Hanya angka murni yang diformat; isian lama (old) seperti "2.500" dibiarkan apa adanya (is_numeric akan membacanya 2,5)
     if (is_int($hargaTampil) || (is_string($hargaTampil) && ctype_digit($hargaTampil))) { $hargaTampil = number_format((int) $hargaTampil, 0, ',', '.'); }
+    // Ukuran: buang nol desimal hanya bila ada titik desimal (30.00→30, 20.50→20.5); 30, 100, "12,5" tampil apa adanya
+    $ukuranTampil = function ($x) {
+        if ($x === null || $x === '') return '';
+        $s = trim((string) $x);
+        return preg_match('/^\d+\.\d*$/', $s) ? rtrim(rtrim($s, '0'), '.') : $s;
+    };
     $finDipilih = (array) $v('finishing');
     $adaFinLain = filled($v('finishing_lainnya'));
 @endphp
@@ -49,7 +55,7 @@
         <div class="sg-ukuran">
             @foreach (['panjang' => 'P', 'lebar' => 'L', 'tinggi' => 'T'] as $dim => $huruf)
                 <div>
-                    <input type="text" inputmode="decimal" id="{{ $fidI($dim) }}" name="{{ $n }}[{{ $dim }}]" value="{{ $v($dim) !== null ? rtrim(rtrim((string) $v($dim), '0'), '.') : '' }}"
+                    <input type="text" inputmode="decimal" id="{{ $fidI($dim) }}" name="{{ $n }}[{{ $dim }}]" value="{{ $ukuranTampil($v($dim)) }}" autocomplete="off"
                            class="form-control @error($k($dim)) is-invalid @enderror" aria-label="{{ ucfirst($dim) }} (cm)" {!! $aria($k($dim)) !!}>
                     <small aria-hidden="true">{{ $huruf }}</small>
                 </div>

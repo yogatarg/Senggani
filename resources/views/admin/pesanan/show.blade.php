@@ -57,12 +57,12 @@
     @can('update', $pesanan)
         <div class="sg-lencana-aksi">
             <a href="{{ $pesanan->link_whatsapp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp Customer</a>
-            <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder" style="min-height:44px"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
-            <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" style="min-height:44px" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
+            <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
+            <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
         </div>
     @else
         <div class="sg-lencana-aksi d-xl-none">
-            <button type="button" class="sg-btn sg-btn-sekunder" style="min-height:44px" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
+            <button type="button" class="sg-btn sg-btn-sekunder" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
         </div>
     @endcan
 </header>

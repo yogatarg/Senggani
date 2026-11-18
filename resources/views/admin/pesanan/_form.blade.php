@@ -50,7 +50,9 @@
 
     $ikonDesain = ['belum_dikirim' => 'fa-circle-minus', 'menunggu' => 'fa-hourglass-half', 'revisi' => 'fa-pen', 'disetujui' => 'fa-circle-check'];
     $fileLama = $pesanan->exists ? $pesanan->file : collect();
-    $customerTerpilih = old('customer_id', $pesanan->customer_id);
+    // Edit: lepas_customer=1 → customer ditentukan ulang dari isian (customer baru atau pemilik nomor WA)
+    $lepasCustomer = $pesanan->exists && old('lepas_customer') === '1';
+    $customerTerpilih = $lepasCustomer ? null : old('customer_id', $pesanan->customer_id);
     // Data chip customer terpilih (edit, atau setelah gagal validasi)
     $customerAwal = $customerTerpilih ? \App\Models\Customer::withCount('pesanan')->find($customerTerpilih) : null;
     if (! $customerAwal) { $customerTerpilih = null; }
@@ -104,6 +106,9 @@
 
             {{-- Pilih customer lama (autocomplete). Kosong = customer baru dari isian di bawah. --}}
             <input type="hidden" name="customer_id" id="f-customer_id" value="{{ $customerTerpilih }}" data-customer-id>
+            @if ($pesanan->exists)
+                <input type="hidden" name="lepas_customer" id="f-lepas_customer" value="{{ $lepasCustomer ? '1' : '' }}" data-lepas-customer-input>
+            @endif
             <div class="sg-field" data-pilih-customer data-url="{{ $urlCariCustomer }}">
                 <div class="sg-chip-customer" data-chip-customer @unless ($customerAwal) hidden @endunless>
                     <span class="sg-chip-customer-ikon" aria-hidden="true"><i class="fa-solid fa-user-check"></i></span>
@@ -113,7 +118,7 @@
                     </div>
                     <div class="sg-chip-customer-aksi">
                         <button type="button" class="sg-btn sg-btn-teks" data-ganti-customer>Ganti</button>
-                        <button type="button" class="sg-btn sg-btn-teks" data-lepas-customer aria-label="Lepas customer, buat customer baru dari isian">Lepas</button>
+                        <button type="button" class="sg-btn sg-btn-teks" data-lepas-customer aria-label="Lepas customer. SPP akan memakai customer dari isian: customer baru atau pemilik nomor WA ini">Lepas</button>
                     </div>
                 </div>
 
