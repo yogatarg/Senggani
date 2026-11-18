@@ -140,7 +140,7 @@ class PesananAksesTest extends TestCase
         $produksi = Admin::factory()->produksi()->create();
         $pesanan  = Pesanan::factory()->create(['total' => 1250000]);
 
-        $this->sebagai($produksi)->get(route('admin.pesanan.index'))->assertOk()->assertSee($pesanan->nomor_order);
+        $this->sebagai($produksi)->get(route('admin.pesanan.index'))->assertOk()->assertSee($pesanan->nomor_spp_teks);
         $this->sebagai($produksi)->get(route('admin.pesanan.show', $pesanan))->assertOk()
             ->assertSee('Rp 1.250.000')
             ->assertDontSee('Hapus order')

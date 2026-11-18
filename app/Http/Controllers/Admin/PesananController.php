@@ -121,8 +121,16 @@ class PesananController extends Controller
     {
         Gate::authorize('create', Pesanan::class);
 
+        $saran = Pesanan::saranNomorSpp();
+
         return view('admin.pesanan.create', [
-            'pesanan' => new Pesanan(['tanggal_order' => today(), 'status_desain' => StatusDesain::BelumDikirim->value]),
+            'pesanan' => new Pesanan([
+                'nomor_spp'      => $saran,
+                'tanggal_order'  => today(),
+                'jenis_deadline' => 'kirim',
+                'status_desain'  => StatusDesain::BelumDikirim->value,
+            ]),
+            'saranNomor' => $saran,
             ...$this->dataMaster(),
         ]);
     }
@@ -131,22 +139,36 @@ class PesananController extends Controller
     {
         $fileBaru = $this->olahGambarBaru($request);
 
-        $pesanan = $this->layanan->buat($request->dataPesanan(), $request->dataItem(), $fileBaru, Auth::user());
+        $pesanan = $this->layanan->buat(
+            $request->dataPesanan(), $request->dataItem(), $fileBaru, Auth::user(),
+            $request->customerId(), $request->perbaruiCustomer(),
+        );
+
+        return $this->kembaliKeDetail($pesanan, "{$pesanan->nomor_spp_teks} berhasil disimpan.");
+    }
+
+    /** Redirect ke detail + pesan sukses; info customer (bila ada) ikut di pesan & di session 'info_customer'. */
+    private function kembaliKeDetail(Pesanan $pesanan, string $pesan)
+    {
+        $info = $this->layanan->infoCustomer;
 
         return redirect()->route('admin.pesanan.show', $pesanan)
-            ->with('success', "Order {$pesanan->nomor_order} berhasil disimpan.");
+            ->with('success', $info ? "{$pesan} {$info}" : $pesan)
+            ->with('info_customer', $info);
     }
 
     public function show(Pesanan $pesanan)
     {
         Gate::authorize('view', $pesanan);
 
-        $pesanan->load(['detailPesanan', 'file', 'riwayat', 'pembuat']);
+        $pesanan->load(['detailPesanan', 'file', 'riwayat', 'pembuat', 'customer']);
 
         $status = $pesanan->status_produksi;
 
         return view('admin.pesanan.show', [
             'pesanan'          => $pesanan,
+            'teksSpp'          => $pesanan->teks_spp,
+            'linkWhatsappSpp'  => $pesanan->link_whatsapp_spp,
             'statusBerikutnya' => $status->berikutnya(),
             'statusSebelumnya' => $status->sebelumnya(),
             'alurStatus'       => array_map(fn ($s) => StatusProduksi::from($s), StatusProduksi::ALUR),
@@ -180,10 +202,11 @@ class PesananController extends Controller
     {
         Gate::authorize('update', $pesanan);
 
-        $pesanan->load(['detailPesanan', 'file']);
+        $pesanan->load(['detailPesanan', 'file', 'customer']);
 
         return view('admin.pesanan.edit', [
-            'pesanan' => $pesanan,
+            'pesanan'    => $pesanan,
+            'saranNomor' => Pesanan::saranNomorSpp(),
             ...$this->dataMaster(),
         ]);
     }
@@ -192,10 +215,12 @@ class PesananController extends Controller
     {
         $fileBaru = $this->olahGambarBaru($request);
 
-        $this->layanan->perbarui($pesanan, $request->dataPesanan(), $request->dataItem(), $fileBaru, Auth::user());
+        $this->layanan->perbarui(
+            $pesanan, $request->dataPesanan(), $request->dataItem(), $fileBaru, Auth::user(),
+            $request->customerId(), $request->perbaruiCustomer(),
+        );
 
-        return redirect()->route('admin.pesanan.show', $pesanan)
-            ->with('success', "Order {$pesanan->nomor_order} berhasil diperbarui.");
+        return $this->kembaliKeDetail($pesanan, "{$pesanan->nomor_spp_teks} berhasil diperbarui.");
     }
 
     /** Hapus order salah input (soft delete, khusus admin). */
@@ -206,7 +231,7 @@ class PesananController extends Controller
         $pesanan->delete();
 
         return redirect()->route('admin.pesanan.index')
-            ->with('success', "Order {$pesanan->nomor_order} dihapus.");
+            ->with('success', "{$pesanan->nomor_spp_teks} dihapus.");
     }
 
     /** Pilihan master untuk form (yang disimpan tetap teks snapshot). */
@@ -219,6 +244,8 @@ class PesananController extends Controller
             'masterCetak'     => Cetak::orderBy('nama_cetak')->pluck('nama_cetak')->all(),
             'statusDesain'    => StatusDesain::pilihan(),
             'lainnya'         => Pesanan::LAINNYA,
+            'jenisDeadline'   => Pesanan::JENIS_DEADLINE,
+            'urlCariCustomer' => route('admin.customer.cari'),
         ];
     }
 
@@ -268,7 +295,7 @@ class PesananController extends Controller
         return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $dari, $request) {
             $this->layanan->batalkan($pesanan, $dari, $request->validated('catatan'), Auth::user());
 
-            return "Order {$pesanan->nomor_order} dibatalkan.";
+            return "{$pesanan->nomor_spp_teks} dibatalkan.";
         });
     }
 
@@ -277,7 +304,7 @@ class PesananController extends Controller
         return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $request) {
             $ke = $this->layanan->pulihkan($pesanan, $request->validated('catatan'), Auth::user());
 
-            return "Order dipulihkan ke {$ke->label()}.";
+            return "SPP dipulihkan ke {$ke->label()}.";
         });
     }
 

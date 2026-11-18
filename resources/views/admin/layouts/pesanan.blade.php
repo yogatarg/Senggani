@@ -17,6 +17,7 @@
     $diPesanan  = request()->routeIs('admin.pesanan.*') && ! request()->routeIs('admin.pesanan.create');
     $diTambah   = request()->routeIs('admin.pesanan.create');
     $diPengguna = request()->routeIs('admin.pengguna.*');
+    $diCustomer = request()->routeIs('admin.customer.*');
     $diPassword = request()->routeIs('admin.password.*');
     $adaBottomNav = ! $__env->hasSection('tanpa_bottomnav');
 
@@ -80,6 +81,9 @@
                 <li><a class="sg-menu-item" href="{{ route('admin.pesanan.index') }}" @if ($diPesanan) aria-current="page" @endif><i class="fa-solid fa-box-open" aria-hidden="true"></i> Pesanan</a></li>
                 @can('create', \App\Models\Pesanan::class)
                     <li><a class="sg-menu-item" href="{{ route('admin.pesanan.create') }}" @if ($diTambah) aria-current="page" @endif><i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Tambah Order</a></li>
+                @endcan
+                @can('kelola-customer')
+                    <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
                 @endcan
                 @can('kelola-pengguna')
                     <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
@@ -148,7 +152,7 @@
                 <span class="sg-bn-ikon"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></span> Tambah
             </a>
         @endcan
-        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword) aria-current="page" @endif>
+        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword || $diCustomer) aria-current="page" @endif>
             <span class="sg-bn-ikon"><i class="fa-solid fa-circle-user" aria-hidden="true"></i></span> Akun
         </button>
     </nav>
@@ -169,6 +173,9 @@
     </div>
     <div class="offcanvas-body pt-2">
         <ul class="sg-menu">
+            @can('kelola-customer')
+                <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
+            @endcan
             @can('kelola-pengguna')
                 <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
                 <li><a class="sg-menu-item" href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-store" aria-hidden="true"></i> <span>Katalog <small>admin lama</small></span> <i class="fa-solid fa-arrow-up-right-from-square sg-menu-luar" aria-hidden="true"></i></a></li>

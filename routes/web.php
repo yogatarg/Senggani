@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\BahanController;
 use App\Http\Controllers\Admin\BannerController;
 use App\Http\Controllers\Admin\CetakController;
+use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\FinishingController;
 use App\Http\Controllers\Admin\KategoriProdukController;
 use App\Http\Controllers\Admin\PasswordController;
@@ -76,6 +77,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth.admin', 'peran:admin']
     Route::put('/pengguna/{pengguna}', [PenggunaController::class, 'update'])->name('pengguna.update');
     Route::put('/pengguna/{pengguna}/password', [PenggunaController::class, 'resetPassword'])->name('pengguna.password');
     Route::patch('/pengguna/{pengguna}/aktif', [PenggunaController::class, 'ubahAktif'])->name('pengguna.aktif');
+
+    // Customer (dibuat otomatis dari form SPP; produksi tidak perlu)
+    Route::get('/customer', [CustomerController::class, 'index'])->name('customer.index');
+    Route::get('/customer/cari', [CustomerController::class, 'cari'])->name('customer.cari');
+    Route::get('/customer/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customer.show');
+    Route::get('/customer/{customer}/edit', [CustomerController::class, 'edit'])->whereNumber('customer')->name('customer.edit');
+    Route::put('/customer/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('customer.update');
+    Route::delete('/customer/{customer}', [CustomerController::class, 'destroy'])->whereNumber('customer')->name('customer.destroy');
 
     Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
         ->name('dashboard');

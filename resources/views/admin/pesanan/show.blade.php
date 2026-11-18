@@ -1,6 +1,6 @@
 @extends('admin.layouts.pesanan')
 
-@section('title', $pesanan->nomor_order)
+@section('title', $pesanan->nomor_spp_teks)
 @section('kembali', route('admin.pesanan.index'))
 @section('tanpa_bottomnav', '1')
 
@@ -28,7 +28,7 @@
     $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && \Illuminate\Support\Facades\Gate::allows('batalkan', $pesanan);
     $bisaHapus = \Illuminate\Support\Facades\Gate::allows('delete', $pesanan);
     $bisaPulihkan = $dibatalkan && \Illuminate\Support\Facades\Gate::allows('pulihkan', $pesanan);
-    $judulOrder = $pesanan->nomor_order . ' · ' . $pesanan->nama_customer;
+    $judulOrder = $pesanan->nomor_spp_teks . ' · ' . $pesanan->nama_customer;
 @endphp
 
 @section('content')
@@ -36,8 +36,11 @@
 
 <header class="sg-detail-kepala">
     <div>
-        <h1 class="sg-no-order">{{ $pesanan->nomor_order }}</h1>
-        <p class="sg-nama-cust">{{ $pesanan->nama_customer }}</p>
+        <h1 class="sg-no-order">{{ $pesanan->nomor_spp_teks }}</h1>
+        <p class="sg-nama-cust">{{ $pesanan->nama_customer }}@if ($pesanan->nama_brand) <span class="sg-muted">/ {{ $pesanan->nama_brand }}</span>@endif</p>
+        @if ($pesanan->customer && \Illuminate\Support\Facades\Gate::allows('kelola-customer'))
+            <p class="sg-kecil m-0"><a href="{{ route('admin.customer.show', $pesanan->customer) }}">{{ $pesanan->customer->kode }}</a></p>
+        @endif
         <p class="sg-kontak sg-angka">{{ $waTampil }}@if ($pesanan->kota) · {{ $pesanan->kota }}@endif</p>
         <div class="sg-lencana">
             @include('admin.pesanan._badge-status', ['status' => $status])
@@ -188,6 +191,17 @@
     </div>
 
     <div class="sg-detail-samping">
+        {{-- Teks SPP siap salin (admin & produksi). Sistem tidak mengirim apa pun; admin memilih sendiri kontak/grup WA. --}}
+        <section class="sg-kartu" aria-labelledby="judul-teks-spp">
+            <h2 class="sg-kartu-judul" id="judul-teks-spp">Teks SPP</h2>
+            <label for="teks-spp" class="visually-hidden">Teks SPP untuk disalin</label>
+            <textarea id="teks-spp" class="form-control" rows="10" readonly data-teks-spp>{{ $teksSpp }}</textarea>
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <button type="button" class="sg-btn sg-btn-sekunder" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> Salin teks</button>
+                <a href="{{ $linkWhatsappSpp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Kirim lewat WhatsApp</a>
+            </div>
+        </section>
+
         {{-- Status produksi --}}
         <section class="sg-kartu sg-o-status" aria-labelledby="judul-status">
             <h2 class="sg-kartu-judul" id="judul-status">Status produksi</h2>
@@ -249,7 +263,7 @@
             <hr class="sg-pemisah my-3">
             <dl>
                 <div><dt>Tanggal order</dt><dd>{{ $pesanan->tanggal_order?->translatedFormat('j M Y') }}</dd></div>
-                <div><dt>Deadline</dt><dd>{{ $pesanan->deadline?->translatedFormat('j M Y') }}</dd></div>
+                <div><dt>Deadline</dt><dd>{{ $pesanan->deadline?->translatedFormat('j M Y') }} · {{ $pesanan->label_jenis_deadline }}</dd></div>
             </dl>
 
             @if (! $pesanan->tanggal_lunas && (float) $pesanan->total > 0)
@@ -341,7 +355,7 @@
             <form class="modal-content" method="POST" action="{{ route('admin.pesanan.destroy', $pesanan) }}" data-kirim>
                 @csrf @method('DELETE')
                 <div class="modal-header">
-                    <h2 class="modal-title" id="modalHapusJudul">Hapus order {{ $pesanan->nomor_order }}?</h2>
+                    <h2 class="modal-title" id="modalHapusJudul">Hapus order {{ $pesanan->nomor_spp_teks }}?</h2>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">

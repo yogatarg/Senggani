@@ -16,7 +16,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
             <div class="modal-body">
-                <p class="m-0 sg-muted">{{ $pesanan->nomor_order }} · {{ $pesanan->nama_customer }}</p>
+                <p class="m-0 sg-muted">{{ $pesanan->nomor_spp_teks }} · {{ $pesanan->nama_customer }}</p>
                 @if ($ke)
                     <p class="sg-modal-pindah">
                         Dari @include('admin.pesanan._badge-status', ['status' => $pesanan->status_produksi])

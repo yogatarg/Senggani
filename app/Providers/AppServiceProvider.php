@@ -29,5 +29,6 @@ class AppServiceProvider extends ServiceProvider
         // Pesanan memakai App\Policies\PesananPolicy (ditemukan otomatis).
         Gate::define('admin', fn (Admin $pengguna) => $pengguna->isAdmin());
         Gate::define('kelola-pengguna', fn (Admin $pengguna) => $pengguna->isAdmin());
+        Gate::define('kelola-customer', fn (Admin $pengguna) => $pengguna->isAdmin());
     }
 }

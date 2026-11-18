@@ -20,6 +20,10 @@ use Illuminate\Validation\Validator;
  * - item[i][finishing][]: daftar nama finishing (multi) + item[i][finishing_lainnya] teks bebas.
  * - Harga & DP boleh dikirim dengan pemisah ribuan ("2.500" / "Rp 2.500"); disimpan rupiah bulat.
  * - mockup[] dan referensi[]: gambar baru (maks 5 MB per file, total maks 10 file per order).
+ * - nomor_spp: angka ≥1 unik (boleh "#176"). Nomor yang loncat jauh dari saran ditolak dengan
+ *   error di kunci "konfirmasi_nomor" kecuali dikirim konfirmasi_nomor=1. Saat edit, mengganti
+ *   nomor ditolak dengan error di kunci "konfirmasi_ganti_nomor" kecuali dikirim konfirmasi_ganti_nomor=1.
+ * - customer_id (opsional) + perbarui_customer=1 (opsional): lihat PesananService::tentukanCustomer.
  */
 class SimpanPesananRequest extends FormRequest
 {
@@ -27,6 +31,9 @@ class SimpanPesananRequest extends FormRequest
 
     // Batas total order agar muat di kolom decimal(15,2)
     private const MAKS_TOTAL = 9_999_999_999_999;
+
+    // Batas kolom unsignedInteger yang masuk akal untuk nomor SPP
+    private const MAKS_NOMOR = 99_999_999;
 
     private const FIELD_PILIHAN = ['jenis_packaging', 'jenis_bahan', 'jenis_cetak'];
 
@@ -55,6 +62,12 @@ class SimpanPesananRequest extends FormRequest
             $this->merge(['item' => $item]);
         }
 
+        if ($this->has('nomor_spp') && is_string($this->input('nomor_spp'))) {
+            // "#176" / "SPP #176" → "176"
+            $nomor = Pesanan::angkaNomorSpp($this->input('nomor_spp'));
+            $this->merge(['nomor_spp' => $nomor ?? $this->keAngka($this->input('nomor_spp'))]);
+        }
+
         if ($this->has('dp')) {
             $this->merge(['dp' => $this->keAngka($this->input('dp'))]);
         }
@@ -66,6 +79,14 @@ class SimpanPesananRequest extends FormRequest
         $lainnya = Pesanan::LAINNYA;
 
         return [
+            'nomor_spp'              => ['required', 'integer', 'min:1', 'max:' . self::MAKS_NOMOR],
+            'konfirmasi_nomor'       => ['nullable', 'boolean'],
+            'konfirmasi_ganti_nomor' => ['nullable', 'boolean'],
+            'customer_id'            => ['nullable', 'integer', Rule::exists('customer', 'id')],
+            'perbarui_customer'      => ['nullable', 'boolean'],
+            'nama_brand'             => ['nullable', 'string', 'max:150'],
+            'jenis_deadline'         => ['required', Rule::in(array_keys(Pesanan::JENIS_DEADLINE))],
+
             'nama_customer'   => ['required', 'string', 'max:150'],
             'nomor_whatsapp'  => ['required', 'string', 'max:30', 'regex:/^[0-9+\s\-().]+$/'],
             'alamat'          => ['required', 'string', 'max:2000'],
@@ -109,7 +130,13 @@ class SimpanPesananRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
-            if ($validator->errors()->isNotEmpty()) {
+            $adaGalatDasar = $validator->errors()->isNotEmpty();
+
+            if (! $validator->errors()->has('nomor_spp')) {
+                $this->periksaNomorSpp($validator);
+            }
+
+            if ($adaGalatDasar) {
                 return; // cek lanjutan butuh data dasar yang sudah valid
             }
 
@@ -141,6 +168,44 @@ class SimpanPesananRequest extends FormRequest
         }];
     }
 
+    /** Unik (termasuk SPP yang dihapus), konfirmasi loncatan, dan konfirmasi ganti nomor. */
+    private function periksaNomorSpp(Validator $validator): void
+    {
+        $nomor   = (int) $this->input('nomor_spp');
+        $pesanan = $this->route('pesanan');
+        $edit    = $pesanan instanceof Pesanan;
+
+        $pemilik = Pesanan::withTrashed()
+            ->where('nomor_spp', $nomor)
+            ->when($edit, fn ($q) => $q->whereKeyNot($pesanan->id))
+            ->first(['id', 'nama_customer', 'deleted_at']);
+
+        if ($pemilik) {
+            $validator->errors()->add('nomor_spp', "SPP #{$nomor} sudah dipakai oleh {$pemilik->nama_customer}"
+                . ($pemilik->trashed() ? ' (SPP itu sudah dihapus).' : '.'));
+
+            return;
+        }
+
+        if ($edit) {
+            $lama = (int) $pesanan->nomor_spp;
+            if ($nomor !== $lama && ! $this->boolean('konfirmasi_ganti_nomor')) {
+                $validator->errors()->add('konfirmasi_ganti_nomor',
+                    "Nomor SPP akan diganti dari #{$lama} menjadi #{$nomor}. Produksi mungkin sudah menerima nomor lama "
+                    . 'lewat WhatsApp, jadi kabari mereka setelah menyimpan. Centang konfirmasi lalu simpan lagi bila yakin.');
+            }
+
+            return;
+        }
+
+        if (! $this->boolean('konfirmasi_nomor') && Pesanan::nomorSppLoncat($nomor)) {
+            $saran = Pesanan::saranNomorSpp();
+            $validator->errors()->add('konfirmasi_nomor',
+                "Nomor SPP #{$nomor} jauh dari nomor berikutnya (#{$saran}). Periksa lagi; bila memang benar, "
+                . 'centang konfirmasi lalu simpan lagi.');
+        }
+    }
+
     public function messages(): array
     {
         return [
@@ -156,12 +221,18 @@ class SimpanPesananRequest extends FormRequest
             'mockup.*.dimensions'    => 'Gambar mockup terlalu besar. Lebar dan tinggi maksimal 8000 piksel.',
             'referensi.*.dimensions' => 'Gambar referensi terlalu besar. Lebar dan tinggi maksimal 8000 piksel.',
             'nomor_whatsapp.regex'   => 'Nomor WhatsApp hanya boleh berisi angka, spasi, +, dan -.',
+            'customer_id.exists'     => 'Customer yang dipilih tidak ditemukan. Pilih ulang atau kosongkan.',
+            'jenis_deadline.in'      => 'Pilih jenis deadline: Siap atau Kirim.',
         ];
     }
 
     public function attributes(): array
     {
         return [
+            'nomor_spp'      => 'Nomor SPP',
+            'customer_id'    => 'Customer',
+            'nama_brand'     => 'Nama brand/acara',
+            'jenis_deadline' => 'Jenis deadline',
             'nama_customer'  => 'Nama customer',
             'nomor_whatsapp' => 'Nomor WhatsApp',
             'alamat'         => 'Alamat',
@@ -201,13 +272,16 @@ class SimpanPesananRequest extends FormRequest
 
     // ── Data siap simpan (dipakai controller setelah validasi) ──
 
-    /** Kolom tabel pesanan (tanpa nomor_order, total, status_produksi). */
+    /** Kolom tabel pesanan (tanpa customer_id, total, status_produksi). */
     public function dataPesanan(): array
     {
         $v = $this->validated();
 
         return [
+            'nomor_spp'      => (int) $v['nomor_spp'],
             'nama_customer'  => trim($v['nama_customer']),
+            'nama_brand'     => filled($v['nama_brand'] ?? null) ? trim($v['nama_brand']) : null,
+            'jenis_deadline' => $v['jenis_deadline'],
             'nomor_whatsapp' => self::normalisasiWhatsapp($v['nomor_whatsapp']),
             'alamat'         => trim($v['alamat']),
             'kota'           => trim($v['kota']),
@@ -220,6 +294,19 @@ class SimpanPesananRequest extends FormRequest
             'status_desain'  => $v['status_desain'] ?? StatusDesain::BelumDikirim->value,
             'catatan_admin'  => $v['catatan_admin'] ?? null,
         ];
+    }
+
+    /** Customer yang dipilih admin (null = cari lewat WA / buat baru). */
+    public function customerId(): ?int
+    {
+        $id = $this->validated('customer_id');
+
+        return $id ? (int) $id : null;
+    }
+
+    public function perbaruiCustomer(): bool
+    {
+        return $this->boolean('perbarui_customer');
     }
 
     /** Item dengan pilihan "Lainnya" sudah diganti teks bebasnya, finishing digabung koma. */

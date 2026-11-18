@@ -1,7 +1,12 @@
 {{--
     Isi form order (tambah & edit), dibungkus <form> di create/edit.
     Variabel: $pesanan, $masterPackaging, $masterBahan, $masterFinishing, $masterCetak (array nama),
-    $statusDesain (nilai => label), $lainnya (nilai opsi "Lainnya"), $labelSimpan, $urlBatal.
+    $statusDesain (nilai => label), $lainnya (nilai opsi "Lainnya"), $labelSimpan, $urlBatal,
+    $saranNomor (int), $jenisDeadline (nilai => label), $urlCariCustomer (endpoint JSON autocomplete).
+
+    Peringatan nomor SPP datang sebagai error validasi di kunci:
+    - konfirmasi_nomor        (tambah: nomor loncat jauh dari saran)   → kirim konfirmasi_nomor=1
+    - konfirmasi_ganti_nomor  (edit: nomor diganti)                    → kirim konfirmasi_ganti_nomor=1
 --}}
 @php
     // Ubah item tersimpan ke bentuk input form: nilai di luar master menjadi "Lainnya" + teks bebas
@@ -44,6 +49,9 @@
 
     $ikonDesain = ['belum_dikirim' => 'fa-circle-minus', 'menunggu' => 'fa-hourglass-half', 'revisi' => 'fa-pen', 'disetujui' => 'fa-circle-check'];
     $fileLama = $pesanan->exists ? $pesanan->file : collect();
+    $customerTerpilih = old('customer_id', $pesanan->customer_id);
+    $perluKonfirmasiNomor = $errors->has('konfirmasi_nomor') || old('konfirmasi_nomor');
+    $perluKonfirmasiGanti = $errors->has('konfirmasi_ganti_nomor') || old('konfirmasi_ganti_nomor');
     $maksFile = \App\Models\PesananFile::MAKS_PER_ORDER;
 @endphp
 
@@ -53,6 +61,49 @@
         {{-- ① Customer --}}
         <section class="sg-kartu" id="bagian-customer" aria-labelledby="judul-customer">
             <h2 class="sg-kartu-judul" id="judul-customer"><span class="sg-no" aria-hidden="true">1</span> Customer</h2>
+
+            <div class="sg-field">
+                <label class="sg-label" for="f-nomor_spp">Nomor SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
+                <div class="sg-imbuh sg-imbuh-depan">
+                    <span class="sg-imbuh-teks" aria-hidden="true">#</span>
+                    <input type="text" inputmode="numeric" id="f-nomor_spp" name="nomor_spp" value="{{ old('nomor_spp', $pesanan->nomor_spp) }}" maxlength="9" required autocomplete="off"
+                           class="form-control sg-angka @error('nomor_spp') is-invalid @enderror" data-nomor-spp data-saran-nomor="{{ $saranNomor }}" data-nomor-lama="{{ $pesanan->exists ? $pesanan->nomor_spp : '' }}"
+                           aria-describedby="bantu-nomor-spp {{ $errors->has('nomor_spp') ? $gid('nomor_spp') : '' }}" @error('nomor_spp') aria-invalid="true" @enderror>
+                </div>
+                {!! $galat('nomor_spp') !!}
+                <p class="sg-bantu" id="bantu-nomor-spp">
+                    @if ($pesanan->exists)
+                        Nomor saat ini #{{ $pesanan->nomor_spp }}. Ganti hanya bila salah input.
+                    @else
+                        Saran: #{{ $saranNomor }} (nomor terbesar + 1). Boleh diganti.
+                    @endif
+                </p>
+                @if ($perluKonfirmasiNomor)
+                    <div class="sg-alert sg-alert-peringatan" id="f-konfirmasi_nomor">
+                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        <div>
+                            @error('konfirmasi_nomor')<p>{{ $message }}</p>@enderror
+                            <label><input type="checkbox" name="konfirmasi_nomor" value="1" @checked(old('konfirmasi_nomor'))> Ya, nomor ini sudah benar</label>
+                        </div>
+                    </div>
+                @endif
+                @if ($perluKonfirmasiGanti)
+                    <div class="sg-alert sg-alert-peringatan" id="f-konfirmasi_ganti_nomor">
+                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        <div>
+                            @error('konfirmasi_ganti_nomor')<p>{{ $message }}</p>@enderror
+                            <label><input type="checkbox" name="konfirmasi_ganti_nomor" value="1" @checked(old('konfirmasi_ganti_nomor'))> Ya, ganti nomor SPP</label>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            {{-- Customer terpilih (diisi autocomplete; kosong = cari lewat WA atau buat baru) --}}
+            <input type="hidden" name="customer_id" id="f-customer_id" value="{{ $customerTerpilih }}" data-customer-id data-url-cari-customer="{{ $urlCariCustomer }}">
+            @if ($pesanan->exists && $pesanan->customer)
+                <p class="sg-bantu mt-0">Customer: <a href="{{ route('admin.customer.show', $pesanan->customer) }}">{{ $pesanan->customer->kode }} · {{ $pesanan->customer->nama }}</a></p>
+            @endif
+            {!! $galat('customer_id') !!}
             <div class="sg-dua" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))">
                 <div class="sg-field">
                     <label class="sg-label" for="f-nama_customer">Nama customer <span class="sg-wajib" aria-hidden="true">*</span></label>
@@ -78,6 +129,16 @@
                 <input type="text" id="f-kota" name="kota" value="{{ old('kota', $pesanan->kota) }}" maxlength="100" required
                        class="form-control @error('kota') is-invalid @enderror" {!! $aria('kota') !!}>
                 {!! $galat('kota') !!}
+            </div>
+            <div class="sg-field">
+                <label class="sg-label" for="f-nama_brand">Nama brand / acara <span class="fw-normal sg-muted">(opsional)</span></label>
+                <input type="text" id="f-nama_brand" name="nama_brand" value="{{ old('nama_brand', $pesanan->nama_brand) }}" maxlength="150" autocomplete="off"
+                       class="form-control @error('nama_brand') is-invalid @enderror" {!! $aria('nama_brand') !!}>
+                {!! $galat('nama_brand') !!}
+            </div>
+            <div class="sg-field">
+                <label><input type="checkbox" name="perbarui_customer" value="1" @checked(old('perbarui_customer'))> Perbarui data customer dengan isian ini</label>
+                <p class="sg-bantu">SPP lain milik customer ini tidak ikut berubah.</p>
             </div>
         </section>
 
@@ -199,6 +260,19 @@
                     {!! $galat('deadline') !!}
                 </div>
             </div>
+
+            <fieldset class="sg-field" id="f-jenis_deadline">
+                <legend class="sg-label">Jenis deadline <span class="sg-wajib" aria-hidden="true">*</span></legend>
+                <div class="sg-segmen">
+                    @foreach ($jenisDeadline as $nilai => $label)
+                        <label>
+                            <input type="radio" name="jenis_deadline" value="{{ $nilai }}" @checked(old('jenis_deadline', $pesanan->jenis_deadline ?? 'kirim') === $nilai)>
+                            <span>{{ $label }}</span>
+                        </label>
+                    @endforeach
+                </div>
+                {!! $galat('jenis_deadline') !!}
+            </fieldset>
 
             <div class="sg-otomatis"><span>Total <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
 

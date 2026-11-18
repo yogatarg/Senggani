@@ -4,7 +4,7 @@
     $jumlahItem = (int) $p->detail_pesanan_count;
     $totalPcs = number_format((int) $p->total_jumlah, 0, ',', '.');
     $ringkasLabel = collect([
-        $p->nomor_order,
+        $p->nomor_spp_teks,
         $p->nama_customer,
         $p->status_produksi->label(),
         'bayar ' . $p->label_status_pembayaran,
@@ -14,7 +14,7 @@
 @endphp
 <article class="sg-order">
     <div class="sg-order-atas">
-        <span class="sg-order-no">{{ $p->nomor_order }}</span>
+        <span class="sg-order-no">{{ $p->nomor_spp_teks }}</span>
         @include('admin.pesanan._deadline', ['p' => $p])
     </div>
     <h2 class="sg-order-nama">

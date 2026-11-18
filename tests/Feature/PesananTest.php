@@ -41,6 +41,8 @@ class PesananTest extends TestCase
     private function dataOrder(array $ubah = []): array
     {
         return array_replace_recursive([
+            'nomor_spp'      => (string) Pesanan::saranNomorSpp(),
+            'jenis_deadline' => 'kirim',
             'nama_customer'  => 'Bu Rina Susanti',
             'nomor_whatsapp' => '0812-3456-7890',
             'alamat'         => 'Jl. Melati 5',
@@ -64,6 +66,12 @@ class PesananTest extends TestCase
                 ],
             ],
         ], $ubah);
+    }
+
+    /** Data form edit: nomor SPP tetap milik pesanan itu kecuali diubah. */
+    private function dataEdit(Pesanan $pesanan, array $ubah = []): array
+    {
+        return array_replace_recursive($this->dataOrder(['nomor_spp' => (string) $pesanan->nomor_spp]), $ubah);
     }
 
     private function buatOrder(array $ubah = []): Pesanan
@@ -94,7 +102,7 @@ class PesananTest extends TestCase
 
         $this->assertDatabaseHas('pesanan_riwayat', [
             'pesanan_id' => $pesanan->id, 'status_dari' => null, 'status_ke' => 'antrian',
-            'catatan' => 'Order dibuat', 'nama_pengguna' => 'Rina CS',
+            'catatan' => 'SPP dibuat', 'nama_pengguna' => 'Rina CS',
         ]);
     }
 
@@ -147,7 +155,7 @@ class PesananTest extends TestCase
     {
         $pesanan = $this->buatOrder();
 
-        $data = $this->dataOrder();
+        $data = $this->dataEdit($pesanan);
         $data['item'] = [['jenis_packaging' => 'Box', 'jenis_bahan' => 'Duplex', 'jumlah' => '10', 'harga_satuan' => '1000']];
         $data['dp'] = '0';
 
@@ -157,47 +165,9 @@ class PesananTest extends TestCase
         $pesanan->refresh();
         $this->assertEquals(10000, (float) $pesanan->total);
         $this->assertCount(1, $pesanan->detailPesanan);
-        $this->assertDatabaseHas('pesanan_riwayat', ['pesanan_id' => $pesanan->id, 'catatan' => 'Order diubah']);
+        $this->assertDatabaseHas('pesanan_riwayat', ['pesanan_id' => $pesanan->id, 'catatan' => 'SPP diubah']);
 
         $this->sebagai($this->admin)->get(route('admin.pesanan.edit', $pesanan))->assertOk()->assertSee('Box');
-    }
-
-    // ── Nomor order ────────────────────────────────────
-
-    public function test_nomor_order_format_dan_berurutan_per_bulan(): void
-    {
-        $this->travelTo(now()->setDate(2026, 11, 18));
-        $a = $this->buatOrder();
-        $b = $this->buatOrder();
-
-        $this->assertSame('SGN-2611-001', $a->nomor_order);
-        $this->assertSame('SGN-2611-002', $b->nomor_order);
-
-        $this->travelTo(now()->setDate(2026, 12, 1));
-        $this->assertSame('SGN-2612-001', $this->buatOrder()->nomor_order);
-    }
-
-    public function test_nomor_tidak_didaur_ulang_dan_mengejar_data_yang_ada(): void
-    {
-        $this->travelTo(now()->setDate(2026, 11, 18));
-        $a = $this->buatOrder();
-        $this->sebagai($this->admin)->delete(route('admin.pesanan.destroy', $a));
-
-        // Order diinput manual dengan nomor lebih besar dari penghitung
-        Pesanan::factory()->create(['nomor_order' => 'SGN-2611-007']);
-
-        $this->assertSame('SGN-2611-008', $this->buatOrder()->nomor_order);
-        $this->assertSame(1, Pesanan::where('nomor_order', 'SGN-2611-008')->count());
-    }
-
-    public function test_nomor_lebih_dari_999_menjadi_empat_digit(): void
-    {
-        $this->travelTo(now()->setDate(2026, 11, 18));
-        DB::table('pesanan_nomor_urut')->insert(['periode' => '2611', 'terakhir' => 999]);
-
-        $nomor = DB::transaction(fn () => app(PesananService::class)->nomorBerikutnya());
-
-        $this->assertSame('SGN-2611-1000', $nomor);
     }
 
     // ── Pembayaran ─────────────────────────────────────
@@ -285,7 +255,8 @@ class PesananTest extends TestCase
         $budi    = Pesanan::factory()->create(['nama_customer' => 'Budi Santoso']);
         $budiLam = Pesanan::factory()->status('selesai')->create(['nama_customer' => 'Pak Budi']);
         Pesanan::factory()->create(['nama_customer' => 'Sari']);
-        $nomor   = Pesanan::factory()->create(['nomor_order' => 'SGN-2611-042', 'nama_customer' => 'Andi']);
+        $nomor   = Pesanan::factory()->status('selesai')->create(['nomor_spp' => 42, 'nama_customer' => 'Andi']);
+        $brand   = Pesanan::factory()->create(['nama_customer' => 'Ismun', 'nama_brand' => 'Paperbag Alea']);
         Pesanan::factory()->create(['nama_customer' => 'Persen 100%']);
 
         $cari = fn ($q, $tab = 'antrian') => $this->sebagai($this->admin)
@@ -293,7 +264,10 @@ class PesananTest extends TestCase
             ->viewData('pesanan')->pluck('id')->sort()->values()->all();
 
         $this->assertSame([$budi->id, $budiLam->id], $cari('budi'));
-        $this->assertSame([$nomor->id], $cari('2611-042', 'history'));
+        $this->assertSame([$nomor->id], $cari('42', 'history'));
+        $this->assertSame([$nomor->id], $cari('#42'));
+        $this->assertSame([$nomor->id], $cari('SPP #42'));
+        $this->assertSame([$brand->id], $cari('alea'));
         $this->assertSame([], $cari('_')); // wildcard di-escape
     }
 
@@ -378,7 +352,7 @@ class PesananTest extends TestCase
         // Perangkat 2 (Ayah) masih melihat "antrian" lalu menekan tombol yang sama
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses'])
             ->assertRedirect(route('admin.pesanan.show', $pesanan))
-            ->assertSessionHas('error', 'Status pesanan ini sudah diubah oleh Mamah menjadi Dalam Proses. Muat ulang halaman.')
+            ->assertSessionHas('error', 'Status SPP ini sudah diubah oleh Mamah menjadi Dalam Proses. Tampilan sudah diperbarui.')
             ->assertSessionHas('bentrok', true);
 
         $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses'])
@@ -414,7 +388,7 @@ class PesananTest extends TestCase
             ->assertSessionHasErrors('status_lama');
 
         $this->sebagai($this->admin)->post(route('admin.pesanan.pulihkan', $pesanan))
-            ->assertSessionHas('success', 'Order dipulihkan ke Dalam Proses.');
+            ->assertSessionHas('success', 'SPP dipulihkan ke Dalam Proses.');
         $pesanan->refresh();
         $this->assertSame('proses', $pesanan->status_produksi->value);
         $this->assertNull($pesanan->selesai_pada);
@@ -454,7 +428,7 @@ class PesananTest extends TestCase
 
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))
             ->assertOk()
-            ->assertSee($pesanan->nomor_order)
+            ->assertSee($pesanan->nomor_spp_teks)
             ->assertSee('Pindahkan ke Dalam Proses')
             ->assertSee('Batalkan order')
             ->assertViewHas('statusBerikutnya');
@@ -546,7 +520,7 @@ class PesananTest extends TestCase
         $pesanan = $this->buatOrder(['mockup' => array_map(fn ($i) => UploadedFile::fake()->image("m{$i}.jpg", 20, 20), range(1, 9))]);
         $this->assertCount(9, $pesanan->file);
 
-        $data = $this->dataOrder(['mockup' => [UploadedFile::fake()->image('x.jpg', 20, 20), UploadedFile::fake()->image('y.jpg', 20, 20)]]);
+        $data = $this->dataEdit($pesanan, ['mockup' => [UploadedFile::fake()->image('x.jpg', 20, 20), UploadedFile::fake()->image('y.jpg', 20, 20)]]);
         $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan), $data)
             ->assertSessionHasErrors(['mockup' => 'Gambar maksimal 10 per order. Masih bisa menambah 1 gambar.']);
     }

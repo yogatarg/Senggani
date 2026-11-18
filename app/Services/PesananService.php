@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Enums\StatusProduksi;
 use App\Exceptions\StatusBentrok;
 use App\Models\Admin;
+use App\Models\Customer;
 use App\Models\Pesanan;
 use App\Models\PesananFile;
 use App\Models\PesananRiwayat;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -24,60 +26,37 @@ class PesananService
     // Folder sementara hasil olah gambar sebelum order tersimpan (disk local)
     public const FOLDER_SEMENTARA = 'pesanan/sementara';
 
-    // ── Nomor order ────────────────────────────────────
-
     /**
-     * Nomor SGN-YYMM-NNN dari waktu simpan. WAJIB dipanggil di dalam transaksi
-     * yang sama dengan insert order: baris periode dikunci (lockForUpdate) sehingga
-     * dua penyimpanan bersamaan antre dan tidak mendapat nomor kembar.
+     * Info untuk admin setelah buat/perbarui, mis. SPP dikaitkan ke customer lama
+     * karena nomor WA-nya sudah terdaftar. null bila tidak ada.
      */
-    public function nomorBerikutnya(?Carbon $waktu = null): string
-    {
-        $periode = ($waktu ?? now())->format('ym');
+    public ?string $infoCustomer = null;
 
-        DB::table('pesanan_nomor_urut')->insertOrIgnore(['periode' => $periode, 'terakhir' => 0]);
-
-        $terakhir = (int) DB::table('pesanan_nomor_urut')
-            ->where('periode', $periode)
-            ->lockForUpdate()
-            ->value('terakhir');
-
-        // Jaga-jaga bila penghitung tertinggal dari data (mis. order diinput manual):
-        // ambil nomor terbesar yang sudah ada di periode ini, termasuk yang di-soft-delete.
-        $nomorTerbesar = Pesanan::withTrashed()
-            ->where('nomor_order', 'like', "SGN-{$periode}-%")
-            ->orderByRaw('LENGTH(nomor_order) DESC')
-            ->orderByDesc('nomor_order')
-            ->value('nomor_order');
-        if ($nomorTerbesar) {
-            $terakhir = max($terakhir, (int) substr($nomorTerbesar, strlen("SGN-{$periode}-")));
-        }
-
-        $urut = $terakhir + 1;
-
-        DB::table('pesanan_nomor_urut')->where('periode', $periode)->update(['terakhir' => $urut]);
-
-        return sprintf('SGN-%s-%s', $periode, str_pad((string) $urut, 3, '0', STR_PAD_LEFT));
-    }
-
-    // ── Simpan order ───────────────────────────────────
+    // ── Simpan SPP ─────────────────────────────────────
 
     /**
-     * Buat order baru beserta item, file, dan riwayat "Order dibuat".
+     * Buat SPP baru beserta item, file, dan riwayat "SPP dibuat".
      *
-     * @param  array  $data      kolom pesanan (tanpa total/nomor)
+     * @param  array  $data      kolom pesanan termasuk nomor_spp (tanpa total/customer_id)
      * @param  array  $item      daftar item (lihat isiItem)
      * @param  array  $fileBaru  [['jenis' => 'mockup', 'path' => 'pesanan/sementara/x.webp', 'nama_asli' => '...'], ...]
+     * @param  ?int   $customerId customer yang dipilih admin (null = cari lewat WA / buat baru)
+     * @param  bool   $perbaruiCustomer timpa data customer dengan isian form
+     *
+     * @throws ValidationException bila nomor SPP keduluan admin lain (indeks unik)
      */
-    public function buat(array $data, array $item, array $fileBaru, Admin $oleh): Pesanan
+    public function buat(array $data, array $item, array $fileBaru, Admin $oleh, ?int $customerId = null, bool $perbaruiCustomer = false): Pesanan
     {
         $dipindah = [];
+        $this->infoCustomer = null;
 
         try {
-            return DB::transaction(function () use ($data, $item, $fileBaru, $oleh, &$dipindah) {
+            return DB::transaction(function () use ($data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, &$dipindah) {
+                $customer = $this->tentukanCustomer($data, $customerId, $perbaruiCustomer);
+
                 $pesanan = Pesanan::create([
                     ...$data,
-                    'nomor_order'     => $this->nomorBerikutnya(),
+                    'customer_id'     => $customer->id,
                     'status_produksi' => StatusProduksi::Antrian->value,
                     'selesai_pada'    => null,
                     'dibuat_oleh'     => $oleh->id,
@@ -86,41 +65,120 @@ class PesananService
 
                 $this->isiItem($pesanan, $item);
                 $this->lampirkanFile($pesanan, $fileBaru, $oleh, $dipindah);
-                $this->catat($pesanan, $oleh, null, StatusProduksi::Antrian, 'Order dibuat');
+                $this->catat($pesanan, $oleh, null, StatusProduksi::Antrian, 'SPP dibuat');
 
                 return $pesanan;
             });
         } catch (Throwable $e) {
             $this->buangFile([...array_column($fileBaru, 'path'), ...$dipindah]);
 
-            throw $e;
+            throw $this->terjemahkanDuplikat($e, (int) ($data['nomor_spp'] ?? 0));
         }
     }
 
-    /** Perbarui data order, ganti seluruh item, tambah file baru. */
-    public function perbarui(Pesanan $pesanan, array $data, array $item, array $fileBaru, Admin $oleh): Pesanan
+    /**
+     * Perbarui data SPP, ganti seluruh item, tambah file baru. Pergantian nomor SPP
+     * dicatat di riwayat (konfirmasinya diperiksa di Form Request).
+     */
+    public function perbarui(Pesanan $pesanan, array $data, array $item, array $fileBaru, Admin $oleh, ?int $customerId = null, bool $perbaruiCustomer = false): Pesanan
     {
         $dipindah = [];
+        $this->infoCustomer = null;
 
         try {
-            DB::transaction(function () use ($pesanan, $data, $item, $fileBaru, $oleh, &$dipindah) {
+            DB::transaction(function () use ($pesanan, $data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, &$dipindah) {
                 // Kolom yang tidak boleh diubah lewat form
-                unset($data['nomor_order'], $data['status_produksi'], $data['selesai_pada'], $data['dibuat_oleh'], $data['total']);
+                unset($data['status_produksi'], $data['selesai_pada'], $data['dibuat_oleh'], $data['total'], $data['customer_id']);
 
-                $pesanan->fill($data)->save();
+                $nomorLama = (int) $pesanan->nomor_spp;
+                $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
+
+                $customer = $this->tentukanCustomer($data, $customerId ?? $pesanan->customer_id, $perbaruiCustomer);
+
+                $pesanan->fill([...$data, 'customer_id' => $customer->id])->save();
 
                 $pesanan->detailPesanan()->delete();
                 $this->isiItem($pesanan, $item);
                 $this->lampirkanFile($pesanan, $fileBaru, $oleh, $dipindah);
-                $this->catat($pesanan, $oleh, null, null, 'Order diubah');
+
+                if ($nomorBaru !== $nomorLama) {
+                    $this->catat($pesanan, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomorBaru} oleh {$oleh->nama}");
+                }
+                $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
             });
         } catch (Throwable $e) {
             $this->buangFile([...array_column($fileBaru, 'path'), ...$dipindah]);
+            $pesanan->refresh();
 
-            throw $e;
+            throw $this->terjemahkanDuplikat($e, (int) ($data['nomor_spp'] ?? 0));
         }
 
         return $pesanan->refresh();
+    }
+
+    /**
+     * Pelanggaran indeks unik nomor_spp (dua admin menyimpan nomor yang sama hampir
+     * bersamaan) diubah menjadi pesan validasi, bukan error 500.
+     */
+    private function terjemahkanDuplikat(Throwable $e, int $nomor): Throwable
+    {
+        if (! $e instanceof UniqueConstraintViolationException || ! str_contains($e->getMessage(), 'nomor_spp')) {
+            return $e;
+        }
+
+        $pemilik = Pesanan::withTrashed()->where('nomor_spp', $nomor)->value('nama_customer');
+
+        return ValidationException::withMessages([
+            'nomor_spp' => $pemilik
+                ? "SPP #{$nomor} sudah dipakai oleh {$pemilik}."
+                : "SPP #{$nomor} baru saja dipakai admin lain. Pakai nomor lain.",
+        ]);
+    }
+
+    // ── Customer ───────────────────────────────────────
+
+    /**
+     * Pilih customer untuk SPP:
+     * 1. Nomor WA isian sudah milik customer lain → pakai customer itu (beri tahu admin).
+     * 2. Admin memilih customer (customer_id) → pakai customer itu.
+     * 3. Selain itu buat customer baru dari isian.
+     * Bila $perbarui, data customer ditimpa isian form (nama, alamat, kota, dan WA bila
+     * nomornya belum dipakai customer lain). Salinan di SPP lain tidak berubah.
+     */
+    private function tentukanCustomer(array $data, ?int $customerId, bool $perbarui): Customer
+    {
+        $wa        = (string) $data['nomor_whatsapp'];
+        $dipilih   = $customerId ? Customer::find($customerId) : null;
+        $pemilikWa = Customer::where('nomor_whatsapp', $wa)->first();
+
+        if ($pemilikWa && (! $dipilih || $dipilih->id !== $pemilikWa->id)) {
+            $this->infoCustomer = "Nomor WhatsApp {$pemilikWa->whatsapp_tampil} sudah terdaftar atas customer "
+                . "{$pemilikWa->kode} ({$pemilikWa->nama}), jadi SPP ini dikaitkan ke customer tersebut.";
+            $customer = $pemilikWa;
+        } elseif ($dipilih) {
+            $customer = $dipilih;
+        } else {
+            // createOrFirst: aman bila dua admin membuat customer ber-WA sama bersamaan
+            return Customer::createOrFirst(['nomor_whatsapp' => $wa], [
+                'nama'   => $data['nama_customer'],
+                'alamat' => $data['alamat'] ?? null,
+                'kota'   => $data['kota'] ?? null,
+            ]);
+        }
+
+        if ($perbarui) {
+            $ubah = [
+                'nama'   => $data['nama_customer'],
+                'alamat' => $data['alamat'] ?? null,
+                'kota'   => $data['kota'] ?? null,
+            ];
+            if ($customer->nomor_whatsapp !== $wa && ! Customer::where('nomor_whatsapp', $wa)->exists()) {
+                $ubah['nomor_whatsapp'] = $wa;
+            }
+            $customer->update($ubah);
+        }
+
+        return $customer;
     }
 
     /**
@@ -221,7 +279,7 @@ class PesananService
     {
         if (! $dari->bisaDibatalkan()) {
             throw ValidationException::withMessages([
-                'status_lama' => 'Order yang sudah selesai atau dibatalkan tidak bisa dibatalkan.',
+                'status_lama' => 'SPP yang sudah selesai atau dibatalkan tidak bisa dibatalkan.',
             ]);
         }
 
@@ -270,7 +328,7 @@ class PesananService
         $segar = Pesanan::withTrashed()->find($pesanan->id);
 
         if (! $segar || $segar->trashed()) {
-            return new StatusBentrok('Order ini sudah dihapus. Muat ulang halaman.');
+            return new StatusBentrok('SPP ini sudah dihapus oleh admin.');
         }
 
         $pelaku = PesananRiwayat::where('pesanan_id', $pesanan->id)
@@ -282,7 +340,7 @@ class PesananService
         $oleh   = $pelaku ? " oleh {$pelaku}" : '';
 
         return new StatusBentrok(
-            "Status pesanan ini sudah diubah{$oleh} menjadi {$status->label()}. Muat ulang halaman.",
+            "Status SPP ini sudah diubah{$oleh} menjadi {$status->label()}. Tampilan sudah diperbarui.",
             $status,
         );
     }
