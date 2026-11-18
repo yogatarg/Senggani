@@ -20,10 +20,14 @@ use Illuminate\Validation\Validator;
  * - item[i][finishing][]: daftar nama finishing (multi) + item[i][finishing_lainnya] teks bebas.
  * - Harga & DP boleh dikirim dengan pemisah ribuan ("2.500" / "Rp 2.500"); disimpan rupiah bulat.
  * - mockup[] dan referensi[]: gambar baru (maks 5 MB per file, total maks 10 file per order).
- * - nomor_spp: angka ≥1 unik (boleh "#176"). Nomor yang loncat jauh dari saran ditolak dengan
+ * - nomor_spp: angka bulat ≥1 unik (boleh "#176" / "SPP #176"; "12.5" / "1e3" ditolak). Nomor yang loncat jauh dari saran ditolak dengan
  *   error di kunci "konfirmasi_nomor" kecuali dikirim konfirmasi_nomor=1. Saat edit, mengganti
  *   nomor ditolak dengan error di kunci "konfirmasi_ganti_nomor" kecuali dikirim konfirmasi_ganti_nomor=1.
  * - customer_id (opsional) + perbarui_customer=1 (opsional): lihat PesananService::tentukanCustomer.
+ * - lepas_customer=1 (opsional, saat edit): customer_id kosong berarti SPP dilepas dari customer lama
+ *   dan customer ditentukan ulang dari isian (pemilik WA bila ada, jika tidak customer baru).
+ *   Tanpa lepas_customer, customer_id kosong saat edit = customer lama tetap.
+ * - item[i][panjang|lebar|tinggi]: boleh koma desimal ("12,5" → 12.5).
  */
 class SimpanPesananRequest extends FormRequest
 {
@@ -34,6 +38,8 @@ class SimpanPesananRequest extends FormRequest
 
     // Batas kolom unsignedInteger yang masuk akal untuk nomor SPP
     private const MAKS_NOMOR = 99_999_999;
+
+    private const PESAN_BUKAN_GAMBAR = 'File harus berupa gambar JPG, PNG, atau WebP.';
 
     private const FIELD_PILIHAN = ['jenis_packaging', 'jenis_bahan', 'jenis_cetak'];
 
@@ -52,6 +58,11 @@ class SimpanPesananRequest extends FormRequest
 
         if (is_array($item)) {
             foreach ($item as $i => $baris) {
+                foreach (['panjang', 'lebar', 'tinggi'] as $ukuran) {
+                    if (is_array($baris) && array_key_exists($ukuran, $baris)) {
+                        $item[$i][$ukuran] = $this->keDesimal($baris[$ukuran]);
+                    }
+                }
                 if (is_array($baris) && array_key_exists('harga_satuan', $baris)) {
                     $item[$i]['harga_satuan'] = $this->keAngka($baris['harga_satuan']);
                 }
@@ -63,9 +74,11 @@ class SimpanPesananRequest extends FormRequest
         }
 
         if ($this->has('nomor_spp') && is_string($this->input('nomor_spp'))) {
-            // "#176" / "SPP #176" → "176"
-            $nomor = Pesanan::angkaNomorSpp($this->input('nomor_spp'));
-            $this->merge(['nomor_spp' => $nomor ?? $this->keAngka($this->input('nomor_spp'))]);
+            // "#176" / "SPP #176" → "176". Format lain ("12.5", "1e3", "1.000") dibiarkan apa adanya
+            // supaya ditolak aturan integer, bukan diubah diam-diam menjadi angka lain.
+            $mentah = trim($this->input('nomor_spp'));
+            $nomor  = Pesanan::angkaNomorSpp($mentah);
+            $this->merge(['nomor_spp' => $nomor ?? ($mentah === '' ? null : $mentah)]);
         }
 
         if ($this->has('dp')) {
@@ -75,7 +88,8 @@ class SimpanPesananRequest extends FormRequest
 
     public function rules(): array
     {
-        $gambar = ['image', 'mimes:jpg,jpeg,png,webp', 'max:' . PesananFile::MAKS_KB, 'dimensions:max_width=8000,max_height=8000'];
+        // bail: file bukan gambar cukup satu galat (tanpa galat ukuran/dimensi menyusul)
+        $gambar = ['bail', 'image', 'mimes:jpg,jpeg,png,webp', 'max:' . PesananFile::MAKS_KB, 'dimensions:max_width=8000,max_height=8000'];
         $lainnya = Pesanan::LAINNYA;
 
         return [
@@ -84,6 +98,7 @@ class SimpanPesananRequest extends FormRequest
             'konfirmasi_ganti_nomor' => ['nullable', 'boolean'],
             'customer_id'            => ['nullable', 'integer', Rule::exists('customer', 'id')],
             'perbarui_customer'      => ['nullable', 'boolean'],
+            'lepas_customer'         => ['nullable', 'boolean'],
             'nama_brand'             => ['nullable', 'string', 'max:150'],
             'jenis_deadline'         => ['required', Rule::in(array_keys(Pesanan::JENIS_DEADLINE))],
 
@@ -94,7 +109,7 @@ class SimpanPesananRequest extends FormRequest
             'tanggal_order'   => ['required', 'date'],
             'deadline'        => ['required', 'date', 'after_or_equal:tanggal_order'],
             'dp'              => ['nullable', 'integer', 'min:0'],
-            'tanggal_lunas'   => ['nullable', 'date', 'before_or_equal:today'],
+            'tanggal_lunas'   => ['nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'],
             'link_desain'     => ['nullable', 'url', 'max:500', 'starts_with:https://drive.google.com/,https://docs.google.com/'],
             'catatan_desain'  => ['nullable', 'string', 'max:5000'],
             'status_desain'   => ['nullable', Rule::enum(StatusDesain::class)],
@@ -147,15 +162,15 @@ class SimpanPesananRequest extends FormRequest
 
             $total = $this->hitungTotal();
             if ($total > self::MAKS_TOTAL) {
-                $validator->errors()->add('item', 'Total order terlalu besar.');
+                $validator->errors()->add('item', 'Total SPP terlalu besar.');
             }
 
             if ((int) $this->input('dp', 0) > $total) {
-                $validator->errors()->add('dp', 'DP tidak boleh lebih dari total order (Rp ' . number_format($total, 0, ',', '.') . ').');
+                $validator->errors()->add('dp', 'DP tidak boleh lebih dari total SPP (Rp ' . number_format($total, 0, ',', '.') . ').');
             }
 
             if ($this->filled('tanggal_lunas') && $total <= 0) {
-                $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total order lebih dari Rp 0.');
+                $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total SPP lebih dari Rp 0.');
             }
 
             $pesanan = $this->route('pesanan');
@@ -163,7 +178,7 @@ class SimpanPesananRequest extends FormRequest
             $baru = count($this->file('mockup', [])) + count($this->file('referensi', []));
             if ($sudahAda + $baru > PesananFile::MAKS_PER_ORDER) {
                 $sisa = max(PesananFile::MAKS_PER_ORDER - $sudahAda, 0);
-                $validator->errors()->add('mockup', 'Gambar maksimal ' . PesananFile::MAKS_PER_ORDER . " per order. Masih bisa menambah {$sisa} gambar.");
+                $validator->errors()->add('mockup', 'Gambar maksimal ' . PesananFile::MAKS_PER_ORDER . " per SPP. Masih bisa menambah {$sisa} gambar.");
             }
         }];
     }
@@ -210,7 +225,9 @@ class SimpanPesananRequest extends FormRequest
     {
         return [
             ...$this->pesanUmum(),
-            'deadline.after_or_equal' => 'Deadline tidak boleh sebelum tanggal order.',
+            'nomor_spp.integer'       => 'Nomor SPP harus angka bulat, mis. 176.',
+            'deadline.after_or_equal' => 'Deadline tidak boleh sebelum tanggal SPP.',
+            'tanggal_lunas.after_or_equal'  => 'Tanggal lunas tidak boleh sebelum tanggal SPP.',
             'tanggal_lunas.before_or_equal' => 'Tanggal lunas tidak boleh setelah hari ini.',
             'item.required'  => 'Tambahkan minimal satu item pesanan.',
             'item.min'       => 'Tambahkan minimal satu item pesanan.',
@@ -218,6 +235,10 @@ class SimpanPesananRequest extends FormRequest
             'item.*.jenis_bahan_lainnya.required_if'     => 'Tulis jenis bahan lainnya.',
             'item.*.jenis_cetak_lainnya.required_if'     => 'Tulis jenis cetak lainnya.',
             'item.*.jumlah.min' => 'Jumlah item ke-:position minimal 1.',
+            'mockup.*.image'         => self::PESAN_BUKAN_GAMBAR,
+            'mockup.*.mimes'         => self::PESAN_BUKAN_GAMBAR,
+            'referensi.*.image'      => self::PESAN_BUKAN_GAMBAR,
+            'referensi.*.mimes'      => self::PESAN_BUKAN_GAMBAR,
             'mockup.*.dimensions'    => 'Gambar mockup terlalu besar. Lebar dan tinggi maksimal 8000 piksel.',
             'referensi.*.dimensions' => 'Gambar referensi terlalu besar. Lebar dan tinggi maksimal 8000 piksel.',
             'nomor_whatsapp.regex'   => 'Nomor WhatsApp hanya boleh berisi angka, spasi, +, dan -.',
@@ -237,14 +258,14 @@ class SimpanPesananRequest extends FormRequest
             'nomor_whatsapp' => 'Nomor WhatsApp',
             'alamat'         => 'Alamat',
             'kota'           => 'Kota',
-            'tanggal_order'  => 'Tanggal order',
+            'tanggal_order'  => 'Tanggal SPP',
             'deadline'       => 'Deadline',
             'dp'             => 'DP',
             'tanggal_lunas'  => 'Tanggal lunas',
             'link_desain'    => 'Link Google Drive',
             'catatan_desain' => 'Catatan desain',
             'status_desain'  => 'Status approval desain',
-            'catatan_admin'  => 'Catatan order',
+            'catatan_admin'  => 'Catatan SPP',
             'item'           => 'Item pesanan',
             'item.*.jenis_packaging'         => 'Jenis packaging item ke-:position',
             'item.*.jenis_packaging_lainnya' => 'Jenis packaging lainnya item ke-:position',
@@ -307,6 +328,12 @@ class SimpanPesananRequest extends FormRequest
     public function perbaruiCustomer(): bool
     {
         return $this->boolean('perbarui_customer');
+    }
+
+    /** Edit: lepas SPP dari customer lama bila customer_id kosong. */
+    public function lepasCustomer(): bool
+    {
+        return $this->boolean('lepas_customer');
     }
 
     /** Item dengan pilihan "Lainnya" sudah diganti teks bebasnya, finishing digabung koma. */
@@ -373,6 +400,22 @@ class SimpanPesananRequest extends FormRequest
         }
 
         return $total;
+    }
+
+    // Ukuran cm tidak memakai pemisah ribuan: "12,5" → "12.5". Selain bentuk itu dibiarkan
+    // apa adanya (aturan numeric yang menilai); kosong → null.
+    private function keDesimal(mixed $nilai): mixed
+    {
+        if (! is_string($nilai)) {
+            return $nilai;
+        }
+
+        $nilai = trim($nilai);
+        if ($nilai === '') {
+            return null;
+        }
+
+        return preg_match('/^\d+,\d+$/', $nilai) ? str_replace(',', '.', $nilai) : $nilai;
     }
 
     // "Rp 2.500" → "2500"; nilai kosong dibiarkan kosong agar aturan required bekerja

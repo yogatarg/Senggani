@@ -79,21 +79,29 @@ class PesananService
     /**
      * Perbarui data SPP, ganti seluruh item, tambah file baru. Pergantian nomor SPP
      * dicatat di riwayat (konfirmasinya diperiksa di Form Request).
+     *
+     * @param  bool  $lepasCustomer  customer_id kosong + true = lepas dari customer lama
      */
-    public function perbarui(Pesanan $pesanan, array $data, array $item, array $fileBaru, Admin $oleh, ?int $customerId = null, bool $perbaruiCustomer = false): Pesanan
+    public function perbarui(Pesanan $pesanan, array $data, array $item, array $fileBaru, Admin $oleh, ?int $customerId = null, bool $perbaruiCustomer = false, bool $lepasCustomer = false): Pesanan
     {
         $dipindah = [];
         $this->infoCustomer = null;
 
         try {
-            DB::transaction(function () use ($pesanan, $data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, &$dipindah) {
+            DB::transaction(function () use ($pesanan, $data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, $lepasCustomer, &$dipindah) {
                 // Kolom yang tidak boleh diubah lewat form
                 unset($data['status_produksi'], $data['selesai_pada'], $data['dibuat_oleh'], $data['total'], $data['customer_id']);
 
                 $nomorLama = (int) $pesanan->nomor_spp;
                 $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
 
-                $customer = $this->tentukanCustomer($data, $customerId ?? $pesanan->customer_id, $perbaruiCustomer);
+                // customer_id kosong: tetap customer lama, kecuali admin menekan "Lepas" (lepas_customer=1)
+                // sehingga customer ditentukan ulang dari isian seperti saat tambah SPP.
+                $customer = $this->tentukanCustomer(
+                    $data,
+                    $customerId ?? ($lepasCustomer ? null : $pesanan->customer_id),
+                    $perbaruiCustomer,
+                );
 
                 $pesanan->fill([...$data, 'customer_id' => $customer->id])->save();
 
@@ -225,7 +233,7 @@ class PesananService
             $tujuan = 'pesanan/' . $pesanan->id . '/' . Str::uuid() . '.' . pathinfo($file['path'], PATHINFO_EXTENSION);
 
             if (! $disk->move($file['path'], $tujuan)) {
-                throw new \RuntimeException('Gambar gagal dipindahkan ke folder order.');
+                throw new \RuntimeException('Gambar gagal dipindahkan ke folder SPP.');
             }
             $dipindah[] = $tujuan;
 

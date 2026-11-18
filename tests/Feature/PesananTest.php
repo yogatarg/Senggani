@@ -126,7 +126,7 @@ class PesananTest extends TestCase
             'link_desain'    => 'https://contoh.com/desain',
             'item'           => [1 => ['jenis_packaging' => Pesanan::LAINNYA, 'jenis_packaging_lainnya' => '', 'jumlah' => '0']],
         ]))->assertSessionHasErrors([
-            'deadline' => 'Deadline tidak boleh sebelum tanggal order.',
+            'deadline' => 'Deadline tidak boleh sebelum tanggal SPP.',
             'link_desain',
             'item.1.jenis_packaging_lainnya' => 'Tulis jenis packaging lainnya.',
             'item.1.jumlah' => 'Jumlah item ke-2 minimal 1.',
@@ -441,7 +441,9 @@ class PesananTest extends TestCase
         $this->sebagai($this->admin)->delete(route('admin.pesanan.destroy', $pesanan))->assertRedirect(route('admin.pesanan.index'));
 
         $this->assertSoftDeleted($pesanan);
-        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))->assertNotFound();
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))
+            ->assertRedirect(route('admin.pesanan.index'))
+            ->assertSessionHas('error', "{$pesanan->nomor_spp_teks} sudah dihapus oleh admin.");
         $this->assertSame(0, $this->sebagai($this->admin)->getJson(route('admin.pesanan.jumlah'))->json('jumlah.semua'));
     }
 
@@ -474,9 +476,10 @@ class PesananTest extends TestCase
         $this->flushSession();
         $this->get(route('admin.pesanan.file.lihat', [$pesanan, $file]))->assertRedirect(route('admin.login'));
 
-        // File order lain lewat URL order ini → 404
+        // File order lain lewat URL order ini → tidak ditemukan (redirect ramah, bukan 404 publik)
         $lain = Pesanan::factory()->create();
-        $this->sebagai($this->admin)->get(route('admin.pesanan.file.lihat', [$lain, $file]))->assertNotFound();
+        $this->sebagai($this->admin)->get(route('admin.pesanan.file.lihat', [$lain, $file]))
+            ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error');
     }
 
     public function test_hapus_file_khusus_admin(): void
@@ -522,7 +525,7 @@ class PesananTest extends TestCase
 
         $data = $this->dataEdit($pesanan, ['mockup' => [UploadedFile::fake()->image('x.jpg', 20, 20), UploadedFile::fake()->image('y.jpg', 20, 20)]]);
         $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan), $data)
-            ->assertSessionHasErrors(['mockup' => 'Gambar maksimal 10 per order. Masih bisa menambah 1 gambar.']);
+            ->assertSessionHasErrors(['mockup' => 'Gambar maksimal 10 per SPP. Masih bisa menambah 1 gambar.']);
     }
 
     // ── Migrasi ────────────────────────────────────────

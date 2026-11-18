@@ -22,19 +22,19 @@ class Pesanan extends Model
 
     // Tab dashboard (kunci query string ?tab=)
     public const TAB = [
-        'semua'            => 'Semua Order',
+        'semua'            => 'Semua SPP',
         'antrian'          => 'Antrian Produksi',
         'proses'           => 'Dalam Proses',
         'selesai_produksi' => 'Pesanan Selesai',
         'pengiriman'       => 'Pengiriman',
-        'history'          => 'History Order',
+        'history'          => 'History SPP',
     ];
 
     // Pilihan urutan (?urut=)
     public const URUT = [
         'deadline'      => 'Deadline terdekat',
         'deadline_jauh' => 'Deadline terjauh',
-        'terbaru'       => 'Order terbaru',
+        'terbaru'       => 'SPP terbaru',
     ];
 
     // Nilai <select> untuk opsi "Lainnya…" (teks bebas di field <nama>_lainnya)

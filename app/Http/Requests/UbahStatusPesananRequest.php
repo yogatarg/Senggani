@@ -36,7 +36,7 @@ class UbahStatusPesananRequest extends FormRequest
     {
         return [
             ...$this->pesanUmum(),
-            'status_lama.in' => 'Status order ini tidak bisa diubah lewat tombol maju/mundur.',
+            'status_lama.in' => 'Status SPP ini tidak bisa diubah lewat tombol maju/mundur.',
             'status_baru.in' => 'Status tujuan tidak valid.',
         ];
     }

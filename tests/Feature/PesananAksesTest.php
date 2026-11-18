@@ -122,9 +122,11 @@ class PesananAksesTest extends TestCase
         $produksi = Admin::factory()->produksi()->create();
         $pesanan  = Pesanan::factory()->create();
 
-        $this->sebagai($produksi)->get(route('admin.pesanan.create'))->assertForbidden();
+        $this->sebagai($produksi)->get(route('admin.pesanan.create'))
+            ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Halaman ini khusus admin.');
         $this->sebagai($produksi)->post(route('admin.pesanan.store'), [])->assertForbidden();
-        $this->sebagai($produksi)->get(route('admin.pesanan.edit', $pesanan))->assertForbidden();
+        $this->sebagai($produksi)->get(route('admin.pesanan.edit', $pesanan))
+            ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Halaman ini khusus admin.');
         $this->sebagai($produksi)->put(route('admin.pesanan.update', $pesanan), [])->assertForbidden();
         $this->sebagai($produksi)->delete(route('admin.pesanan.destroy', $pesanan))->assertForbidden();
         $this->sebagai($produksi)->post(route('admin.pesanan.batal', $pesanan), ['status_lama' => 'antrian'])->assertForbidden();

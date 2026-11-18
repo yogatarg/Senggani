@@ -217,7 +217,7 @@ class PesananController extends Controller
 
         $this->layanan->perbarui(
             $pesanan, $request->dataPesanan(), $request->dataItem(), $fileBaru, Auth::user(),
-            $request->customerId(), $request->perbaruiCustomer(),
+            $request->customerId(), $request->perbaruiCustomer(), $request->lepasCustomer(),
         );
 
         return $this->kembaliKeDetail($pesanan, "{$pesanan->nomor_spp_teks} berhasil diperbarui.");

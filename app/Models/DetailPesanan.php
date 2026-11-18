@@ -39,7 +39,7 @@ class DetailPesanan extends Model
         return $this->belongsTo(Pesanan::class);
     }
 
-    /** Ukuran untuk tampilan, mis. "25 × 10 × 30 cm" (bagian kosong dilewati). */
+    /** Ukuran untuk tampilan, mis. "25 × 10 × 30 cm" / "12,5 × 10 cm" (bagian kosong dilewati). */
     protected function ukuranTeks(): Attribute
     {
         return Attribute::get(function () {
@@ -52,7 +52,10 @@ class DetailPesanan extends Model
                 return null;
             }
 
-            return implode(' × ', array_map(fn ($n) => rtrim(rtrim((string) $n, '0'), '.'), $bagian)) . ' cm';
+            // 25.00 → "25", 12.50 → "12,5" (koma desimal seperti teks SPP)
+            $ringkas = fn ($n) => str_replace('.', ',', rtrim(rtrim(number_format((float) $n, 2, '.', ''), '0'), '.'));
+
+            return implode(' × ', array_map($ringkas, $bagian)) . ' cm';
         });
     }
 

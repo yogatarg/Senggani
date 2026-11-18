@@ -23,5 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+
+        // 403/404 di panel /admin (sudah login): redirect ke daftar SPP / JSON berbahasa Indonesia,
+        // bukan halaman error bawaan. Halaman error publik tidak berubah.
+        \App\Exceptions\GalatPanelAdmin::daftarkan($exceptions);
+
     })->create();
