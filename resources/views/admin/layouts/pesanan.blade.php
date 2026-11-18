@@ -1,57 +1,202 @@
 {{--
-    Layout SEMENTARA modul Pesanan (HTML dasar, tanpa gaya).
-    Akan diganti frontend sesuai catatan desain 2026-11-18-desain-pesanan-senggani.md.
+    Layout modul Pesanan (admin & produksi). Bootstrap 5.3 + Font Awesome 6.4 + Poppins, tanpa AdminLTE/jQuery.
+    Acuan: catatan desain 2026-11-18-desain-pesanan-senggani.md.
+
+    Section opsional dari halaman:
+    - title        : judul tab browser & top bar HP
+    - judul_bar    : judul top bar HP (bila berbeda dari title)
+    - kembali      : URL tombol kembali di top bar HP (sub-halaman)
+    - tanpa_bottomnav : isi apa saja untuk menyembunyikan bottom nav (halaman dengan bilah aksi sticky)
 --}}
+@php
+    $namaPengguna = (string) session('admin_nama', 'Pengguna');
+    $peranProduksi = session('admin_peran') === 'produksi';
+    $inisial = collect(preg_split('/\s+/', trim($namaPengguna)) ?: [])
+        ->filter()->take(2)->map(fn ($k) => mb_strtoupper(mb_substr($k, 0, 1)))->implode('') ?: 'S';
+
+    $diPesanan  = request()->routeIs('admin.pesanan.*') && ! request()->routeIs('admin.pesanan.create');
+    $diTambah   = request()->routeIs('admin.pesanan.create');
+    $diPengguna = request()->routeIs('admin.pengguna.*');
+    $diPassword = request()->routeIs('admin.password.*');
+    $adaBottomNav = ! $__env->hasSection('tanpa_bottomnav');
+
+    // id field untuk link di ringkasan error: item.0.jumlah → f-item-0-jumlah
+    $idField = function (string $kunci) {
+        $kunci = preg_replace('/^(mockup|referensi)\..*$/', '$1', $kunci);
+        $kunci = preg_replace('/^(item\.\d+\.finishing)\..*$/', '$1', $kunci);
+
+        return 'f-' . str_replace('.', '-', $kunci);
+    };
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#FFFFFF">
     <title>@yield('title', 'Pesanan') — Senggani</title>
+    <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ asset('css/pesanan.css') }}?v={{ filemtime(public_path('css/pesanan.css')) }}" rel="stylesheet">
 </head>
-<body>
-<header>
-    <strong>Senggani</strong> ·
-    {{ session('admin_nama') }} ({{ session('admin_peran') === 'produksi' ? 'Produksi' : 'Admin' }})
-    <nav>
-        <a href="{{ route('admin.pesanan.index') }}">Pesanan</a>
-        @can('create', \App\Models\Pesanan::class)
-            | <a href="{{ route('admin.pesanan.create') }}">Tambah Order</a>
-        @endcan
-        @can('kelola-pengguna')
-            | <a href="{{ route('admin.pengguna.index') }}">Kelola Pengguna</a>
-            | <a href="{{ route('admin.dashboard') }}">Katalog (admin lama)</a>
-        @endcan
-        | <a href="{{ route('admin.password.edit') }}">Ubah Password</a>
-        | <form action="{{ route('admin.logout') }}" method="POST" style="display:inline">
-            @csrf
-            <button type="submit">Keluar</button>
-        </form>
-    </nav>
-    <hr>
+<body class="sg {{ $adaBottomNav ? 'sg-ada-bottomnav' : 'sg-bilah-ada' }}">
+<a class="sg-lewati" href="#konten">Lewati ke konten</a>
+
+{{-- Top bar HP & tablet --}}
+<header class="sg-topbar d-lg-none">
+    @hasSection('kembali')
+        <a href="@yield('kembali')" class="sg-topbar-kembali" aria-label="Kembali"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a>
+    @else
+        <img src="{{ asset('icon-192.png') }}" alt="" class="sg-topbar-ikon" width="32" height="32">
+    @endif
+    <p class="sg-topbar-judul">{!! $__env->hasSection('judul_bar') ? $__env->yieldContent('judul_bar') : $__env->yieldContent('title', 'Pesanan') !!}</p>
+    <button type="button" class="sg-avatar" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" aria-label="Menu akun {{ $namaPengguna }}">
+        <span aria-hidden="true">{{ $inisial }}</span>
+    </button>
 </header>
 
-<main>
-    @if (session('success'))
-        <p role="status"><strong>{{ session('success') }}</strong></p>
-    @endif
-    @if (session('error'))
-        <p role="alert"><strong>{{ session('error') }}</strong></p>
-    @endif
-    @if ($errors->any())
-        <div role="alert">
-            <p>Ada {{ $errors->count() }} isian yang perlu diperbaiki:</p>
-            <ul>
-                @foreach ($errors->all() as $pesan)
-                    <li>{{ $pesan }}</li>
-                @endforeach
+<div class="sg-kerangka">
+    {{-- Sidebar desktop --}}
+    <aside class="sg-sidebar d-none d-lg-flex" aria-label="Navigasi utama">
+        <a href="{{ route('admin.pesanan.index') }}" class="sg-sidebar-logo" aria-label="Senggani — ke daftar pesanan">
+            <img src="{{ asset('images/logo.png') }}" alt="Senggani" width="123" height="24">
+        </a>
+        <div class="sg-profil">
+            <span class="sg-avatar sg-avatar-besar" aria-hidden="true">{{ $inisial }}</span>
+            <div style="min-width:0">
+                <div class="sg-profil-nama" title="{{ $namaPengguna }}">{{ $namaPengguna }}</div>
+                <span class="sg-chip-peran">{{ $peranProduksi ? 'Produksi' : 'Admin' }}</span>
+            </div>
+        </div>
+        <hr class="sg-pemisah">
+        <nav aria-label="Menu kerja">
+            <ul class="sg-menu">
+                <li><a class="sg-menu-item" href="{{ route('admin.pesanan.index') }}" @if ($diPesanan) aria-current="page" @endif><i class="fa-solid fa-box-open" aria-hidden="true"></i> Pesanan</a></li>
+                @can('create', \App\Models\Pesanan::class)
+                    <li><a class="sg-menu-item" href="{{ route('admin.pesanan.create') }}" @if ($diTambah) aria-current="page" @endif><i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Tambah Order</a></li>
+                @endcan
+                @can('kelola-pengguna')
+                    <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
+                @endcan
             </ul>
+        </nav>
+        <hr class="sg-pemisah">
+        <ul class="sg-menu">
+            @can('kelola-pengguna')
+                <li><a class="sg-menu-item" href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-store" aria-hidden="true"></i> <span>Katalog <small>admin lama</small></span> <i class="fa-solid fa-arrow-up-right-from-square sg-menu-luar" aria-hidden="true"></i></a></li>
+            @endcan
+            <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
+        </ul>
+        <hr class="sg-pemisah">
+        <form action="{{ route('admin.logout') }}" method="POST">
+            @csrf
+            <button type="submit" class="sg-menu-item sg-menu-keluar"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Keluar</button>
+        </form>
+    </aside>
+
+    <main id="konten" class="sg-utama" tabindex="-1">
+        <div class="sg-panel">
+            @if (session('error'))
+                @if (session('bentrok'))
+                    <div class="sg-alert sg-alert-info" role="alert">
+                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                        <p>{{ session('error') }}<br><span class="sg-kecil">Tampilan di bawah sudah memakai status terbaru.</span></p>
+                    </div>
+                @else
+                    <div class="sg-alert sg-alert-galat" role="alert">
+                        <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                        <p>{{ session('error') }}</p>
+                    </div>
+                @endif
+            @endif
+
+            @if ($errors->any())
+                <div class="sg-alert sg-alert-galat" role="alert" tabindex="-1" id="ringkasan-galat">
+                    <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                    <div>
+                        <p><strong>{{ $errors->count() === 1 ? 'Ada 1 isian yang perlu diperbaiki' : 'Ada ' . $errors->count() . ' isian yang perlu diperbaiki' }}</strong></p>
+                        <ul>
+                            @foreach ($errors->getMessages() as $kunci => $daftarPesan)
+                                @foreach ($daftarPesan as $pesan)
+                                    <li><a href="#{{ $idField($kunci) }}">{{ $pesan }}</a></li>
+                                @endforeach
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+            @endif
+
+            @yield('content')
+        </div>
+    </main>
+</div>
+
+{{-- Bottom nav HP & tablet (halaman tingkat atas) --}}
+@if ($adaBottomNav)
+    <nav class="sg-bottomnav d-lg-none" aria-label="Navigasi bawah">
+        <a href="{{ route('admin.pesanan.index') }}" @if ($diPesanan) aria-current="page" @endif>
+            <span class="sg-bn-ikon"><i class="fa-solid fa-box-open" aria-hidden="true"></i></span> Pesanan
+        </a>
+        @can('create', \App\Models\Pesanan::class)
+            <a href="{{ route('admin.pesanan.create') }}" @if ($diTambah) aria-current="page" @endif>
+                <span class="sg-bn-ikon"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></span> Tambah
+            </a>
+        @endcan
+        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword) aria-current="page" @endif>
+            <span class="sg-bn-ikon"><i class="fa-solid fa-circle-user" aria-hidden="true"></i></span> Akun
+        </button>
+    </nav>
+@endif
+
+{{-- Sheet Akun --}}
+<div class="offcanvas offcanvas-bottom sg-sheet" tabindex="-1" id="sheetAkun" aria-labelledby="sheetAkunJudul">
+    <div class="sg-sheet-pegangan" aria-hidden="true"></div>
+    <div class="offcanvas-header pb-0">
+        <div class="sg-profil p-0">
+            <span class="sg-avatar sg-avatar-besar" aria-hidden="true">{{ $inisial }}</span>
+            <div style="min-width:0">
+                <h2 class="sg-profil-nama fs-6 m-0" id="sheetAkunJudul">{{ $namaPengguna }}</h2>
+                <span class="sg-chip-peran">{{ $peranProduksi ? 'Produksi' : 'Admin' }}</span>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
+    </div>
+    <div class="offcanvas-body pt-2">
+        <ul class="sg-menu">
+            @can('kelola-pengguna')
+                <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
+                <li><a class="sg-menu-item" href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-store" aria-hidden="true"></i> <span>Katalog <small>admin lama</small></span> <i class="fa-solid fa-arrow-up-right-from-square sg-menu-luar" aria-hidden="true"></i></a></li>
+            @endcan
+            <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
+            <li>
+                <form action="{{ route('admin.logout') }}" method="POST">
+                    @csrf
+                    <button type="submit" class="sg-menu-item sg-menu-keluar"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Keluar</button>
+                </form>
+            </li>
+        </ul>
+    </div>
+</div>
+
+{{-- Toast --}}
+<div class="sg-toast-wadah" id="wadah-toast" aria-live="polite">
+    @if (session('success'))
+        <div class="sg-toast sg-masuk" role="status" data-toast-otomatis>
+            <i class="fa-solid fa-circle-check" aria-hidden="true" style="color:#86EFAC"></i>
+            <p>{{ session('success') }}</p>
+            <button type="button" data-tutup-toast aria-label="Tutup pemberitahuan"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </div>
     @endif
+</div>
 
-    @yield('content')
-</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ asset('js/pesanan.js') }}?v={{ filemtime(public_path('js/pesanan.js')) }}"></script>
+@stack('scripts')
 </body>
 </html>

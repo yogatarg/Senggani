@@ -1,16 +1,21 @@
 @extends('admin.layouts.pesanan')
 
 @section('title', 'Edit ' . $pesanan->nomor_order)
+@section('kembali', route('admin.pesanan.show', $pesanan))
+@section('tanpa_bottomnav', '1')
 
 @section('content')
-<p><a href="{{ route('admin.pesanan.show', $pesanan) }}">← {{ $pesanan->nomor_order }}</a></p>
-<h1>Edit Order {{ $pesanan->nomor_order }}</h1>
+<div class="sg-kepala">
+    <div>
+        <a href="{{ route('admin.pesanan.show', $pesanan) }}" class="sg-remah d-none d-lg-inline-flex" data-batal-form><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {{ $pesanan->nomor_order }}</a>
+        <h1>Edit Order {{ $pesanan->nomor_order }}</h1>
+        <p class="sg-kepala-sub">Total dihitung ulang otomatis dari item saat disimpan.</p>
+    </div>
+</div>
 
-<form method="POST" action="{{ route('admin.pesanan.update', $pesanan) }}" enctype="multipart/form-data">
+<form method="POST" action="{{ route('admin.pesanan.update', $pesanan) }}" enctype="multipart/form-data" data-kirim data-jaga-perubahan>
     @csrf
     @method('PUT')
-    @include('admin.pesanan._form')
-    <button type="submit">Simpan Perubahan</button>
-    <a href="{{ route('admin.pesanan.show', $pesanan) }}">Batal</a>
+    @include('admin.pesanan._form', ['labelSimpan' => 'Simpan Perubahan', 'urlBatal' => route('admin.pesanan.show', $pesanan)])
 </form>
 @endsection

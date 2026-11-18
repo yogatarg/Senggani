@@ -2,86 +2,139 @@
 
 @section('title', 'Pesanan')
 
-@section('content')
-<h1>Pesanan</h1>
-<p>Diperbarui <span id="waktu-diperbarui">{{ now()->format('H.i') }}</span></p>
-<p id="ada-perubahan" hidden>Ada perubahan pesanan. <a href="{{ request()->fullUrl() }}">Muat ulang</a></p>
+@php
+    $infoTab = [
+        'semua'            => ['ikon' => 'fa-layer-group',       'pendek' => 'Semua'],
+        'antrian'          => ['ikon' => 'fa-hourglass-half',    'pendek' => 'Antrian'],
+        'proses'           => ['ikon' => 'fa-print',             'pendek' => 'Proses'],
+        'selesai_produksi' => ['ikon' => 'fa-circle-check',      'pendek' => 'Selesai'],
+        'pengiriman'       => ['ikon' => 'fa-truck',             'pendek' => 'Kirim'],
+        'history'          => ['ikon' => 'fa-clock-rotate-left', 'pendek' => 'History'],
+    ];
+    $kosong = [
+        'semua'            => ['fa-box-open', 'Belum ada pesanan', 'Pesanan baru yang ditambahkan admin akan muncul di sini.'],
+        'antrian'          => ['fa-hourglass-half', 'Antrian kosong', 'Tidak ada pesanan yang menunggu dikerjakan.'],
+        'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'Pindahkan pesanan dari Antrian saat mulai dikerjakan.'],
+        'selesai_produksi' => ['fa-circle-check', 'Belum ada pesanan selesai', 'Pesanan yang selesai diproduksi menunggu dikirim di sini.'],
+        'pengiriman'       => ['fa-truck', 'Tidak ada pesanan dalam pengiriman', 'Pesanan yang sedang diantar atau dikirim muncul di sini.'],
+        'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'Pesanan yang sudah selesai atau dibatalkan tersimpan di sini.'],
+    ];
+    $angka = fn ($n) => number_format((int) $n, 0, ',', '.');
+    $mencari = $q !== '';
+@endphp
 
-<nav aria-label="Tab status">
-    @foreach ($daftarTab as $kunci => $label)
-        <a href="{{ route('admin.pesanan.index', ['tab' => $kunci, 'urut' => $urut]) }}"
-           @if ($tab === $kunci && $q === '') aria-current="page" @endif>
-            {{ $label }} (<span data-jumlah-tab="{{ $kunci }}">{{ $ringkasan['jumlah'][$kunci] }}</span>)
-        </a>
-        @if (! $loop->last) | @endif
-    @endforeach
+@section('content')
+<div class="sg-kepala">
+    <div>
+        <h1 class="d-none d-lg-block">Pesanan</h1>
+        <h1 class="visually-hidden d-lg-none">Pesanan</h1>
+        <p class="sg-kepala-sub" id="status-segar">
+            <span data-teks-segar>Diperbarui <time datetime="{{ now()->toIso8601String() }}">{{ now()->format('H.i') }}</time></span>
+            <a href="{{ request()->fullUrl() }}" class="sg-segar" aria-label="Muat ulang"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></a>
+        </p>
+    </div>
+    @can('create', \App\Models\Pesanan::class)
+        <div class="sg-kepala-aksi d-none d-lg-flex">
+            <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah Order</a>
+        </div>
+    @endcan
+</div>
+
+<div class="sg-alert sg-alert-info" id="ada-perubahan" role="status" hidden>
+    <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+    <p>Ada perubahan pesanan. <a href="{{ request()->fullUrl() }}">Muat ulang</a></p>
+</div>
+
+<nav class="sg-tab-wadah" aria-label="Tab status pesanan">
+    <ul class="sg-tab" data-tab-gulir>
+        @foreach ($daftarTab as $kunci => $label)
+            @php $aktif = $tab === $kunci && ! $mencari; $jml = $ringkasan['jumlah'][$kunci] ?? 0; @endphp
+            <li>
+                <a href="{{ route('admin.pesanan.index', ['tab' => $kunci, 'urut' => $urut]) }}" data-tab-link
+                   @if ($aktif) aria-current="page" @endif>
+                    <i class="fa-solid {{ $infoTab[$kunci]['ikon'] }}" aria-hidden="true"></i>
+                    <span class="d-md-none">{{ $infoTab[$kunci]['pendek'] }}</span>
+                    <span class="d-none d-md-inline">{{ $label }}</span>
+                    @if ($kunci !== 'history')
+                        <span class="sg-tab-angka {{ $jml === 0 ? 'sg-nol' : '' }}" data-jumlah-tab="{{ $kunci }}">{{ $jml }}<span class="visually-hidden"> order</span></span>
+                    @endif
+                </a>
+            </li>
+        @endforeach
+    </ul>
 </nav>
 
-<form method="GET" action="{{ route('admin.pesanan.index') }}">
+<form method="GET" action="{{ route('admin.pesanan.index') }}" class="sg-alat" role="search" data-form-cari>
     <input type="hidden" name="tab" value="{{ $tab }}">
-    <input type="search" name="q" value="{{ $q }}" placeholder="Cari nama customer atau nomor order" enterkeyhint="search">
-    <select name="urut" onchange="this.form.submit()">
-        @foreach ($daftarUrut as $kunci => $label)
-            <option value="{{ $kunci }}" @selected($urut === $kunci)>{{ $label }}</option>
-        @endforeach
-    </select>
-    <button type="submit">Cari</button>
+    <div class="sg-cari">
+        <label for="cari" class="visually-hidden">Cari pesanan</label>
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="search" id="cari" name="q" value="{{ $q }}" class="form-control" maxlength="100"
+               placeholder="Cari nama customer atau nomor order" enterkeyhint="search" autocomplete="off">
+        <button type="button" class="sg-cari-hapus" data-hapus-cari aria-label="Hapus isi pencarian" @if (! $mencari) hidden @endif>
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+    </div>
+    <div class="sg-urut">
+        <label for="urut">Urut</label>
+        <select id="urut" name="urut" class="form-select" data-kirim-otomatis>
+            @foreach ($daftarUrut as $kunci => $label)
+                <option value="{{ $kunci }}" @selected($urut === $kunci)>{{ $label }}</option>
+            @endforeach
+        </select>
+    </div>
 </form>
 
-@if ($q !== '')
-    <p>{{ $pesanan->total() }} order cocok dengan "{{ $q }}" (semua status, termasuk History) ·
-        <a href="{{ route('admin.pesanan.index', ['tab' => $tab]) }}">Hapus pencarian</a></p>
+@if ($mencari)
+    <p class="sg-info-baris" role="status">
+        <span><strong>{{ $angka($pesanan->total()) }}</strong> order cocok dengan “{{ $q }}” <span class="sg-muted">(semua status, termasuk History)</span></span>
+        <span aria-hidden="true">·</span>
+        <a href="{{ route('admin.pesanan.index', ['tab' => $tab, 'urut' => $urut]) }}">Hapus pencarian</a>
+    </p>
 @endif
 
-@forelse ($pesanan as $p)
-    @php $itemPertama = $p->detailPesanan->first(); @endphp
-    <article>
-        <h3><a href="{{ route('admin.pesanan.show', $p) }}">{{ $p->nomor_order }}</a> — {{ $p->nama_customer }}</h3>
-        <p>
-            @if ($itemPertama)
-                {{ $itemPertama->jenis_packaging }} {{ $itemPertama->ukuran_teks }}
-            @endif
-            @if ($p->detail_pesanan_count > 1)
-                (+{{ $p->detail_pesanan_count - 1 }} item) · Total {{ number_format((int) $p->total_jumlah, 0, ',', '.') }} pcs
-            @else
-                · {{ number_format((int) $p->total_jumlah, 0, ',', '.') }} pcs
-            @endif
-        </p>
-        <p>
-            Deadline {{ $p->deadline->translatedFormat('d M Y') }}
-            @if ($p->penanda_deadline === 'lewat')
-                [LEWAT {{ abs($p->hari_menuju_deadline) }} hari]
-            @elseif ($p->penanda_deadline === 'mendekat')
-                [{{ $p->hari_menuju_deadline === 0 ? 'Hari ini' : $p->hari_menuju_deadline . ' hari lagi' }}]
-            @endif
-        </p>
-        <p>Produksi: {{ $p->status_produksi->label() }} · Bayar: {{ $p->label_status_pembayaran }}</p>
-    </article>
-    <hr>
-@empty
-    <p>{{ $q !== '' ? "Tidak ada pesanan untuk \"{$q}\"." : 'Belum ada pesanan di tab ini.' }}</p>
-@endforelse
+@if ($pesanan->isEmpty())
+    @php [$ikonK, $judulK, $teksK] = $mencari
+        ? ['fa-magnifying-glass', 'Tidak ada pesanan untuk “' . $q . '”', 'Periksa ejaan, atau cari dengan nomor order.']
+        : $kosong[$tab]; @endphp
+    <div class="sg-kosong">
+        <span class="sg-kosong-ikon"><i class="fa-solid {{ $ikonK }}" aria-hidden="true"></i></span>
+        <h2>{{ $judulK }}</h2>
+        <p>{{ $teksK }}</p>
+        @if ($mencari)
+            <a href="{{ route('admin.pesanan.index', ['tab' => $tab, 'urut' => $urut]) }}" class="sg-btn sg-btn-sekunder">Hapus pencarian</a>
+        @elseif ($tab === 'semua')
+            @can('create', \App\Models\Pesanan::class)
+                <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah Order</a>
+            @endcan
+        @elseif ($tab === 'proses')
+            <a href="{{ route('admin.pesanan.index', ['tab' => 'antrian']) }}" class="sg-btn sg-btn-sekunder">Lihat Antrian</a>
+        @endif
+    </div>
+@else
+    <div class="sg-daftar" id="daftar-pesanan" data-daftar>
+        @foreach ($pesanan as $p)
+            @include('admin.pesanan._kartu', ['p' => $p])
+        @endforeach
+    </div>
 
-{{ $pesanan->links() }}
+    @if ($pesanan->hasPages())
+        <div class="sg-muat" data-muat>
+            @unless ($pesanan->onFirstPage())
+                <a href="{{ $pesanan->previousPageUrl() }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> Order sebelumnya</a>
+            @endunless
+            @if ($pesanan->hasMorePages())
+                <a href="{{ $pesanan->nextPageUrl() }}" class="sg-btn sg-btn-sekunder" data-muat-lagi>Muat lebih banyak</a>
+            @endif
+        </div>
+        <p class="sg-muted sg-kecil text-center mt-2 mb-0" data-muat-info>
+            Menampilkan {{ $angka($pesanan->firstItem()) }}–<span data-muat-akhir>{{ $angka($pesanan->lastItem()) }}</span> dari {{ $angka($pesanan->total()) }} order
+        </p>
+    @endif
+@endif
 
-<script>
-    // Auto-refresh ringan: cek jumlah per tab tiap 60 detik saat tab browser terlihat
-    (function () {
-        var penanda = @json($ringkasan['penanda']);
-        setInterval(function () {
-            if (document.visibilityState !== 'visible') return;
-            fetch(@json(route('admin.pesanan.jumlah')), { headers: { 'Accept': 'application/json' } })
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) {
-                    if (!data) return;
-                    Object.keys(data.jumlah).forEach(function (k) {
-                        var el = document.querySelector('[data-jumlah-tab="' + k + '"]');
-                        if (el) el.textContent = data.jumlah[k];
-                    });
-                    if (data.penanda !== penanda) document.getElementById('ada-perubahan').hidden = false;
-                })
-                .catch(function () {});
-        }, 60000);
-    })();
-</script>
+<div hidden
+     data-segar-otomatis
+     data-url="{{ route('admin.pesanan.jumlah') }}"
+     data-penanda="{{ $ringkasan['penanda'] }}"></div>
 @endsection

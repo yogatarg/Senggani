@@ -21,6 +21,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Nama hari/bulan berbahasa Indonesia untuk translatedFormat() (mis. "18 Nov").
+        // Hanya locale Carbon; locale aplikasi & pesan validasi tidak diubah.
+        \Illuminate\Support\Carbon::setLocale('id');
+
         // Peran "admin" (CS): katalog, kelola pengguna, input & ubah order.
         // Pesanan memakai App\Policies\PesananPolicy (ditemukan otomatis).
         Gate::define('admin', fn (Admin $pengguna) => $pengguna->isAdmin());
