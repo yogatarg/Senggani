@@ -1,11 +1,16 @@
-{{-- Kartu order di daftar. $p = Pesanan (dengan detailPesanan, detail_pesanan_count, total_jumlah). --}}
+{{--
+    Kartu SPP di daftar. $p = Pesanan (dengan detailPesanan, detail_pesanan_count, total_jumlah).
+    Opsional: $tanpaKode (true di halaman customer), $tingkat ('h2' default, 'h3' bila di bawah judul section).
+--}}
 @php
     $itemPertama = $p->detailPesanan->first();
     $jumlahItem = (int) $p->detail_pesanan_count;
     $totalPcs = number_format((int) $p->total_jumlah, 0, ',', '.');
+    $tagJudul = ($tingkat ?? 'h2') === 'h3' ? 'h3' : 'h2';
+    $tampilKode = $p->customer_id && ! ($tanpaKode ?? false) && \Illuminate\Support\Facades\Gate::allows('kelola-customer');
     $ringkasLabel = collect([
         $p->nomor_spp_teks,
-        $p->nama_customer,
+        $p->nama_customer . ($p->nama_brand ? ' / ' . $p->nama_brand : ''),
         $p->status_produksi->label(),
         'bayar ' . $p->label_status_pembayaran,
         $p->penanda_deadline === 'lewat' ? 'lewat deadline ' . abs($p->hari_menuju_deadline) . ' hari'
@@ -14,12 +19,21 @@
 @endphp
 <article class="sg-order">
     <div class="sg-order-atas">
-        <span class="sg-order-no">{{ $p->nomor_spp_teks }}</span>
+        <span class="sg-order-no">
+            {{ $p->nomor_spp_teks }}
+            @if ($tampilKode)
+                <span aria-hidden="true">·</span>
+                <a href="{{ route('admin.customer.show', $p->customer_id) }}" class="sg-order-kode" aria-label="Customer {{ \App\Models\Customer::kodeDari($p->customer_id) }}">{{ \App\Models\Customer::kodeDari($p->customer_id) }}</a>
+            @endif
+        </span>
         @include('admin.pesanan._deadline', ['p' => $p])
     </div>
-    <h2 class="sg-order-nama">
+    <{{ $tagJudul }} class="sg-order-nama">
         <a href="{{ route('admin.pesanan.show', $p) }}" class="stretched-link" aria-label="{{ $ringkasLabel }}">{{ $p->nama_customer }}</a>
-    </h2>
+    </{{ $tagJudul }}>
+    @if ($p->nama_brand)
+        <p class="sg-order-brand">{{ $p->nama_brand }}</p>
+    @endif
     @if ($itemPertama)
         <p class="sg-order-item">{{ $itemPertama->jenis_packaging }}@if ($itemPertama->ukuran_teks) {{ $itemPertama->ukuran_teks }}@endif</p>
     @endif

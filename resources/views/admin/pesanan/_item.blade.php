@@ -1,5 +1,5 @@
 {{--
-    Satu item order. $i = indeks (angka, atau '__I__' untuk template JS), $it = nilai input (array).
+    Satu item SPP. $i = indeks (angka, atau '__I__' untuk template JS), $it = nilai input (array).
     Nama field: item[i][...] (kontrak backend). id field: f-item-i-<nama> (dipakai link ringkasan error).
 --}}
 @php
@@ -11,7 +11,8 @@
         ? collect($errors->keys())->filter(fn ($kunci) => str_starts_with($kunci, "item.{$i}."))->count()
         : 0;
     $hargaTampil = $v('harga_satuan');
-    if (is_numeric($hargaTampil)) { $hargaTampil = number_format((int) $hargaTampil, 0, ',', '.'); }
+    // Hanya angka murni yang diformat; isian lama (old) seperti "2.500" dibiarkan apa adanya (is_numeric akan membacanya 2,5)
+    if (is_int($hargaTampil) || (is_string($hargaTampil) && ctype_digit($hargaTampil))) { $hargaTampil = number_format((int) $hargaTampil, 0, ',', '.'); }
     $finDipilih = (array) $v('finishing');
     $adaFinLain = filled($v('finishing_lainnya'));
 @endphp

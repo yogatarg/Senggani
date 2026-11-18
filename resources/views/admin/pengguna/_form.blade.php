@@ -1,8 +1,8 @@
 {{-- Field pengguna. Variabel: $pengguna, $daftarPeran, $akunSendiri (opsional). --}}
 @php
     $keteranganPeran = [
-        'admin'    => 'Input order, pembayaran, pengguna, katalog',
-        'produksi' => 'Lihat order, ubah status, tulis catatan',
+        'admin'    => 'Input SPP, pembayaran, pengguna, katalog',
+        'produksi' => 'Lihat SPP, ubah status, tulis catatan',
     ];
     $akunSendiri = $akunSendiri ?? false;
 @endphp

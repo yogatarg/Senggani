@@ -1,6 +1,6 @@
 @extends('admin.layouts.pesanan')
 
-@section('title', 'Tambah Order')
+@section('title', 'Tambah SPP')
 @section('kembali', route('admin.pesanan.index'))
 @section('tanpa_bottomnav', '1')
 
@@ -8,13 +8,13 @@
 <div class="sg-kepala">
     <div>
         <a href="{{ route('admin.pesanan.index') }}" class="sg-remah d-none d-lg-inline-flex" data-batal-form><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Pesanan</a>
-        <h1>Tambah Order</h1>
+        <h1>Tambah SPP</h1>
         <p class="sg-kepala-sub">Isian bertanda <span class="sg-wajib" aria-hidden="true">*</span> wajib diisi.</p>
     </div>
 </div>
 
 <form method="POST" action="{{ route('admin.pesanan.store') }}" enctype="multipart/form-data" data-kirim data-jaga-perubahan>
     @csrf
-    @include('admin.pesanan._form', ['labelSimpan' => 'Simpan Order', 'urlBatal' => route('admin.pesanan.index')])
+    @include('admin.pesanan._form', ['labelSimpan' => 'Simpan SPP', 'urlBatal' => route('admin.pesanan.index')])
 </form>
 @endsection

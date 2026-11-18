@@ -1,5 +1,5 @@
 {{--
-    Isi form order (tambah & edit), dibungkus <form> di create/edit.
+    Isi form SPP (tambah & edit), dibungkus <form> di create/edit.
     Variabel: $pesanan, $masterPackaging, $masterBahan, $masterFinishing, $masterCetak (array nama),
     $statusDesain (nilai => label), $lainnya (nilai opsi "Lainnya"), $labelSimpan, $urlBatal,
     $saranNomor (int), $jenisDeadline (nilai => label), $urlCariCustomer (endpoint JSON autocomplete).
@@ -45,26 +45,32 @@
     if (! old('nomor_whatsapp') && is_string($waLama) && str_starts_with($waLama, '62')) { $waLama = '0' . substr($waLama, 2); }
 
     $dpTampil = old('dp', $pesanan->exists ? (int) $pesanan->dp : '');
-    if (is_numeric($dpTampil)) { $dpTampil = (int) $dpTampil === 0 && ! $pesanan->exists ? '' : number_format((int) $dpTampil, 0, ',', '.'); }
+    // Sama seperti harga: "250.000" dari old() bukan 250
+    if (is_int($dpTampil) || (is_string($dpTampil) && ctype_digit($dpTampil))) { $dpTampil = (int) $dpTampil === 0 && ! $pesanan->exists ? '' : number_format((int) $dpTampil, 0, ',', '.'); }
 
     $ikonDesain = ['belum_dikirim' => 'fa-circle-minus', 'menunggu' => 'fa-hourglass-half', 'revisi' => 'fa-pen', 'disetujui' => 'fa-circle-check'];
     $fileLama = $pesanan->exists ? $pesanan->file : collect();
     $customerTerpilih = old('customer_id', $pesanan->customer_id);
-    $perluKonfirmasiNomor = $errors->has('konfirmasi_nomor') || old('konfirmasi_nomor');
-    $perluKonfirmasiGanti = $errors->has('konfirmasi_ganti_nomor') || old('konfirmasi_ganti_nomor');
+    // Data chip customer terpilih (edit, atau setelah gagal validasi)
+    $customerAwal = $customerTerpilih ? \App\Models\Customer::withCount('pesanan')->find($customerTerpilih) : null;
+    if (! $customerAwal) { $customerTerpilih = null; }
+    // Tambah: konfirmasi_nomor (nomor loncat); edit: konfirmasi_ganti_nomor (nomor diganti)
+    $kunciKonfirmasi = $pesanan->exists ? 'konfirmasi_ganti_nomor' : 'konfirmasi_nomor';
+    $tampilKonfirmasi = $errors->has($kunciKonfirmasi) || old($kunciKonfirmasi);
     $maksFile = \App\Models\PesananFile::MAKS_PER_ORDER;
 @endphp
 
 <div class="sg-form-tata" data-form-order data-maks-file="{{ $maksFile }}" data-maks-mb="{{ \App\Models\PesananFile::MAKS_KB / 1024 }}">
     <div class="sg-form-utama">
 
-        {{-- ① Customer --}}
+        {{-- ① SPP & customer --}}
         <section class="sg-kartu" id="bagian-customer" aria-labelledby="judul-customer">
-            <h2 class="sg-kartu-judul" id="judul-customer"><span class="sg-no" aria-hidden="true">1</span> Customer</h2>
+            <h2 class="sg-kartu-judul" id="judul-customer"><span class="sg-no" aria-hidden="true">1</span> SPP &amp; customer</h2>
 
-            <div class="sg-field">
+            {{-- Nomor SPP --}}
+            <div class="sg-field sg-nomor-spp">
                 <label class="sg-label" for="f-nomor_spp">Nomor SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
-                <div class="sg-imbuh sg-imbuh-depan">
+                <div class="sg-imbuh sg-imbuh-depan sg-nomor-spp-isian">
                     <span class="sg-imbuh-teks" aria-hidden="true">#</span>
                     <input type="text" inputmode="numeric" id="f-nomor_spp" name="nomor_spp" value="{{ old('nomor_spp', $pesanan->nomor_spp) }}" maxlength="9" required autocomplete="off"
                            class="form-control sg-angka @error('nomor_spp') is-invalid @enderror" data-nomor-spp data-saran-nomor="{{ $saranNomor }}" data-nomor-lama="{{ $pesanan->exists ? $pesanan->nomor_spp : '' }}"
@@ -73,78 +79,105 @@
                 {!! $galat('nomor_spp') !!}
                 <p class="sg-bantu" id="bantu-nomor-spp">
                     @if ($pesanan->exists)
-                        Nomor saat ini #{{ $pesanan->nomor_spp }}. Ganti hanya bila salah input.
+                        Nomor saat ini <strong class="sg-angka">#{{ $pesanan->nomor_spp }}</strong>. Ganti hanya bila salah input.
                     @else
-                        Saran: #{{ $saranNomor }} (nomor terbesar + 1). Boleh diganti.
+                        Saran nomor berikutnya: <strong class="sg-angka">#{{ $saranNomor }}</strong>. Boleh diganti bila melanjutkan nomor buku.
                     @endif
                 </p>
-                @if ($perluKonfirmasiNomor)
-                    <div class="sg-alert sg-alert-peringatan" id="f-konfirmasi_nomor">
-                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                        <div>
-                            @error('konfirmasi_nomor')<p>{{ $message }}</p>@enderror
-                            <label><input type="checkbox" name="konfirmasi_nomor" value="1" @checked(old('konfirmasi_nomor'))> Ya, nomor ini sudah benar</label>
-                        </div>
+
+                {{-- Kotak konfirmasi nomor: tampil dari error server, atau dari cek browser sebelum kirim (server tetap penentu) --}}
+                <div class="sg-alert sg-alert-peringatan sg-konfirmasi-nomor" data-konfirmasi-nomor="{{ $kunciKonfirmasi }}"
+                     @unless ($tampilKonfirmasi) hidden @endunless>
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    <div>
+                        <p class="mb-2" id="pesan-{{ $kunciKonfirmasi }}" data-pesan-konfirmasi>{{ $errors->first($kunciKonfirmasi) }}</p>
+                        <label class="sg-centang" for="f-{{ $kunciKonfirmasi }}">
+                            <input type="checkbox" id="f-{{ $kunciKonfirmasi }}" name="{{ $kunciKonfirmasi }}" value="1" class="form-check-input" @checked(old($kunciKonfirmasi))
+                                   aria-describedby="pesan-{{ $kunciKonfirmasi }}" @error($kunciKonfirmasi) aria-invalid="true" @enderror>
+                            <span>Ya, saya yakin pakai nomor ini</span>
+                        </label>
                     </div>
-                @endif
-                @if ($perluKonfirmasiGanti)
-                    <div class="sg-alert sg-alert-peringatan" id="f-konfirmasi_ganti_nomor">
-                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                        <div>
-                            @error('konfirmasi_ganti_nomor')<p>{{ $message }}</p>@enderror
-                            <label><input type="checkbox" name="konfirmasi_ganti_nomor" value="1" @checked(old('konfirmasi_ganti_nomor'))> Ya, ganti nomor SPP</label>
-                        </div>
-                    </div>
-                @endif
+                </div>
             </div>
 
-            {{-- Customer terpilih (diisi autocomplete; kosong = cari lewat WA atau buat baru) --}}
-            <input type="hidden" name="customer_id" id="f-customer_id" value="{{ $customerTerpilih }}" data-customer-id data-url-cari-customer="{{ $urlCariCustomer }}">
-            @if ($pesanan->exists && $pesanan->customer)
-                <p class="sg-bantu mt-0">Customer: <a href="{{ route('admin.customer.show', $pesanan->customer) }}">{{ $pesanan->customer->kode }} · {{ $pesanan->customer->nama }}</a></p>
-            @endif
-            {!! $galat('customer_id') !!}
+            <hr class="sg-pemisah my-3">
+
+            {{-- Pilih customer lama (autocomplete). Kosong = customer baru dari isian di bawah. --}}
+            <input type="hidden" name="customer_id" id="f-customer_id" value="{{ $customerTerpilih }}" data-customer-id>
+            <div class="sg-field" data-pilih-customer data-url="{{ $urlCariCustomer }}">
+                <div class="sg-chip-customer" data-chip-customer @unless ($customerAwal) hidden @endunless>
+                    <span class="sg-chip-customer-ikon" aria-hidden="true"><i class="fa-solid fa-user-check"></i></span>
+                    <div class="sg-chip-customer-teks">
+                        <strong data-chip-judul>@if ($customerAwal)Customer lama {{ $customerAwal->kode }} · {{ $customerAwal->pesanan_count }} SPP @endif</strong>
+                        <span data-chip-sub>@if ($customerAwal){{ $customerAwal->nama }} · {{ $customerAwal->whatsapp_tampil }}@endif</span>
+                    </div>
+                    <div class="sg-chip-customer-aksi">
+                        <button type="button" class="sg-btn sg-btn-teks" data-ganti-customer>Ganti</button>
+                        <button type="button" class="sg-btn sg-btn-teks" data-lepas-customer aria-label="Lepas customer, buat customer baru dari isian">Lepas</button>
+                    </div>
+                </div>
+
+                <div data-cari-customer-wadah @if ($customerAwal) hidden @endif>
+                    <label class="sg-label" for="f-cari_customer">Cari customer lama</label>
+                    <div class="sg-cari sg-ac">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <input type="text" id="f-cari_customer" class="form-control" autocomplete="off" maxlength="100" enterkeyhint="search"
+                               placeholder="Nama, nomor WA, atau kode C-0001"
+                               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="daftar-customer" aria-describedby="bantu-cari-customer"
+                               data-input-cari-customer>
+                        <ul class="sg-ac-daftar" id="daftar-customer" role="listbox" aria-label="Hasil pencarian customer" data-daftar-customer hidden></ul>
+                    </div>
+                    <p class="sg-bantu" id="bantu-cari-customer">Belum memilih? Customer baru dibuat dari isian di bawah. Bila nomor WA sudah terdaftar, SPP otomatis dikaitkan ke customer itu.</p>
+                </div>
+                <p class="visually-hidden" aria-live="polite" data-status-customer></p>
+                {!! $galat('customer_id') !!}
+            </div>
+
             <div class="sg-dua" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))">
                 <div class="sg-field">
                     <label class="sg-label" for="f-nama_customer">Nama customer <span class="sg-wajib" aria-hidden="true">*</span></label>
                     <input type="text" id="f-nama_customer" name="nama_customer" value="{{ old('nama_customer', $pesanan->nama_customer) }}" maxlength="150" required autocomplete="off"
-                           class="form-control @error('nama_customer') is-invalid @enderror" {!! $aria('nama_customer') !!}>
+                           class="form-control @error('nama_customer') is-invalid @enderror" data-isi-customer="nama" {!! $aria('nama_customer') !!}>
                     {!! $galat('nama_customer') !!}
                 </div>
                 <div class="sg-field">
                     <label class="sg-label" for="f-nomor_whatsapp">No. WhatsApp <span class="sg-wajib" aria-hidden="true">*</span></label>
                     <input type="tel" inputmode="tel" id="f-nomor_whatsapp" name="nomor_whatsapp" value="{{ $waLama }}" maxlength="30" required autocomplete="off"
-                           placeholder="0812 3456 7890" class="form-control sg-angka @error('nomor_whatsapp') is-invalid @enderror" {!! $aria('nomor_whatsapp') !!}>
+                           placeholder="0812 3456 7890" class="form-control sg-angka @error('nomor_whatsapp') is-invalid @enderror" data-isi-customer="wa" {!! $aria('nomor_whatsapp') !!}>
                     {!! $galat('nomor_whatsapp') !!}
                 </div>
             </div>
             <div class="sg-field">
+                <label class="sg-label" for="f-nama_brand">Nama brand / acara <span class="fw-normal sg-muted">(opsional)</span></label>
+                <input type="text" id="f-nama_brand" name="nama_brand" value="{{ old('nama_brand', $pesanan->nama_brand) }}" maxlength="150" autocomplete="off"
+                       placeholder="Misalnya: Kopi Senja, Nikahan Rina &amp; Dimas"
+                       class="form-control @error('nama_brand') is-invalid @enderror" {!! $aria('nama_brand') !!}>
+                {!! $galat('nama_brand') !!}
+            </div>
+            <div class="sg-field">
                 <label class="sg-label" for="f-alamat">Alamat lengkap <span class="sg-wajib" aria-hidden="true">*</span></label>
                 <textarea id="f-alamat" name="alamat" rows="2" required maxlength="2000" style="min-height:72px"
-                          class="form-control @error('alamat') is-invalid @enderror" {!! $aria('alamat') !!}>{{ old('alamat', $pesanan->alamat) }}</textarea>
+                          class="form-control @error('alamat') is-invalid @enderror" data-isi-customer="alamat" {!! $aria('alamat') !!}>{{ old('alamat', $pesanan->alamat) }}</textarea>
                 {!! $galat('alamat') !!}
             </div>
             <div class="sg-field">
                 <label class="sg-label" for="f-kota">Kota <span class="sg-wajib" aria-hidden="true">*</span></label>
                 <input type="text" id="f-kota" name="kota" value="{{ old('kota', $pesanan->kota) }}" maxlength="100" required
-                       class="form-control @error('kota') is-invalid @enderror" {!! $aria('kota') !!}>
+                       class="form-control @error('kota') is-invalid @enderror" data-isi-customer="kota" {!! $aria('kota') !!}>
                 {!! $galat('kota') !!}
             </div>
-            <div class="sg-field">
-                <label class="sg-label" for="f-nama_brand">Nama brand / acara <span class="fw-normal sg-muted">(opsional)</span></label>
-                <input type="text" id="f-nama_brand" name="nama_brand" value="{{ old('nama_brand', $pesanan->nama_brand) }}" maxlength="150" autocomplete="off"
-                       class="form-control @error('nama_brand') is-invalid @enderror" {!! $aria('nama_brand') !!}>
-                {!! $galat('nama_brand') !!}
-            </div>
-            <div class="sg-field">
-                <label><input type="checkbox" name="perbarui_customer" value="1" @checked(old('perbarui_customer'))> Perbarui data customer dengan isian ini</label>
-                <p class="sg-bantu">SPP lain milik customer ini tidak ikut berubah.</p>
+            <div class="sg-field" data-wadah-perbarui-customer @unless ($customerAwal) hidden @endunless>
+                <label class="sg-centang" for="f-perbarui_customer">
+                    <input type="checkbox" id="f-perbarui_customer" name="perbarui_customer" value="1" class="form-check-input" @checked(old('perbarui_customer')) aria-describedby="bantu-perbarui-customer">
+                    <span>Perbarui data customer dengan isian ini</span>
+                </label>
+                <p class="sg-bantu" id="bantu-perbarui-customer">Alamat &amp; kota boleh beda per SPP. Centang hanya bila data customer memang berubah; SPP lain tidak ikut berubah.</p>
             </div>
         </section>
 
         {{-- ② Item --}}
         <section class="sg-kartu" id="bagian-item" aria-labelledby="judul-bagian-item">
-            <h2 class="sg-kartu-judul" id="judul-bagian-item"><span class="sg-no" aria-hidden="true">2</span> Item pesanan</h2>
+            <h2 class="sg-kartu-judul" id="judul-bagian-item"><span class="sg-no" aria-hidden="true">2</span> Item</h2>
             <div id="f-item">{!! $galat('item') !!}</div>
             <div id="daftar-item" data-daftar-item>
                 @foreach (array_values($daftarItem) as $i => $it)
@@ -180,7 +213,7 @@
                 </div>
             @endif
 
-            <p class="sg-bantu mt-0 mb-3" data-hitung-file aria-live="polite">Maksimal {{ $maksFile }} gambar per order (JPG, PNG, atau WebP, maks 5 MB per gambar).</p>
+            <p class="sg-bantu mt-0 mb-3" data-hitung-file aria-live="polite">Maksimal {{ $maksFile }} gambar per SPP (JPG, PNG, atau WebP, maks 5 MB per gambar).</p>
 
             @if ($fileLama->isNotEmpty())
                 <div class="sg-field">
@@ -242,37 +275,38 @@
             </fieldset>
         </section>
 
-        {{-- ④ Order & harga --}}
+        {{-- ④ Jadwal & harga --}}
         <section class="sg-kartu" id="bagian-harga" aria-labelledby="judul-harga">
-            <h2 class="sg-kartu-judul" id="judul-harga"><span class="sg-no" aria-hidden="true">4</span> Order &amp; harga</h2>
-            <div class="sg-dua">
+            <h2 class="sg-kartu-judul" id="judul-harga"><span class="sg-no" aria-hidden="true">4</span> Jadwal &amp; harga</h2>
+            <div class="sg-jadwal">
                 <div class="sg-field">
-                    <label class="sg-label" for="f-tanggal_order">Tanggal order <span class="sg-wajib" aria-hidden="true">*</span></label>
+                    <label class="sg-label" for="f-tanggal_order">Tanggal SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
                     <input type="date" id="f-tanggal_order" name="tanggal_order" value="{{ old('tanggal_order', $tgl($pesanan->tanggal_order)) }}" required
                            class="form-control @error('tanggal_order') is-invalid @enderror" data-tanggal-order {!! $aria('tanggal_order') !!}>
                     {!! $galat('tanggal_order') !!}
                 </div>
                 <div class="sg-field">
-                    <label class="sg-label" for="f-deadline">Deadline <span class="sg-wajib" aria-hidden="true">*</span></label>
-                    <input type="date" id="f-deadline" name="deadline" value="{{ old('deadline', $tgl($pesanan->deadline)) }}" required
-                           min="{{ old('tanggal_order', $tgl($pesanan->tanggal_order)) }}"
-                           class="form-control @error('deadline') is-invalid @enderror" data-deadline {!! $aria('deadline') !!}>
+                    <label class="sg-label" for="f-deadline" id="label-deadline">Deadline <span class="sg-wajib" aria-hidden="true">*</span></label>
+                    <div class="sg-deadline-isian">
+                        <input type="date" id="f-deadline" name="deadline" value="{{ old('deadline', $tgl($pesanan->deadline)) }}" required
+                               min="{{ old('tanggal_order', $tgl($pesanan->tanggal_order)) }}"
+                               class="form-control @error('deadline') is-invalid @enderror" data-deadline
+                               aria-describedby="bantu-deadline {{ $errors->has('deadline') ? $gid('deadline') : '' }}" @error('deadline') aria-invalid="true" @enderror>
+                        <div class="sg-segmen-rapat" id="f-jenis_deadline" role="radiogroup" aria-labelledby="label-jenis-deadline" aria-describedby="bantu-deadline">
+                            <span class="visually-hidden" id="label-jenis-deadline">Jenis deadline</span>
+                            @foreach ($jenisDeadline as $nilai => $label)
+                                <label>
+                                    <input type="radio" name="jenis_deadline" value="{{ $nilai }}" @checked(old('jenis_deadline', $pesanan->jenis_deadline ?? 'kirim') === $nilai)>
+                                    <span>{{ $label }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
                     {!! $galat('deadline') !!}
+                    {!! $galat('jenis_deadline') !!}
+                    <p class="sg-bantu" id="bantu-deadline"><strong>Siap</strong>: barang siap diambil pada tanggal itu. <strong>Kirim</strong>: barang sudah dikirim.</p>
                 </div>
             </div>
-
-            <fieldset class="sg-field" id="f-jenis_deadline">
-                <legend class="sg-label">Jenis deadline <span class="sg-wajib" aria-hidden="true">*</span></legend>
-                <div class="sg-segmen">
-                    @foreach ($jenisDeadline as $nilai => $label)
-                        <label>
-                            <input type="radio" name="jenis_deadline" value="{{ $nilai }}" @checked(old('jenis_deadline', $pesanan->jenis_deadline ?? 'kirim') === $nilai)>
-                            <span>{{ $label }}</span>
-                        </label>
-                    @endforeach
-                </div>
-                {!! $galat('jenis_deadline') !!}
-            </fieldset>
 
             <div class="sg-otomatis"><span>Total <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
 
@@ -302,7 +336,7 @@
             <p class="mb-3">@include('admin.pesanan._badge-bayar-live')</p>
 
             <div class="sg-field">
-                <label class="sg-label" for="f-catatan_admin">Catatan order</label>
+                <label class="sg-label" for="f-catatan_admin">Catatan SPP</label>
                 <textarea id="f-catatan_admin" name="catatan_admin" rows="3" maxlength="5000"
                           class="form-control @error('catatan_admin') is-invalid @enderror" {!! $aria('catatan_admin') !!}>{{ old('catatan_admin', $pesanan->catatan_admin) }}</textarea>
                 {!! $galat('catatan_admin') !!}
@@ -311,7 +345,7 @@
     </div>
 
     {{-- Kolom samping (≥1200) --}}
-    <aside class="sg-form-samping" aria-label="Ringkasan order">
+    <aside class="sg-form-samping" aria-label="Ringkasan SPP">
         <div class="sg-kartu sg-ringkas">
             <h2 class="sg-kartu-judul">Ringkasan</h2>
             <dl>
@@ -324,10 +358,10 @@
             <hr class="sg-pemisah my-3">
             <nav aria-label="Lompat ke bagian">
                 <ol class="sg-lompat">
-                    <li><a href="#bagian-customer">1. Customer</a></li>
+                    <li><a href="#bagian-customer">1. SPP &amp; customer</a></li>
                     <li><a href="#bagian-item">2. Item (<span data-jumlah-item>1</span>)</a></li>
                     <li><a href="#bagian-desain">3. Desain</a></li>
-                    <li><a href="#bagian-harga">4. Order &amp; harga</a></li>
+                    <li><a href="#bagian-harga">4. Jadwal &amp; harga</a></li>
                 </ol>
             </nav>
             <hr class="sg-pemisah my-3">

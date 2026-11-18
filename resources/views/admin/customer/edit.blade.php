@@ -14,12 +14,12 @@
     <div>
         <a href="{{ route('admin.customer.show', $customer) }}" class="sg-remah d-none d-lg-inline-flex"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {{ $customer->kode }}</a>
         <h1>Edit Customer {{ $customer->kode }}</h1>
-        <p class="sg-kepala-sub">SPP yang sudah ada tetap memakai data saat SPP dibuat.</p>
+        <p class="sg-kepala-sub">SPP yang sudah ada tetap memakai data saat SPP dibuat. Isian bertanda <span class="sg-wajib" aria-hidden="true">*</span> wajib diisi.</p>
     </div>
 </div>
 
 <section class="sg-kartu sg-sempit">
-    <form method="POST" action="{{ route('admin.customer.update', $customer) }}" data-kirim>
+    <form method="POST" action="{{ route('admin.customer.update', $customer) }}" data-kirim data-jaga-perubahan>
         @csrf @method('PUT')
         <div class="sg-field">
             <label class="sg-label" for="f-nama">Nama <span class="sg-wajib" aria-hidden="true">*</span></label>
@@ -35,17 +35,17 @@
         </div>
         <div class="sg-field">
             <label class="sg-label" for="f-alamat">Alamat</label>
-            <textarea id="f-alamat" name="alamat" rows="2" maxlength="2000" class="form-control @error('alamat') is-invalid @enderror">{{ old('alamat', $customer->alamat) }}</textarea>
+            <textarea id="f-alamat" name="alamat" rows="2" maxlength="2000" class="form-control @error('alamat') is-invalid @enderror" @error('alamat') aria-invalid="true" aria-describedby="g-alamat" @enderror>{{ old('alamat', $customer->alamat) }}</textarea>
             @include('admin.layouts._galat', ['k' => 'alamat'])
         </div>
         <div class="sg-field">
             <label class="sg-label" for="f-kota">Kota</label>
-            <input type="text" id="f-kota" name="kota" value="{{ old('kota', $customer->kota) }}" maxlength="100" class="form-control @error('kota') is-invalid @enderror">
+            <input type="text" id="f-kota" name="kota" value="{{ old('kota', $customer->kota) }}" maxlength="100" class="form-control @error('kota') is-invalid @enderror" @error('kota') aria-invalid="true" aria-describedby="g-kota" @enderror>
             @include('admin.layouts._galat', ['k' => 'kota'])
         </div>
         <div class="sg-form-aksi">
             <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…">Simpan Perubahan</button>
-            <a href="{{ route('admin.customer.show', $customer) }}" class="sg-btn sg-btn-sekunder">Batal</a>
+            <a href="{{ route('admin.customer.show', $customer) }}" class="sg-btn sg-btn-sekunder" data-batal-form>Batal</a>
         </div>
     </form>
 </section>

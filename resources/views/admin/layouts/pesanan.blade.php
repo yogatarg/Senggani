@@ -80,7 +80,7 @@
             <ul class="sg-menu">
                 <li><a class="sg-menu-item" href="{{ route('admin.pesanan.index') }}" @if ($diPesanan) aria-current="page" @endif><i class="fa-solid fa-box-open" aria-hidden="true"></i> Pesanan</a></li>
                 @can('create', \App\Models\Pesanan::class)
-                    <li><a class="sg-menu-item" href="{{ route('admin.pesanan.create') }}" @if ($diTambah) aria-current="page" @endif><i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Tambah Order</a></li>
+                    <li><a class="sg-menu-item" href="{{ route('admin.pesanan.create') }}" @if ($diTambah) aria-current="page" @endif><i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Tambah SPP</a></li>
                 @endcan
                 @can('kelola-customer')
                     <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
@@ -110,7 +110,7 @@
                 @if (session('bentrok'))
                     <div class="sg-alert sg-alert-info" role="alert">
                         <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-                        <p>{{ session('error') }}<br><span class="sg-kecil">Tampilan di bawah sudah memakai status terbaru.</span></p>
+                        <p>{{ session('error') }}</p>
                     </div>
                 @else
                     <div class="sg-alert sg-alert-galat" role="alert">
@@ -118,6 +118,13 @@
                         <p>{{ session('error') }}</p>
                     </div>
                 @endif
+            @endif
+
+            @if (session('info_customer'))
+                <div class="sg-alert sg-alert-info" role="status">
+                    <i class="fa-solid fa-address-book" aria-hidden="true"></i>
+                    <p>{{ session('info_customer') }}</p>
+                </div>
             @endif
 
             @if ($errors->any())
@@ -196,10 +203,30 @@
     @if (session('success'))
         <div class="sg-toast sg-masuk" role="status" data-toast-otomatis>
             <i class="fa-solid fa-circle-check" aria-hidden="true" style="color:#86EFAC"></i>
-            <p>{{ session('success') }}</p>
+            {{-- Info customer sudah tampil sebagai alert di halaman, jadi tidak diulang di toast --}}
+            <p>{{ session('info_customer') ? trim(str_replace(session('info_customer'), '', session('success'))) : session('success') }}</p>
             <button type="button" data-tutup-toast aria-label="Tutup pemberitahuan"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </div>
     @endif
+</div>
+
+{{-- Modal konfirmasi umum (dipakai JS: hapus gambar, nonaktifkan akun, keluar tanpa simpan) --}}
+<div class="modal fade modal-sheet sg-modal-konfirmasi" id="modalKonfirmasi" tabindex="-1" aria-labelledby="modalKonfirmasiJudul" aria-describedby="modalKonfirmasiIsi" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalKonfirmasiJudul" data-konfirmasi-judul>Lanjutkan?</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <p class="m-0" id="modalKonfirmasiIsi" data-konfirmasi-isi></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="sg-btn sg-btn-sekunder" data-bs-dismiss="modal" data-konfirmasi-batal>Batal</button>
+                <button type="button" class="sg-btn sg-btn-utama" data-konfirmasi-ya>Ya, lanjutkan</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

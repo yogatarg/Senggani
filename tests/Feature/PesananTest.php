@@ -430,7 +430,7 @@ class PesananTest extends TestCase
             ->assertOk()
             ->assertSee($pesanan->nomor_spp_teks)
             ->assertSee('Pindahkan ke Dalam Proses')
-            ->assertSee('Batalkan order')
+            ->assertSee('Batalkan SPP')
             ->assertViewHas('statusBerikutnya');
     }
 

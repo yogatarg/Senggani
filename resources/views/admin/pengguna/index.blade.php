@@ -11,7 +11,7 @@
 <div class="sg-kepala">
     <div>
         <h1>Kelola Pengguna</h1>
-        <p class="sg-kepala-sub">Akun yang tidak dipakai dinonaktifkan, bukan dihapus, supaya riwayat order tetap mencatat namanya.</p>
+        <p class="sg-kepala-sub">Akun yang tidak dipakai dinonaktifkan, bukan dihapus, supaya riwayat SPP tetap mencatat namanya.</p>
     </div>
     <div class="sg-kepala-aksi">
         <a href="{{ route('admin.pengguna.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah Pengguna</a>

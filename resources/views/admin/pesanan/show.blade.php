@@ -37,11 +37,17 @@
 <header class="sg-detail-kepala">
     <div>
         <h1 class="sg-no-order">{{ $pesanan->nomor_spp_teks }}</h1>
-        <p class="sg-nama-cust">{{ $pesanan->nama_customer }}@if ($pesanan->nama_brand) <span class="sg-muted">/ {{ $pesanan->nama_brand }}</span>@endif</p>
-        @if ($pesanan->customer && \Illuminate\Support\Facades\Gate::allows('kelola-customer'))
-            <p class="sg-kecil m-0"><a href="{{ route('admin.customer.show', $pesanan->customer) }}">{{ $pesanan->customer->kode }}</a></p>
+        <p class="sg-nama-cust">{{ $pesanan->nama_customer }}</p>
+        @if ($pesanan->nama_brand)
+            <p class="sg-brand">{{ $pesanan->nama_brand }}</p>
         @endif
-        <p class="sg-kontak sg-angka">{{ $waTampil }}@if ($pesanan->kota) · {{ $pesanan->kota }}@endif</p>
+        <p class="sg-kontak sg-angka">
+            @if ($pesanan->customer && \Illuminate\Support\Facades\Gate::allows('kelola-customer'))
+                <a href="{{ route('admin.customer.show', $pesanan->customer) }}" class="sg-kode-customer" aria-label="Lihat customer {{ $pesanan->customer->kode }}"><i class="fa-solid fa-address-book" aria-hidden="true"></i>{{ $pesanan->customer->kode }}</a>
+                <span aria-hidden="true">·</span>
+            @endif
+            {{ $waTampil }}@if ($pesanan->kota) · {{ $pesanan->kota }}@endif
+        </p>
         <div class="sg-lencana">
             @include('admin.pesanan._badge-status', ['status' => $status])
             @include('admin.pesanan._badge-bayar', ['p' => $pesanan])
@@ -52,6 +58,11 @@
         <div class="sg-lencana-aksi">
             <a href="{{ $pesanan->link_whatsapp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp Customer</a>
             <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder" style="min-height:44px"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
+            <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" style="min-height:44px" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
+        </div>
+    @else
+        <div class="sg-lencana-aksi d-xl-none">
+            <button type="button" class="sg-btn sg-btn-sekunder" style="min-height:44px" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
         </div>
     @endcan
 </header>
@@ -60,7 +71,7 @@
     <div class="sg-detail-utama">
         {{-- Item --}}
         <section class="sg-kartu sg-o-item" aria-labelledby="judul-item">
-            <h2 class="sg-kartu-judul" id="judul-item">Item pesanan ({{ $pesanan->detailPesanan->count() }})</h2>
+            <h2 class="sg-kartu-judul" id="judul-item">Item SPP ({{ $pesanan->detailPesanan->count() }})</h2>
             @forelse ($pesanan->detailPesanan as $d)
                 <article class="sg-item-detail">
                     <div class="sg-item-detail-kepala">
@@ -116,7 +127,7 @@
                 <p class="sg-teks-catatan">{{ $pesanan->catatan_desain }}</p>
             @endif
             @if ($pesanan->catatan_admin)
-                <h3 class="sg-label mt-3">Catatan order</h3>
+                <h3 class="sg-label mt-3">Catatan SPP</h3>
                 <p class="sg-teks-catatan mb-0">{{ $pesanan->catatan_admin }}</p>
             @endif
             @if ($pesanan->alamat)
@@ -169,11 +180,11 @@
                             <div style="min-width:0">
                                 <div class="sg-tl-meta">{{ $r->created_at->translatedFormat('j M Y, H.i') }} · {{ $r->nama_pengguna }}</div>
                                 @switch($r->jenis)
-                                    @case('dibuat') <p class="sg-tl-isi">Order dibuat</p> @break
+                                    @case('dibuat') <p class="sg-tl-isi">SPP dibuat</p> @break
                                     @case('maju') <p class="sg-tl-isi">Status: <strong>{{ $r->status_dari->label() }}</strong> → <strong>{{ $r->status_ke->label() }}</strong></p> @break
                                     @case('mundur') <p class="sg-tl-isi">Dikembalikan ke <strong>{{ $r->status_ke->label() }}</strong></p> @break
-                                    @case('batal') <p class="sg-tl-isi">Order dibatalkan</p> @break
-                                    @case('pulihkan') <p class="sg-tl-isi">Order dipulihkan ke <strong>{{ $r->status_ke->label() }}</strong></p> @break
+                                    @case('batal') <p class="sg-tl-isi">SPP dibatalkan</p> @break
+                                    @case('pulihkan') <p class="sg-tl-isi">SPP dipulihkan ke <strong>{{ $r->status_ke->label() }}</strong></p> @break
                                     @default <p class="sg-tl-isi sg-teks-catatan">{{ $r->catatan }}</p>
                                 @endswitch
                                 @if ($r->catatan && ! in_array($r->jenis, ['dibuat', 'catatan'], true))
@@ -192,21 +203,21 @@
 
     <div class="sg-detail-samping">
         {{-- Teks SPP siap salin (admin & produksi). Sistem tidak mengirim apa pun; admin memilih sendiri kontak/grup WA. --}}
-        <section class="sg-kartu" aria-labelledby="judul-teks-spp">
+        <section class="sg-kartu sg-o-teks" aria-labelledby="judul-teks-spp">
             <h2 class="sg-kartu-judul" id="judul-teks-spp">Teks SPP</h2>
-            <label for="teks-spp" class="visually-hidden">Teks SPP untuk disalin</label>
-            <textarea id="teks-spp" class="form-control" rows="10" readonly data-teks-spp>{{ $teksSpp }}</textarea>
-            <div class="d-flex gap-2 flex-wrap mt-2">
-                <button type="button" class="sg-btn sg-btn-sekunder" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> Salin teks</button>
-                <a href="{{ $linkWhatsappSpp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Kirim lewat WhatsApp</a>
+            <p class="sg-bantu mt-0 mb-3">Salin lalu kirim sendiri ke kontak atau grup produksi.</p>
+            <div class="sg-teks-spp-aksi">
+                <button type="button" class="sg-btn sg-btn-utama" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks</span></button>
+                <a href="{{ $linkWhatsappSpp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Buka di WhatsApp<span class="visually-hidden"> (tab baru)</span></a>
             </div>
+            <div class="sg-teks-spp" id="teks-spp" tabindex="0" role="region" aria-label="Pratinjau teks SPP">{{ $teksSpp }}</div>
         </section>
 
         {{-- Status produksi --}}
         <section class="sg-kartu sg-o-status" aria-labelledby="judul-status">
             <h2 class="sg-kartu-judul" id="judul-status">Status produksi</h2>
             @if ($dibatalkan)
-                <div class="sg-alert sg-alert-peringatan mb-3"><i class="fa-solid fa-ban" aria-hidden="true"></i><p>Order ini dibatalkan{{ isset($waktuStatus['dibatalkan']) ? ' pada ' . $waktuStatus['dibatalkan']->translatedFormat('j M Y') : '' }}.</p></div>
+                <div class="sg-alert sg-alert-peringatan mb-3"><i class="fa-solid fa-ban" aria-hidden="true"></i><p>SPP ini dibatalkan{{ isset($waktuStatus['dibatalkan']) ? ' pada ' . $waktuStatus['dibatalkan']->translatedFormat('j M Y') : '' }}.</p></div>
             @endif
             <ol class="sg-stepper">
                 @foreach ($alurStatus as $s)
@@ -233,13 +244,13 @@
             <div class="d-none d-lg-grid gap-2">
                 @if ($dibatalkan)
                     @if ($bisaPulihkan)
-                        <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan order</button>
+                        <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan SPP</button>
                     @endif
                 @elseif ($bisaUbahStatus)
                     @if ($statusBerikutnya)
                         <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalMaju">Pindahkan ke {{ $statusBerikutnya->label() }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
                     @else
-                        <p class="sg-muted m-0"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Pesanan sudah selesai.</p>
+                        <p class="sg-muted m-0"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> SPP sudah selesai.</p>
                     @endif
                     @if ($statusSebelumnya)
                         <button type="button" class="sg-btn sg-btn-teks" data-bs-toggle="modal" data-bs-target="#modalMundur"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Kembalikan ke {{ $statusSebelumnya->label() }}</button>
@@ -262,8 +273,8 @@
             </p>
             <hr class="sg-pemisah my-3">
             <dl>
-                <div><dt>Tanggal order</dt><dd>{{ $pesanan->tanggal_order?->translatedFormat('j M Y') }}</dd></div>
-                <div><dt>Deadline</dt><dd>{{ $pesanan->deadline?->translatedFormat('j M Y') }} · {{ $pesanan->label_jenis_deadline }}</dd></div>
+                <div><dt>Tanggal SPP</dt><dd>{{ $pesanan->tanggal_order?->translatedFormat('j M Y') }}</dd></div>
+                <div><dt>Deadline</dt><dd>{{ $pesanan->deadline?->translatedFormat('j M Y') }}@if ($pesanan->label_jenis_deadline) <span class="sg-chip-kecil">{{ $pesanan->label_jenis_deadline }}</span>@endif</dd></div>
             </dl>
 
             @if (! $pesanan->tanggal_lunas && (float) $pesanan->total > 0)
@@ -289,10 +300,10 @@
                 <h2 class="sg-kartu-judul" id="judul-admin">Tindakan admin</h2>
                 <div class="d-grid gap-2">
                     @if ($bisaBatal)
-                        <button type="button" class="sg-btn sg-btn-bahaya" data-bs-toggle="modal" data-bs-target="#modalBatal"><i class="fa-solid fa-ban" aria-hidden="true"></i> Batalkan order</button>
+                        <button type="button" class="sg-btn sg-btn-bahaya" data-bs-toggle="modal" data-bs-target="#modalBatal"><i class="fa-solid fa-ban" aria-hidden="true"></i> Batalkan SPP</button>
                     @endif
                     @if ($bisaHapus)
-                        <button type="button" class="sg-btn sg-btn-teks sg-bahaya" data-bs-toggle="modal" data-bs-target="#modalHapus"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Hapus order (salah input)</button>
+                        <button type="button" class="sg-btn sg-btn-teks sg-bahaya" data-bs-toggle="modal" data-bs-target="#modalHapus"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Hapus SPP (salah input)</button>
                     @endif
                 </div>
             </section>
@@ -304,15 +315,19 @@
 @if (($dibatalkan && $bisaPulihkan) || (! $dibatalkan && $bisaUbahStatus))
     <div class="sg-bilah sg-bilah-detail">
         @if ($dibatalkan)
-            <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan order</button>
+            <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan SPP</button>
         @else
             @if ($statusSebelumnya)
                 <button type="button" class="sg-btn sg-btn-sekunder sg-btn-ikon" style="width:56px" data-bs-toggle="modal" data-bs-target="#modalMundur" aria-label="Kembalikan ke {{ $statusSebelumnya->label() }}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
             @endif
             @if ($statusBerikutnya)
-                <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalMaju">Pindahkan ke {{ $statusBerikutnya->label() }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+                {{-- Label pendek di HP kecil supaya tetap satu baris; nama aksesibel tetap lengkap --}}
+                <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalMaju" aria-label="Pindahkan ke {{ $statusBerikutnya->label() }}">
+                    <span class="d-sm-none">Ke {{ $statusBerikutnya->label() }}</span><span class="d-none d-sm-inline">Pindahkan ke {{ $statusBerikutnya->label() }}</span>
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                </button>
             @else
-                <p class="m-0 flex-grow-1 text-center sg-muted"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Pesanan sudah selesai</p>
+                <p class="m-0 flex-grow-1 text-center sg-muted"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> SPP sudah selesai</p>
             @endif
         @endif
     </div>
@@ -335,18 +350,18 @@
 @endif
 @if ($bisaBatal)
     @include('admin.pesanan._modal-status', [
-        'idModal' => 'modalBatal', 'judul' => 'Batalkan order ini?',
+        'idModal' => 'modalBatal', 'judul' => 'Batalkan SPP ini?',
         'aksi' => route('admin.pesanan.batal', $pesanan), 'ke' => \App\Enums\StatusProduksi::Dibatalkan,
         'placeholder' => 'Alasan pembatalan (opsional)', 'tombol' => 'Ya, batalkan', 'gaya' => 'sg-btn-bahaya-isi',
-        'keterangan' => 'Order pindah ke History dan bisa dipulihkan lagi oleh admin.',
+        'keterangan' => 'SPP pindah ke History dan bisa dipulihkan lagi oleh admin.',
     ])
 @endif
 @if ($bisaPulihkan)
     @include('admin.pesanan._modal-status', [
-        'idModal' => 'modalPulihkan', 'judul' => 'Pulihkan order ini?',
+        'idModal' => 'modalPulihkan', 'judul' => 'Pulihkan SPP ini?',
         'aksi' => route('admin.pesanan.pulihkan', $pesanan), 'ke' => null,
         'placeholder' => 'Catatan (opsional)', 'tombol' => 'Ya, pulihkan', 'gaya' => 'sg-btn-utama',
-        'keterangan' => 'Order kembali ke status terakhir sebelum dibatalkan.',
+        'keterangan' => 'SPP kembali ke status terakhir sebelum dibatalkan.',
     ])
 @endif
 @if ($bisaHapus)
@@ -355,11 +370,11 @@
             <form class="modal-content" method="POST" action="{{ route('admin.pesanan.destroy', $pesanan) }}" data-kirim>
                 @csrf @method('DELETE')
                 <div class="modal-header">
-                    <h2 class="modal-title" id="modalHapusJudul">Hapus order {{ $pesanan->nomor_spp_teks }}?</h2>
+                    <h2 class="modal-title" id="modalHapusJudul">Hapus {{ $pesanan->nomor_spp_teks }}?</h2>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="m-0">Gunakan hanya untuk order <strong>salah input</strong>. Order yang batal sebaiknya dibatalkan, bukan dihapus, supaya riwayatnya tetap ada.</p>
+                    <p class="m-0">Gunakan hanya untuk SPP <strong>salah input</strong>. SPP yang batal sebaiknya dibatalkan, bukan dihapus, supaya riwayatnya tetap ada. Nomornya tidak dipakai ulang.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="sg-btn sg-btn-sekunder" data-bs-dismiss="modal">Batal</button>
@@ -389,9 +404,9 @@
                     <a href="#" class="sg-lb-btn" target="_blank" rel="noopener" data-lb-buka><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Buka asli</a>
                     <a href="#" class="sg-lb-btn" data-lb-unduh-link><i class="fa-solid fa-download" aria-hidden="true"></i> Unduh</a>
                     @can('hapusFile', $pesanan)
-                        <form method="POST" action="" data-lb-form-hapus data-konfirmasi="Hapus gambar ini dari order? Tindakan ini tidak bisa dibatalkan.">
+                        <form method="POST" action="" data-lb-form-hapus>
                             @csrf @method('DELETE')
-                            <button type="submit" class="sg-lb-btn"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Hapus gambar</button>
+                            <button type="button" class="sg-lb-btn" data-lb-hapus-tombol><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Hapus gambar</button>
                         </form>
                     @endcan
                 </div>

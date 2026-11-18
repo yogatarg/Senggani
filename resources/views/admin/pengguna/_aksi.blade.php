@@ -3,7 +3,7 @@
     <a href="{{ route('admin.pengguna.edit', $p) }}" class="sg-btn sg-btn-sekunder sg-btn-kecil" aria-label="Edit atau reset password {{ $p->nama }}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
     @if ($p->id !== $idSaya)
         <form method="POST" action="{{ route('admin.pengguna.aktif', $p) }}" data-kirim
-              @if ($p->aktif) data-konfirmasi="Nonaktifkan akun {{ $p->nama }}? Ia tidak bisa masuk lagi sampai diaktifkan." @endif>
+              @if ($p->aktif) data-konfirmasi="Nonaktifkan akun {{ $p->nama }}?" data-konfirmasi-isi="Ia tidak bisa masuk lagi sampai diaktifkan. Riwayat SPP tetap mencatat namanya." data-konfirmasi-tombol="Ya, nonaktifkan" data-konfirmasi-bahaya @endif>
             @csrf @method('PATCH')
             @if ($p->aktif)
                 <button type="submit" class="sg-btn sg-btn-bahaya sg-btn-kecil" aria-label="Nonaktifkan {{ $p->nama }}">Nonaktifkan</button>

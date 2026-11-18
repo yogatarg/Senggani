@@ -11,13 +11,23 @@
         'pengiriman'       => ['ikon' => 'fa-truck',             'pendek' => 'Kirim'],
         'history'          => ['ikon' => 'fa-clock-rotate-left', 'pendek' => 'History'],
     ];
+    // Label tab tampil (istilah SPP); kunci tetap dari backend
+    $labelTab = [
+        'semua'            => 'Semua',
+        'antrian'          => 'Antrian Produksi',
+        'proses'           => 'Dalam Proses',
+        'selesai_produksi' => 'Pesanan Selesai',
+        'pengiriman'       => 'Pengiriman',
+        'history'          => 'History',
+    ];
+    $labelUrut = ['terbaru' => 'SPP terbaru'];
     $kosong = [
-        'semua'            => ['fa-box-open', 'Belum ada pesanan', 'Pesanan baru yang ditambahkan admin akan muncul di sini.'],
-        'antrian'          => ['fa-hourglass-half', 'Antrian kosong', 'Tidak ada pesanan yang menunggu dikerjakan.'],
-        'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'Pindahkan pesanan dari Antrian saat mulai dikerjakan.'],
-        'selesai_produksi' => ['fa-circle-check', 'Belum ada pesanan selesai', 'Pesanan yang selesai diproduksi menunggu dikirim di sini.'],
-        'pengiriman'       => ['fa-truck', 'Tidak ada pesanan dalam pengiriman', 'Pesanan yang sedang diantar atau dikirim muncul di sini.'],
-        'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'Pesanan yang sudah selesai atau dibatalkan tersimpan di sini.'],
+        'semua'            => ['fa-box-open', 'Belum ada SPP', 'SPP baru yang ditambahkan admin akan muncul di sini.'],
+        'antrian'          => ['fa-hourglass-half', 'Antrian kosong', 'Tidak ada SPP yang menunggu dikerjakan.'],
+        'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'Pindahkan SPP dari Antrian saat mulai dikerjakan.'],
+        'selesai_produksi' => ['fa-circle-check', 'Belum ada pesanan selesai', 'SPP yang selesai diproduksi menunggu dikirim di sini.'],
+        'pengiriman'       => ['fa-truck', 'Tidak ada SPP dalam pengiriman', 'SPP yang sedang diantar atau dikirim muncul di sini.'],
+        'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'SPP yang sudah selesai atau dibatalkan tersimpan di sini.'],
     ];
     $angka = fn ($n) => number_format((int) $n, 0, ',', '.');
     $mencari = $q !== '';
@@ -35,14 +45,14 @@
     </div>
     @can('create', \App\Models\Pesanan::class)
         <div class="sg-kepala-aksi d-none d-lg-flex">
-            <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah Order</a>
+            <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah SPP</a>
         </div>
     @endcan
 </div>
 
 <div class="sg-alert sg-alert-info" id="ada-perubahan" role="status" hidden>
     <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-    <p>Ada perubahan pesanan. <a href="{{ request()->fullUrl() }}">Muat ulang</a></p>
+    <p>Ada perubahan SPP. <a href="{{ request()->fullUrl() }}">Muat ulang</a></p>
 </div>
 
 <nav class="sg-tab-wadah" aria-label="Tab status pesanan">
@@ -54,9 +64,9 @@
                    @if ($aktif) aria-current="page" @endif>
                     <i class="fa-solid {{ $infoTab[$kunci]['ikon'] }}" aria-hidden="true"></i>
                     <span class="d-md-none">{{ $infoTab[$kunci]['pendek'] }}</span>
-                    <span class="d-none d-md-inline">{{ $label }}</span>
+                    <span class="d-none d-md-inline">{{ $labelTab[$kunci] ?? $label }}</span>
                     @if ($kunci !== 'history')
-                        <span class="sg-tab-angka {{ $jml === 0 ? 'sg-nol' : '' }}" data-jumlah-tab="{{ $kunci }}">{{ $jml }}<span class="visually-hidden"> order</span></span>
+                        <span class="sg-tab-angka {{ $jml === 0 ? 'sg-nol' : '' }}" data-jumlah-tab="{{ $kunci }}">{{ $jml }}<span class="visually-hidden"> SPP</span></span>
                     @endif
                 </a>
             </li>
@@ -67,10 +77,10 @@
 <form method="GET" action="{{ route('admin.pesanan.index') }}" class="sg-alat" role="search" data-form-cari>
     <input type="hidden" name="tab" value="{{ $tab }}">
     <div class="sg-cari">
-        <label for="cari" class="visually-hidden">Cari pesanan</label>
+        <label for="cari" class="visually-hidden">Cari SPP</label>
         <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
         <input type="search" id="cari" name="q" value="{{ $q }}" class="form-control" maxlength="100"
-               placeholder="Cari nama customer atau nomor order" enterkeyhint="search" autocomplete="off">
+               placeholder="Cari customer, brand, atau nomor SPP" enterkeyhint="search" autocomplete="off">
         <button type="button" class="sg-cari-hapus" data-hapus-cari aria-label="Hapus isi pencarian" @if (! $mencari) hidden @endif>
             <i class="fa-solid fa-xmark" aria-hidden="true"></i>
         </button>
@@ -79,7 +89,7 @@
         <label for="urut">Urut</label>
         <select id="urut" name="urut" class="form-select" data-kirim-otomatis>
             @foreach ($daftarUrut as $kunci => $label)
-                <option value="{{ $kunci }}" @selected($urut === $kunci)>{{ $label }}</option>
+                <option value="{{ $kunci }}" @selected($urut === $kunci)>{{ $labelUrut[$kunci] ?? $label }}</option>
             @endforeach
         </select>
     </div>
@@ -87,7 +97,7 @@
 
 @if ($mencari)
     <p class="sg-info-baris" role="status">
-        <span><strong>{{ $angka($pesanan->total()) }}</strong> order cocok dengan “{{ $q }}” <span class="sg-muted">(semua status, termasuk History)</span></span>
+        <span><strong>{{ $angka($pesanan->total()) }}</strong> SPP cocok dengan “{{ $q }}” <span class="sg-muted">(semua status, termasuk History)</span></span>
         <span aria-hidden="true">·</span>
         <a href="{{ route('admin.pesanan.index', ['tab' => $tab, 'urut' => $urut]) }}">Hapus pencarian</a>
     </p>
@@ -95,7 +105,7 @@
 
 @if ($pesanan->isEmpty())
     @php [$ikonK, $judulK, $teksK] = $mencari
-        ? ['fa-magnifying-glass', 'Tidak ada pesanan untuk “' . $q . '”', 'Periksa ejaan, atau cari dengan nomor order.']
+        ? ['fa-magnifying-glass', 'Tidak ada SPP untuk “' . $q . '”', 'Periksa ejaan, atau cari dengan nomor SPP (misalnya 176).']
         : $kosong[$tab]; @endphp
     <div class="sg-kosong">
         <span class="sg-kosong-ikon"><i class="fa-solid {{ $ikonK }}" aria-hidden="true"></i></span>
@@ -105,7 +115,7 @@
             <a href="{{ route('admin.pesanan.index', ['tab' => $tab, 'urut' => $urut]) }}" class="sg-btn sg-btn-sekunder">Hapus pencarian</a>
         @elseif ($tab === 'semua')
             @can('create', \App\Models\Pesanan::class)
-                <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah Order</a>
+                <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah SPP</a>
             @endcan
         @elseif ($tab === 'proses')
             <a href="{{ route('admin.pesanan.index', ['tab' => 'antrian']) }}" class="sg-btn sg-btn-sekunder">Lihat Antrian</a>
@@ -121,14 +131,14 @@
     @if ($pesanan->hasPages())
         <div class="sg-muat" data-muat>
             @unless ($pesanan->onFirstPage())
-                <a href="{{ $pesanan->previousPageUrl() }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> Order sebelumnya</a>
+                <a href="{{ $pesanan->previousPageUrl() }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> SPP sebelumnya</a>
             @endunless
             @if ($pesanan->hasMorePages())
                 <a href="{{ $pesanan->nextPageUrl() }}" class="sg-btn sg-btn-sekunder" data-muat-lagi>Muat lebih banyak</a>
             @endif
         </div>
         <p class="sg-muted sg-kecil text-center mt-2 mb-0" data-muat-info>
-            Menampilkan {{ $angka($pesanan->firstItem()) }}–<span data-muat-akhir>{{ $angka($pesanan->lastItem()) }}</span> dari {{ $angka($pesanan->total()) }} order
+            Menampilkan {{ $angka($pesanan->firstItem()) }}–<span data-muat-akhir>{{ $angka($pesanan->lastItem()) }}</span> dari {{ $angka($pesanan->total()) }} SPP
         </p>
     @endif
 @endif
