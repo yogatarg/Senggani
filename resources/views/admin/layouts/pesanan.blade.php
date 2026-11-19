@@ -117,6 +117,15 @@
 
     <main id="konten" class="sg-utama" tabindex="-1">
         <div class="sg-panel">
+            {{-- Indikator koneksi pembaruan otomatis (lonceng & jumlah tab). Diisi JS setelah 2 kali gagal berturut-turut. --}}
+            <div class="sg-koneksi-wadah" role="status" aria-live="polite" data-koneksi>
+                <div class="sg-koneksi" data-koneksi-isi hidden>
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    <p><span>Tidak tersambung</span><span class="visually-hidden">. Data pesanan dan notifikasi deadline mungkin belum terbaru.</span></p>
+                    <button type="button" class="sg-koneksi-ulang" data-koneksi-ulang>Coba lagi</button>
+                </div>
+            </div>
+
             @if (session('error'))
                 @if (session('bentrok'))
                     <div class="sg-alert sg-alert-info" role="alert">
@@ -220,7 +229,7 @@
 
 {{-- Panel notifikasi deadline (sheet di HP, panel di samping sidebar di desktop). Isi diperbarui JS tiap 60 detik. --}}
 <div class="modal fade sg-notif" id="panelNotif" tabindex="-1" aria-labelledby="panelNotifJudul" aria-hidden="true"
-     data-panel-notif data-url="{{ route('admin.pesanan.jumlah') }}" data-url-daftar="{{ route('admin.pesanan.index', ['urut' => 'deadline']) }}">
+     data-panel-notif data-url="{{ route('admin.pesanan.jumlah') }}" data-hari-mendekat="{{ \App\Models\Pesanan::HARI_MENDEKAT }}" data-url-daftar="{{ route('admin.pesanan.index', ['urut' => 'deadline']) }}">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="sg-sheet-pegangan d-lg-none" aria-hidden="true"></div>
@@ -231,7 +240,7 @@
                         @if ($notifDeadline['total'])
                             {{ $notifDeadline['lewat'] }} lewat · {{ $notifDeadline['mendekat'] }} mendekati (≤ {{ \App\Models\Pesanan::HARI_MENDEKAT }} hari)
                         @else
-                            Pesanan yang belum selesai produksi
+                            Pesanan aktif sebelum pengiriman dengan deadline lewat atau ≤ {{ \App\Models\Pesanan::HARI_MENDEKAT }} hari
                         @endif
                     </p>
                 </div>

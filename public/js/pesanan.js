@@ -11,6 +11,9 @@
 
     var formatAngka = function (n) { return new Intl.NumberFormat('id-ID').format(n); };
     var rupiah = function (n) { return 'Rp ' + formatAngka(n); };
+    var gerakHalus = function () {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    };
     var keAngka = function (teks) {
         var d = String(teks || '').replace(/\D/g, '');
         return d === '' ? 0 : parseInt(d, 10);
@@ -104,6 +107,26 @@
             pembukaSheet = null;
         });
     }
+
+    // ── Penjaga fokus modal: Tab/Shift+Tab selalu berputar di dalam modal teratas ──
+    // Focustrap Bootstrap kadang melepas fokus ke <body> saat Tab dari elemen terakhir
+    // (tidak ada elemen yang bisa difokus sesudah modal di DOM), jadi putaran ditangani sendiri.
+    var SEL_FOKUS = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab') return;
+        var terbuka = $$('.modal.show');
+        if (!terbuka.length) return;
+        var kini = document.activeElement;
+        var modal = terbuka.filter(function (m) { return m.contains(kini); }).pop() || terbuka[terbuka.length - 1];
+        var daftar = $$(SEL_FOKUS, modal).filter(function (el) {
+            return el.getClientRects().length > 0 && !el.closest('[hidden], [inert]');
+        });
+        if (!daftar.length) { e.preventDefault(); modal.focus(); return; }
+        var awal = daftar[0], akhir = daftar[daftar.length - 1];
+        if (!modal.contains(kini) || kini === modal) { e.preventDefault(); (e.shiftKey ? akhir : awal).focus(); }
+        else if (e.shiftKey && kini === awal) { e.preventDefault(); akhir.focus(); }
+        else if (!e.shiftKey && kini === akhir) { e.preventDefault(); awal.focus(); }
+    }, true);
 
     // ── Modal konfirmasi (pengganti window.confirm) ─────
     // konfirmasi({ judul, isi, tombol, bahaya }) → Promise<boolean>
@@ -321,6 +344,7 @@
             ? 'Notifikasi deadline, tidak ada yang mendesak'
             : 'Notifikasi deadline: ' + total + ' pesanan mendesak' + (lewat ? ', ' + lewat + ' lewat deadline' : '');
         $$('[data-lonceng]').forEach(function (b) {
+            b.setAttribute('data-label-dasar', label);
             b.setAttribute('aria-label', label);
             var angka = $('[data-lonceng-angka]', b);
             angka.hidden = total === 0;
@@ -333,6 +357,18 @@
             banner.hidden = lewat === 0;
             $('[data-banner-lewat-teks]', banner).textContent = lewat + ' pesanan lewat deadline';
         }
+    }
+
+    // Tanda basi di lonceng saat pembaruan otomatis gagal (angka terakhir tetap, warna abu-abu)
+    var TEKS_BASI = 'Data mungkin belum terbaru';
+    function tandaiLonceng(basi) {
+        $$('[data-lonceng]').forEach(function (b) {
+            var dasar = b.getAttribute('data-label-dasar') || b.getAttribute('aria-label');
+            b.setAttribute('data-label-dasar', dasar);
+            b.setAttribute('aria-label', basi ? dasar + '. ' + TEKS_BASI : dasar);
+            if (basi) b.title = TEKS_BASI; else b.removeAttribute('title');
+            $('[data-lonceng-angka]', b).classList.toggle('sg-basi', basi);
+        });
     }
 
     function isiPanelNotif(d) {
@@ -368,9 +404,11 @@
             isi.appendChild(ul);
         }
         var sub = $('[data-notif-sub]', panelNotif);
+        // Sama dengan versi server (layout pesanan)
+        var hariMendekat = panelNotif.getAttribute('data-hari-mendekat') || '3';
         sub.textContent = d.total
-            ? d.lewat + ' lewat · ' + d.mendekat + ' mendekati'
-            : 'Pesanan yang belum selesai produksi';
+            ? d.lewat + ' lewat · ' + d.mendekat + ' mendekati (≤ ' + hariMendekat + ' hari)'
+            : 'Pesanan aktif sebelum pengiriman dengan deadline lewat atau ≤ ' + hariMendekat + ' hari';
         var lain = $('[data-notif-lain]', panelNotif);
         var sisaLain = (d.total || 0) - item.length;
         lain.hidden = sisaLain <= 0;
@@ -398,17 +436,9 @@
     var segar = $('[data-segar-otomatis]');
     if (segar) {
         var penanda = segar.getAttribute('data-penanda');
-        var teksSegar = $('[data-teks-segar]');
-        var teksAsli = teksSegar ? teksSegar.innerHTML : '';
+        // Status koneksi ditampilkan indikator global di layout (lihat di bawah)
         penerimaJumlah.push(function (data, galat) {
-            if (galat) {
-                if (galat >= 3 && teksSegar) {
-                    teksSegar.textContent = 'Tidak tersambung · coba lagi';
-                    teksSegar.classList.add('sg-tak-tersambung');
-                }
-                return;
-            }
-            if (teksSegar) { teksSegar.innerHTML = teksAsli; teksSegar.classList.remove('sg-tak-tersambung'); }
+            if (galat) return;
             Object.keys(data.jumlah || {}).forEach(function (k) {
                 var el = $('[data-jumlah-tab="' + k + '"]');
                 if (!el) return;
@@ -419,11 +449,25 @@
         });
     }
 
+    // Indikator "Tidak tersambung · Coba lagi" (semua halaman): muncul setelah 2 kali gagal berturut-turut,
+    // hilang sendiri saat berhasil lagi. Badge lonceng ikut ditandai basi.
+    var AMBANG_GAGAL = 2;
+    var koneksiIsi = $('[data-koneksi-isi]');
+    var tombolUlang = $('[data-koneksi-ulang]');
+    penerimaJumlah.push(function (data, galat) {
+        var putus = galat >= AMBANG_GAGAL;
+        if (koneksiIsi) koneksiIsi.hidden = !putus;
+        tandaiLonceng(putus);
+    });
+
     var urlJumlah = (segar && segar.getAttribute('data-url')) || (panelNotif && panelNotif.getAttribute('data-url'));
-    if (urlJumlah && penerimaJumlah.length) {
+    if (urlJumlah) {
         var gagal = 0;
         var terakhirCek = Date.now();
+        var sedangCek = false;
         var cek = function () {
+            if (sedangCek) return;
+            sedangCek = true;
             terakhirCek = Date.now();
             fetch(urlJumlah, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
                 .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
@@ -434,12 +478,26 @@
                 .catch(function () {
                     gagal++;
                     penerimaJumlah.forEach(function (f) { f(null, gagal); });
+                })
+                .then(function () {
+                    sedangCek = false;
+                    if (tombolUlang) { tombolUlang.removeAttribute('aria-busy'); tombolUlang.textContent = 'Coba lagi'; }
                 });
         };
         setInterval(function () { if (document.visibilityState === 'visible') cek(); }, 60000);
         document.addEventListener('visibilitychange', function () {
             if (document.visibilityState === 'visible' && Date.now() - terakhirCek > 60000) cek();
         });
+        // Jaringan kembali: langsung cek tanpa menunggu 60 detik
+        window.addEventListener('online', function () { if (gagal > 0) cek(); });
+        if (tombolUlang) {
+            tombolUlang.addEventListener('click', function () {
+                if (sedangCek) return;
+                tombolUlang.setAttribute('aria-busy', 'true');
+                tombolUlang.textContent = 'Menghubungkan…';
+                cek();
+            });
+        }
     }
 
     // ════════════════════════════════════════════════
@@ -511,7 +569,10 @@
                 $('[data-pesan-konfirmasi]', kotakNoDp).textContent = 'Nomor SPP #' + n + ' jauh dari nomor berikutnya (#' + saran + '). Periksa lagi; bila memang benar, centang konfirmasi lalu simpan.';
                 kotakNoDp.setAttribute('data-nomor-pesan', String(n));
             }
+            var baruMuncul = kotakNoDp.hidden;
             kotakNoDp.hidden = false;
+            // Layar pendek: pastikan peringatan masuk area pandang begitu muncul
+            if (baruMuncul) kotakNoDp.scrollIntoView({ block: 'nearest', behavior: gerakHalus() });
             return !centang.checked;
         };
         if (!kotakNoDp.hidden) kotakNoDp.setAttribute('data-nomor-pesan', String(keAngka(inputNoDp.value)));
@@ -520,8 +581,8 @@
             if (!cekNomorDp()) return;
             e.preventDefault();
             var centang = $('input[type="checkbox"]', kotakNoDp);
-            kotakNoDp.scrollIntoView({ block: 'nearest' });
-            centang.focus();
+            kotakNoDp.scrollIntoView({ block: 'nearest', behavior: gerakHalus() });
+            centang.focus({ preventScroll: true });
         });
         cekDp();
     }
