@@ -531,7 +531,8 @@ class PesananService
     /**
      * Kembalikan SPP "dibatalkan" / "tidak jadi" ke status sebelumnya (khusus admin).
      * Status lama "antrian" dipulihkan ke proses; menunggu_dp dengan harga belum lengkap
-     * ke hitung_harga; status produksi tanpa nomor SPP ke menunggu_dp.
+     * ke hitung_harga; status produksi tanpa nomor SPP ke menunggu_dp; pengiriman/selesai yang belum
+     * lunas ke selesai_produksi (alasannya dicatat di riwayat).
      */
     public function pulihkan(Pesanan $pesanan, ?string $catatan, Admin $oleh): StatusProduksi
     {
@@ -562,6 +563,12 @@ class PesananService
         }
         if ($ke === StatusProduksi::MenungguDp && ! $pesanan->harga_lengkap) {
             $ke = StatusProduksi::HitungHarga;
+        }
+        // Kunci pelunasan: pengiriman/selesai hanya untuk SPP yang sudah lunas
+        if (($ke === StatusProduksi::Pengiriman || $ke === StatusProduksi::Selesai) && ! $pesanan->tanggal_lunas) {
+            $alasan  = "Dipulihkan ke " . StatusProduksi::SelesaiProduksi->label() . " (bukan {$ke->label()}) karena SPP belum lunas.";
+            $catatan = filled($catatan) ? trim($catatan) . "\n" . $alasan : $alasan;
+            $ke      = StatusProduksi::SelesaiProduksi;
         }
 
         $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh);

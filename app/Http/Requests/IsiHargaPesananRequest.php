@@ -16,7 +16,7 @@ use Illuminate\Validation\Validator;
  * hitung_harga (pesan AksiDitolak::HARGA_DIKUNCI), admin kapan saja.
  *
  * Field:
- * - harga[<detail_pesanan.id>]: harga satuan rupiah ("4.300" / "Rp 4.300" diterima). Kosong = belum
+ * - harga[<detail_pesanan.id>]: harga satuan rupiah ("4.300" / "Rp 4.300" diterima), minimal Rp 1. Kosong = belum
  *   dihitung (hanya boleh saat hitung_harga / tidak_jadi). Item yang tidak dikirim tidak diubah.
  * - catatan_harga (opsional): catatan perhitungan; dikirim kosong = dikosongkan.
  */
@@ -45,7 +45,7 @@ class IsiHargaPesananRequest extends FormRequest
     {
         return [
             'harga'         => ['required', 'array', 'min:1', 'max:50'],
-            'harga.*'       => ['nullable', 'integer', 'min:0', 'max:1000000000'],
+            'harga.*'       => ['nullable', 'integer', 'min:1', 'max:1000000000'],
             'catatan_harga' => ['nullable', 'string', 'max:2000'],
         ];
     }
@@ -112,7 +112,7 @@ class IsiHargaPesananRequest extends FormRequest
             ...$this->pesanUmum(),
             'harga.required' => 'Isi harga minimal satu item.',
             'harga.*.integer' => 'Harga harus berupa angka rupiah, mis. 4.300.',
-            'harga.*.min'     => 'Harga tidak boleh negatif.',
+            'harga.*.min'     => 'Harga satuan minimal Rp 1.',
         ];
     }
 

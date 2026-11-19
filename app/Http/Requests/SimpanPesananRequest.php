@@ -22,15 +22,16 @@ use Illuminate\Validation\Validator;
  *   lalu isi item[i][<field>_lainnya].
  * - item[i][finishing][]: daftar nama finishing (multi) + item[i][finishing_lainnya] teks bebas.
  * - Harga & DP boleh dikirim dengan pemisah ribuan ("2.500" / "Rp 2.500"); disimpan rupiah bulat.
- * - item[i][harga_satuan]: OPSIONAL (kosong = belum dihitung). Wajib saat edit SPP yang sudah
- *   melewati Hitung Harga (menunggu_dp dst.).
+ * - item[i][harga_satuan]: OPSIONAL (kosong = belum dihitung), bila diisi minimal Rp 1. Wajib saat
+ *   edit SPP yang sudah melewati Hitung Harga (menunggu_dp dst.).
  * - mockup[] dan referensi[]: gambar baru (maks 5 MB per file, total maks 10 file per order).
  * - nomor_spp: TIDAK dipakai saat tambah (nomor diberikan saat Catat DP). Saat edit SPP yang sudah
  *   bernomor: angka bulat ≥1 unik (boleh "#176" / "SPP #176"; "12.5" / "1e3" ditolak); mengganti
  *   nomor ditolak dengan error di kunci "konfirmasi_ganti_nomor" kecuali dikirim konfirmasi_ganti_nomor=1.
  *   Saat edit SPP yang belum bernomor, nomor_spp diabaikan.
  * - dp & tanggal_lunas: diabaikan saat tambah dan saat edit SPP yang belum masuk produksi
- *   (DP dicatat lewat "Catat DP", pelunasan lewat "Catat lunas").
+ *   (DP dicatat lewat "Catat DP", pelunasan lewat "Catat lunas"). Untuk SPP yang sudah masuk produksi
+ *   DP wajib minimal Rp 1; untuk status pengiriman/selesai tanggal_lunas wajib (kunci pelunasan).
  * - customer_id (opsional) + perbarui_customer=1 (opsional): lihat PesananService::tentukanCustomer.
  * - lepas_customer=1 (opsional, saat edit): customer_id kosong berarti SPP dilepas dari customer lama
  *   dan customer ditentukan ulang dari isian (pemilik WA bila ada, jika tidak customer baru).
@@ -107,6 +108,14 @@ class SimpanPesananRequest extends FormRequest
         return (bool) $this->pesananEdit()?->status_produksi?->sudahProduksi();
     }
 
+    /** SPP yang sudah dikirim/selesai harus tetap tercatat lunas (kunci pelunasan). */
+    private function lunasWajib(): bool
+    {
+        $status = $this->pesananEdit()?->status_produksi;
+
+        return $status === StatusProduksi::Pengiriman || $status === StatusProduksi::Selesai;
+    }
+
     /** Harga wajib bila SPP sudah melewati Hitung Harga (menunggu_dp, proses, dst.). */
     private function hargaWajib(): bool
     {
@@ -137,8 +146,8 @@ class SimpanPesananRequest extends FormRequest
             'kota'            => ['required', 'string', 'max:100'],
             'tanggal_order'   => ['required', 'date'],
             'deadline'        => ['required', 'date', 'after_or_equal:tanggal_order'],
-            'dp'              => $bayar ? ['nullable', 'integer', 'min:0'] : ['exclude'],
-            'tanggal_lunas'   => $bayar ? ['nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'] : ['exclude'],
+            'dp'              => $bayar ? ['required', 'integer', 'min:1'] : ['exclude'],
+            'tanggal_lunas'   => $bayar ? [$this->lunasWajib() ? 'required' : 'nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'] : ['exclude'],
             'link_desain'     => ['nullable', 'url', 'max:500', 'starts_with:https://drive.google.com/,https://docs.google.com/'],
             'catatan_desain'  => ['nullable', 'string', 'max:5000'],
             'status_desain'   => ['nullable', Rule::enum(StatusDesain::class)],
@@ -162,7 +171,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.finishing_lainnya'       => ['nullable', 'string', 'max:255'],
             'item.*.aksesori'                => ['nullable', 'string', 'max:255'],
             'item.*.jumlah'                  => ['required', 'integer', 'min:1', 'max:10000000'],
-            'item.*.harga_satuan'            => [$this->hargaWajib() ? 'required' : 'nullable', 'integer', 'min:0', 'max:1000000000'],
+            'item.*.harga_satuan'            => [$this->hargaWajib() ? 'required' : 'nullable', 'integer', 'min:1', 'max:1000000000'],
 
             'mockup'      => ['nullable', 'array', 'max:' . PesananFile::MAKS_PER_ORDER],
             'mockup.*'    => $gambar,
@@ -240,6 +249,9 @@ class SimpanPesananRequest extends FormRequest
             ...$this->pesanUmum(),
             'nomor_spp.integer'       => 'Nomor SPP harus angka bulat, mis. 176.',
             'deadline.after_or_equal' => 'Deadline tidak boleh sebelum tanggal SPP.',
+            'dp.required'   => 'DP wajib diisi karena SPP sudah masuk produksi (minimal Rp 1).',
+            'dp.min'        => 'DP minimal Rp 1 karena SPP sudah masuk produksi.',
+            'tanggal_lunas.required' => 'SPP yang sudah dikirim/selesai harus tetap tercatat lunas. Kembalikan status ke Pesanan Selesai dulu bila pelunasan perlu dikoreksi.',
             'tanggal_lunas.after_or_equal'  => 'Tanggal lunas tidak boleh sebelum tanggal SPP.',
             'tanggal_lunas.before_or_equal' => 'Tanggal lunas tidak boleh setelah hari ini.',
             'item.required'  => 'Tambahkan minimal satu item pesanan.',
@@ -248,6 +260,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.jenis_bahan_lainnya.required_if'     => 'Tulis jenis bahan lainnya.',
             'item.*.jenis_cetak_lainnya.required_if'     => 'Tulis jenis cetak lainnya.',
             'item.*.jumlah.min' => 'Jumlah item ke-:position minimal 1.',
+            'item.*.harga_satuan.min'      => 'Harga satuan minimal Rp 1.',
             'item.*.harga_satuan.required' => 'Harga satuan item ke-:position wajib diisi karena SPP sudah melewati tahap Hitung Harga.',
             'mockup.*.image'         => self::PESAN_BUKAN_GAMBAR,
             'mockup.*.mimes'         => self::PESAN_BUKAN_GAMBAR,

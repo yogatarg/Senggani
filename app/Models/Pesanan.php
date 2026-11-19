@@ -217,12 +217,29 @@ class Pesanan extends Model
 
     /**
      * Saran nomor SPP berikutnya = nomor terbesar dari SPP yang TIDAK dihapus + 1;
-     * 1 bila belum ada. Keunikan tetap menghitung SPP yang dihapus (lihat validasi),
-     * jadi saran bisa saja sudah dipakai SPP terhapus; admin diberi tahu lewat galat unik.
+     * 1 bila belum ada. Karena keunikan tetap menghitung SPP yang dihapus, nomor yang sudah
+     * dipakai (termasuk oleh SPP terhapus) dilewati sampai ketemu nomor kosong. Nomor typo
+     * besar yang sudah dihapus tidak menyeret saran (titik awal hanya dari SPP aktif).
      */
     public static function saranNomorSpp(): int
     {
-        return (int) static::query()->max('nomor_spp') + 1;
+        $nomor = (int) static::query()->max('nomor_spp') + 1;
+
+        $terpakai = static::withTrashed()
+            ->where('nomor_spp', '>=', $nomor)
+            ->orderBy('nomor_spp')
+            ->pluck('nomor_spp');
+
+        foreach ($terpakai as $n) {
+            if ((int) $n > $nomor) {
+                break;
+            }
+            if ((int) $n === $nomor) {
+                $nomor++;
+            }
+        }
+
+        return $nomor;
     }
 
     /**

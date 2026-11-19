@@ -39,7 +39,7 @@ enum StatusProduksi: string
             self::HitungHarga     => 'Hitung Harga',
             self::MenungguDp      => 'Menunggu DP',
             self::Proses          => 'Dalam Proses',
-            self::SelesaiProduksi => 'Selesai Produksi',
+            self::SelesaiProduksi => 'Pesanan Selesai',
             self::Pengiriman      => 'Pengiriman',
             self::Selesai         => 'Selesai',
             self::TidakJadi       => 'Tidak Jadi',

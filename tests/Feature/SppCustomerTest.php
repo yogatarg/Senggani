@@ -88,7 +88,7 @@ class SppCustomerTest extends TestCase
 
     // ── Nomor SPP: saran ───────────────────────────────
 
-    public function test_saran_nomor_1_bila_belum_ada_dan_terbesar_plus_1_tanpa_yang_dihapus(): void
+    public function test_saran_nomor_1_bila_belum_ada_dan_melompati_nomor_spp_terhapus(): void
     {
         // Form tambah tidak lagi meminta nomor SPP
         $this->sebagai($this->admin)->get(route('admin.pesanan.create'))->assertOk();
@@ -108,15 +108,17 @@ class SppCustomerTest extends TestCase
 
         $this->sebagai($this->admin)->delete(route('admin.pesanan.destroy', $b));
 
-        // Keputusan baru: saran mengabaikan SPP terhapus …
-        $this->assertSame(177, Pesanan::saranNomorSpp());
+        // Saran melompati nomor SPP terhapus (keunikan tetap menghitungnya) …
+        $this->assertSame(178, Pesanan::saranNomorSpp());
         $c = $this->buat(['nomor_whatsapp' => '0813 1111 2222']);
-        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $c))->assertViewHas('saranNomor', 177);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $c))->assertViewHas('saranNomor', 178);
 
-        // … tetapi keunikan tetap menghitungnya
+        // … sehingga saran tidak ditolak oleh validasinya sendiri
         $this->dp($c, ['nomor_spp' => '177'])
             ->assertSessionHasErrors(['nomor_spp' => 'SPP #177 sudah dipakai oleh Ismun (SPP itu sudah dihapus).']);
-        $this->dp($c, ['nomor_spp' => '178'])->assertSessionHasNoErrors();
+        $this->dp($c, ['nomor_spp' => (string) Pesanan::saranNomorSpp()])->assertSessionHasNoErrors();
+        $this->assertSame(178, $c->fresh()->nomor_spp);
+        $this->assertSame(179, Pesanan::saranNomorSpp());
     }
 
     public function test_nomor_boleh_diketik_dengan_pagar_dan_wajib_angka_minimal_1(): void
@@ -184,7 +186,7 @@ class SppCustomerTest extends TestCase
     public function test_ganti_nomor_wajib_konfirmasi_dan_tercatat_di_riwayat(): void
     {
         $pesanan = $this->buatSpp(176);
-        $data = fn (array $u = []) => $this->data(['nomor_spp' => '177', ...$u]);
+        $data = fn (array $u = []) => $this->data(['nomor_spp' => '177', 'dp' => '500.000', ...$u]);
 
         $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan), $data())
             ->assertSessionHasErrors(['konfirmasi_ganti_nomor' => 'Nomor SPP akan diganti dari #176 menjadi #177. Produksi mungkin sudah menerima nomor lama lewat WhatsApp, jadi kabari mereka setelah menyimpan. Centang konfirmasi lalu simpan lagi bila yakin.']);
@@ -468,11 +470,11 @@ class SppCustomerTest extends TestCase
         $data = $this->data(['nama_brand' => '', 'link_desain' => '', 'deadline' => '2027-01-05']);
         $data['item'] = [[
             'jenis_packaging' => 'Paperbag', 'jenis_bahan' => 'kertas kraft putih', 'panjang' => '', 'lebar' => '', 'tinggi' => '',
-            'gramasi' => '', 'jenis_cetak' => '', 'aksesori' => '', 'jumlah' => '500', 'harga_satuan' => '0',
+            'gramasi' => '', 'jenis_cetak' => '', 'aksesori' => '', 'jumlah' => '500', 'harga_satuan' => '',
         ]];
         $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $data)->assertSessionHasNoErrors();
         $p = Pesanan::latest('id')->firstOrFail();
-        $p->forceFill(['nomor_spp' => 1])->save(); // total Rp 0 tidak bisa lewat Catat DP
+        $p->forceFill(['nomor_spp' => 1])->save(); // belum berharga, tidak bisa lewat Catat DP
 
         $harapan = "📋 SPP | #1\n\n"
             . "Nama Customer: Ismun\n"

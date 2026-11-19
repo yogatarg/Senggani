@@ -330,7 +330,7 @@ class PesananTest extends TestCase
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
             'status_lama' => 'proses', 'status_baru' => 'selesai_produksi', 'catatan' => 'Cetak selesai',
-        ])->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('success', 'Status diubah ke Selesai Produksi.');
+        ])->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('success', 'Status diubah ke Pesanan Selesai.');
 
         $this->assertSame('selesai_produksi', $pesanan->fresh()->status_produksi->value);
         $this->assertDatabaseHas('pesanan_riwayat', [
@@ -387,7 +387,7 @@ class PesananTest extends TestCase
         // Perangkat 2 (Ayah) masih melihat "proses" lalu menekan tombol yang sama
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
             ->assertRedirect(route('admin.pesanan.show', $pesanan))
-            ->assertSessionHas('error', 'Status SPP ini sudah diubah oleh Mamah menjadi Selesai Produksi. Tampilan sudah diperbarui.')
+            ->assertSessionHas('error', 'Status SPP ini sudah diubah oleh Mamah menjadi Pesanan Selesai. Tampilan sudah diperbarui.')
             ->assertSessionHas('bentrok', true);
 
         $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
@@ -404,7 +404,7 @@ class PesananTest extends TestCase
 
         $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
             ->assertOk()
-            ->assertJson(['status' => 'selesai_produksi', 'label_status' => 'Selesai Produksi', 'kode_tampil' => $pesanan->kode_tampil]);
+            ->assertJson(['status' => 'selesai_produksi', 'label_status' => 'Pesanan Selesai', 'kode_tampil' => $pesanan->kode_tampil]);
     }
 
     public function test_admin_batal_dan_pulihkan_ke_status_sebelumnya(): void
@@ -465,7 +465,7 @@ class PesananTest extends TestCase
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))
             ->assertOk()
             ->assertSee('SPP #12')
-            ->assertSee('Pindahkan ke Selesai Produksi')
+            ->assertSee('Pindahkan ke Pesanan Selesai')
             ->assertSee('Batalkan SPP')
             ->assertViewHas('statusBerikutnya', \App\Enums\StatusProduksi::SelesaiProduksi)
             ->assertViewHas('statusSebelumnya', \App\Enums\StatusProduksi::MenungguDp);
