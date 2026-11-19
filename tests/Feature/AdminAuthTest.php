@@ -49,8 +49,9 @@ class AdminAuthTest extends TestCase
     {
         $admin = Admin::factory()->create(['email' => 'admin@contoh.test']);
 
+        // Admin juga langsung ke daftar Pesanan (bukan dashboard katalog)
         $this->post('/admin/login', ['email' => 'admin@contoh.test', 'password' => 'password'])
-            ->assertRedirect(route('admin.dashboard'))
+            ->assertRedirect(route('admin.pesanan.index'))
             ->assertSessionHas('admin_id', $admin->id);
 
         $this->get('/admin/dashboard')->assertOk();

@@ -4,20 +4,25 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\StatusDesain;
 use App\Enums\StatusProduksi;
+use App\Exceptions\AksiDitolak;
 use App\Exceptions\StatusBentrok;
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BatalPesananRequest;
 use App\Http\Requests\CatatanPesananRequest;
+use App\Http\Requests\CatatDpPesananRequest;
+use App\Http\Requests\IsiHargaPesananRequest;
 use App\Http\Requests\LunasPesananRequest;
 use App\Http\Requests\PulihkanPesananRequest;
 use App\Http\Requests\SimpanPesananRequest;
+use App\Http\Requests\TidakJadiPesananRequest;
 use App\Http\Requests\UbahStatusPesananRequest;
 use App\Models\Bahan;
 use App\Models\Cetak;
 use App\Models\Finishing;
 use App\Models\KategoriProduk;
 use App\Models\Pesanan;
+use App\Services\NotifikasiDeadline;
 use App\Services\OlahGambar;
 use App\Services\PesananService;
 use Illuminate\Http\Request;
@@ -76,12 +81,18 @@ class PesananController extends Controller
         ]);
     }
 
-    /** JSON ringan untuk auto-refresh 60 detik: jumlah per tab + penanda perubahan terakhir. */
-    public function jumlah()
+    /**
+     * JSON ringan untuk auto-refresh 60 detik: jumlah per tab, penanda perubahan terakhir,
+     * dan data lonceng notifikasi deadline (kunci "deadline", sama dengan $notifDeadline di layout).
+     */
+    public function jumlah(NotifikasiDeadline $notif)
     {
         Gate::authorize('viewAny', Pesanan::class);
 
-        return response()->json($this->ringkasanTab());
+        return response()->json([
+            ...$this->ringkasanTab(),
+            'deadline' => $notif->ambil(),
+        ]);
     }
 
     private function ringkasanTab(): array
@@ -95,12 +106,13 @@ class PesananController extends Controller
         $ambil = fn (string $s) => $perStatus[$s] ?? 0;
 
         $jumlah = [
-            'semua'            => $ambil('antrian') + $ambil('proses') + $ambil('selesai_produksi') + $ambil('pengiriman'),
-            'antrian'          => $ambil('antrian'),
+            'semua'            => array_sum(array_map($ambil, StatusProduksi::AKTIF)),
+            'hitung_harga'     => $ambil('hitung_harga'),
+            'menunggu_dp'      => $ambil('menunggu_dp'),
             'proses'           => $ambil('proses'),
             'selesai_produksi' => $ambil('selesai_produksi'),
             'pengiriman'       => $ambil('pengiriman'),
-            'history'          => $ambil('selesai') + $ambil('dibatalkan'),
+            'history'          => array_sum(array_map($ambil, StatusProduksi::nilaiRiwayat())),
         ];
 
         // Termasuk order yang di-soft-delete agar penghapusan juga terdeteksi
@@ -121,11 +133,12 @@ class PesananController extends Controller
     {
         Gate::authorize('create', Pesanan::class);
 
+        // Nomor SPP tidak diisi saat tambah (diberikan saat Catat DP); saranNomor tetap dikirim
+        // untuk kompatibilitas tampilan lama.
         $saran = Pesanan::saranNomorSpp();
 
         return view('admin.pesanan.create', [
             'pesanan' => new Pesanan([
-                'nomor_spp'      => $saran,
                 'tanggal_order'  => today(),
                 'jenis_deadline' => 'kirim',
                 'status_desain'  => StatusDesain::BelumDikirim->value,
@@ -144,7 +157,7 @@ class PesananController extends Controller
             $request->customerId(), $request->perbaruiCustomer(),
         );
 
-        return $this->kembaliKeDetail($pesanan, "{$pesanan->nomor_spp_teks} berhasil disimpan.");
+        return $this->kembaliKeDetail($pesanan, "{$pesanan->kode_tampil} berhasil disimpan.");
     }
 
     /** Redirect ke detail + pesan sukses; info customer (bila ada) ikut di pesan & di session 'info_customer'. */
@@ -163,17 +176,27 @@ class PesananController extends Controller
 
         $pesanan->load(['detailPesanan', 'file', 'riwayat', 'pembuat', 'customer']);
 
-        $status = $pesanan->status_produksi;
+        $status   = $pesanan->status_produksi;
+        $pengguna = Auth::user();
+        $langkah  = PesananService::langkahManual($status, $pengguna);
 
         return view('admin.pesanan.show', [
-            'pesanan'          => $pesanan,
-            'teksSpp'          => $pesanan->teks_spp,
-            'linkWhatsappSpp'  => $pesanan->link_whatsapp_spp,
-            'statusBerikutnya' => $status->berikutnya(),
-            'statusSebelumnya' => $status->sebelumnya(),
-            'alurStatus'       => array_map(fn ($s) => StatusProduksi::from($s), StatusProduksi::ALUR),
-            'waktuStatus'      => $this->waktuMasukStatus($pesanan),
-            'saranCatatan'     => self::SARAN_CATATAN,
+            'pesanan'            => $pesanan,
+            // null bila belum bernomor SPP (sebelum masuk produksi)
+            'teksSpp'            => $pesanan->teks_spp,
+            'linkWhatsappSpp'    => $pesanan->link_whatsapp_spp,
+            // Tombol maju/mundur yang BOLEH dipakai pengguna ini lewat admin.pesanan.status (null = tidak ada)
+            'statusBerikutnya'   => $langkah['maju'],
+            'statusSebelumnya'   => $langkah['mundur'],
+            'alurStatus'         => array_map(fn ($s) => StatusProduksi::from($s), StatusProduksi::ALUR),
+            'waktuStatus'        => $this->waktuMasukStatus($pesanan),
+            'saranCatatan'       => self::SARAN_CATATAN,
+            // Aksi alur baru
+            'bisaIsiHarga'       => Gate::allows('isiHarga', $pesanan),
+            'bisaCatatDp'        => $status === StatusProduksi::MenungguDp && Gate::allows('catatDp', $pesanan),
+            'bisaTidakJadi'      => $status->sebelumProduksi() && Gate::allows('tidakJadi', $pesanan),
+            'saranNomor'         => $pesanan->nomor_spp ?: Pesanan::saranNomorSpp(),
+            'menungguPelunasan'  => $pesanan->menunggu_pelunasan,
         ]);
     }
 
@@ -220,7 +243,7 @@ class PesananController extends Controller
             $request->customerId(), $request->perbaruiCustomer(), $request->lepasCustomer(),
         );
 
-        return $this->kembaliKeDetail($pesanan, "{$pesanan->nomor_spp_teks} berhasil diperbarui.");
+        return $this->kembaliKeDetail($pesanan, "{$pesanan->kode_tampil} berhasil diperbarui.");
     }
 
     /** Hapus order salah input (soft delete, khusus admin). */
@@ -231,7 +254,7 @@ class PesananController extends Controller
         $pesanan->delete();
 
         return redirect()->route('admin.pesanan.index')
-            ->with('success', "{$pesanan->nomor_spp_teks} dihapus.");
+            ->with('success', "{$pesanan->kode_tampil} dihapus.");
     }
 
     /** Pilihan master untuk form (yang disimpan tetap teks snapshot). */
@@ -274,6 +297,44 @@ class PesananController extends Controller
         return $hasil;
     }
 
+    // ── Harga, DP, tidak jadi ──────────────────────────
+
+    /** Simpan harga per item (tab Hitung Harga). Lihat IsiHargaPesananRequest. */
+    public function isiHarga(IsiHargaPesananRequest $request, Pesanan $pesanan)
+    {
+        return $this->jalankanStatus($request, $pesanan, fn () => $this->layanan->isiHarga(
+            $pesanan, $request->dataHarga(), $request->catatanHarga(), Auth::user(),
+        ));
+    }
+
+    /** "Catat DP & masukkan ke produksi": menunggu_dp → proses + nomor SPP. */
+    public function catatDp(CatatDpPesananRequest $request, Pesanan $pesanan)
+    {
+        return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $request) {
+            $this->layanan->catatDp(
+                $pesanan,
+                (int) $request->validated('dp'),
+                Carbon::parse($request->validated('tanggal_dp')),
+                (int) $request->validated('nomor_spp'),
+                Auth::user(),
+            );
+
+            return "DP dicatat. {$pesanan->kode_tampil} masuk produksi.";
+        });
+    }
+
+    /** Customer tidak jadi pesan (hitung_harga/menunggu_dp → tidak_jadi). */
+    public function tidakJadi(TidakJadiPesananRequest $request, Pesanan $pesanan)
+    {
+        $dari = StatusProduksi::from($request->validated('status_lama'));
+
+        return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $dari, $request) {
+            $this->layanan->tidakJadi($pesanan, $dari, $request->validated('catatan'), Auth::user());
+
+            return "{$pesanan->kode_tampil} ditandai tidak jadi.";
+        });
+    }
+
     // ── Status, catatan, pembayaran ────────────────────
 
     public function ubahStatus(UbahStatusPesananRequest $request, Pesanan $pesanan)
@@ -295,7 +356,7 @@ class PesananController extends Controller
         return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $dari, $request) {
             $this->layanan->batalkan($pesanan, $dari, $request->validated('catatan'), Auth::user());
 
-            return "{$pesanan->nomor_spp_teks} dibatalkan.";
+            return "{$pesanan->kode_tampil} dibatalkan.";
         });
     }
 
@@ -312,6 +373,12 @@ class PesananController extends Controller
     {
         try {
             $pesan = $aksi();
+        } catch (AksiDitolak $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['pesan' => $e->getMessage()], 422);
+            }
+
+            return redirect()->route('admin.pesanan.show', $pesanan)->with('error', $e->getMessage());
         } catch (StatusBentrok $e) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -332,6 +399,8 @@ class PesananController extends Controller
                 'pesan'        => $pesan,
                 'status'       => $pesanan->status_produksi->value,
                 'label_status' => $pesanan->status_produksi->label(),
+                'kode_tampil'  => $pesanan->kode_tampil,
+                'total'        => (float) $pesanan->total,
             ]);
         }
 

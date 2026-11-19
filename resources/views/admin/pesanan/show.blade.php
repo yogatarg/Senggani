@@ -1,6 +1,6 @@
 @extends('admin.layouts.pesanan')
 
-@section('title', $pesanan->nomor_spp_teks)
+@section('title', $pesanan->kode_tampil)
 @section('kembali', route('admin.pesanan.index'))
 @section('tanpa_bottomnav', '1')
 
@@ -28,7 +28,7 @@
     $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && \Illuminate\Support\Facades\Gate::allows('batalkan', $pesanan);
     $bisaHapus = \Illuminate\Support\Facades\Gate::allows('delete', $pesanan);
     $bisaPulihkan = $dibatalkan && \Illuminate\Support\Facades\Gate::allows('pulihkan', $pesanan);
-    $judulOrder = $pesanan->nomor_spp_teks . ' · ' . $pesanan->nama_customer;
+    $judulOrder = $pesanan->kode_tampil . ' · ' . $pesanan->nama_customer;
 @endphp
 
 @section('content')
@@ -36,7 +36,7 @@
 
 <header class="sg-detail-kepala">
     <div>
-        <h1 class="sg-no-order">{{ $pesanan->nomor_spp_teks }}</h1>
+        <h1 class="sg-no-order">{{ $pesanan->kode_tampil }}</h1>
         <p class="sg-nama-cust">{{ $pesanan->nama_customer }}</p>
         @if ($pesanan->nama_brand)
             <p class="sg-brand">{{ $pesanan->nama_brand }}</p>
@@ -370,7 +370,7 @@
             <form class="modal-content" method="POST" action="{{ route('admin.pesanan.destroy', $pesanan) }}" data-kirim>
                 @csrf @method('DELETE')
                 <div class="modal-header">
-                    <h2 class="modal-title" id="modalHapusJudul">Hapus {{ $pesanan->nomor_spp_teks }}?</h2>
+                    <h2 class="modal-title" id="modalHapusJudul">Hapus {{ $pesanan->kode_tampil }}?</h2>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">

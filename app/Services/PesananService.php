@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Enums\StatusProduksi;
+use App\Exceptions\AksiDitolak;
 use App\Exceptions\StatusBentrok;
 use App\Models\Admin;
 use App\Models\Customer;
 use App\Models\Pesanan;
 use App\Models\PesananFile;
 use App\Models\PesananRiwayat;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -35,50 +37,75 @@ class PesananService
     // ── Simpan SPP ─────────────────────────────────────
 
     /**
-     * Buat SPP baru beserta item, file, dan riwayat "SPP dibuat".
+     * Buat pesanan baru beserta item, file, dan riwayat "SPP dibuat". Tanpa nomor SPP,
+     * DP, maupun pelunasan (semuanya dicatat setelah harga disepakati).
+     * Status awal: hitung_harga, atau langsung menunggu_dp bila semua harga item sudah diisi.
      *
-     * @param  array  $data      kolom pesanan termasuk nomor_spp (tanpa total/customer_id)
-     * @param  array  $item      daftar item (lihat isiItem)
+     * @param  array  $data      kolom pesanan (tanpa nomor_spp/total/customer_id/dp/tanggal_lunas)
+     * @param  array  $item      daftar item (lihat isiItem; harga_satuan boleh null)
      * @param  array  $fileBaru  [['jenis' => 'mockup', 'path' => 'pesanan/sementara/x.webp', 'nama_asli' => '...'], ...]
      * @param  ?int   $customerId customer yang dipilih admin (null = cari lewat WA / buat baru)
      * @param  bool   $perbaruiCustomer timpa data customer dengan isian form
-     *
-     * @throws ValidationException bila nomor SPP keduluan admin lain (indeks unik)
      */
     public function buat(array $data, array $item, array $fileBaru, Admin $oleh, ?int $customerId = null, bool $perbaruiCustomer = false): Pesanan
     {
         $dipindah = [];
         $this->infoCustomer = null;
 
+        unset($data['nomor_spp'], $data['dp'], $data['tanggal_dp'], $data['tanggal_lunas']);
+
         try {
             return DB::transaction(function () use ($data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, &$dipindah) {
                 $customer = $this->tentukanCustomer($data, $customerId, $perbaruiCustomer);
 
+                $status = self::hargaItemLengkap($item) ? StatusProduksi::MenungguDp : StatusProduksi::HitungHarga;
+
                 $pesanan = Pesanan::create([
                     ...$data,
+                    'nomor_spp'       => null,
                     'customer_id'     => $customer->id,
-                    'status_produksi' => StatusProduksi::Antrian->value,
+                    'status_produksi' => $status->value,
                     'selesai_pada'    => null,
                     'dibuat_oleh'     => $oleh->id,
                     'total'           => 0,
+                    'dp'              => 0,
                 ]);
 
                 $this->isiItem($pesanan, $item);
                 $this->lampirkanFile($pesanan, $fileBaru, $oleh, $dipindah);
-                $this->catat($pesanan, $oleh, null, StatusProduksi::Antrian, 'SPP dibuat');
+                $this->catat($pesanan, $oleh, null, $status, 'SPP dibuat');
 
                 return $pesanan;
             });
         } catch (Throwable $e) {
             $this->buangFile([...array_column($fileBaru, 'path'), ...$dipindah]);
 
-            throw $this->terjemahkanDuplikat($e, (int) ($data['nomor_spp'] ?? 0));
+            throw $e;
         }
     }
 
+    /** Semua item punya harga_satuan (bukan null). */
+    private static function hargaItemLengkap(array $item): bool
+    {
+        if ($item === []) {
+            return false;
+        }
+
+        foreach ($item as $baris) {
+            if (! isset($baris['harga_satuan']) || $baris['harga_satuan'] === '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /**
-     * Perbarui data SPP, ganti seluruh item, tambah file baru. Pergantian nomor SPP
-     * dicatat di riwayat (konfirmasinya diperiksa di Form Request).
+     * Perbarui data SPP, ganti seluruh item, tambah file baru. Pergantian nomor SPP dan
+     * perubahan total harga dicatat di riwayat (konfirmasi nomor diperiksa di Form Request).
+     * Pesanan berstatus hitung_harga yang kini semua harganya terisi pindah ke menunggu_dp.
+     * Nomor SPP, DP, dan tanggal lunas hanya diubah lewat form ini bila SPP sudah bernomor /
+     * sudah masuk produksi (Form Request membuang isian itu bila belum).
      *
      * @param  bool  $lepasCustomer  customer_id kosong + true = lepas dari customer lama
      */
@@ -94,6 +121,7 @@ class PesananService
 
                 $nomorLama = (int) $pesanan->nomor_spp;
                 $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
+                $totalLama = (float) $pesanan->total;
 
                 // customer_id kosong: tetap customer lama, kecuali admin menekan "Lepas" (lepas_customer=1)
                 // sehingga customer ditentukan ulang dari isian seperti saat tambah SPP.
@@ -109,10 +137,19 @@ class PesananService
                 $this->isiItem($pesanan, $item);
                 $this->lampirkanFile($pesanan, $fileBaru, $oleh, $dipindah);
 
-                if ($nomorBaru !== $nomorLama) {
+                if ($nomorLama && $nomorBaru !== $nomorLama) {
                     $this->catat($pesanan, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomorBaru} oleh {$oleh->nama}");
                 }
+                if ($totalLama !== (float) $pesanan->total) {
+                    $this->catat($pesanan, $oleh, null, null, 'Harga diubah oleh ' . $oleh->nama . ': total '
+                        . self::rupiah($totalLama) . ' → ' . self::rupiah((float) $pesanan->total));
+                }
                 $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
+
+                if ($pesanan->status_produksi === StatusProduksi::HitungHarga && self::hargaItemLengkap($item)) {
+                    $this->pindahStatusDalamTransaksi($pesanan, StatusProduksi::HitungHarga, StatusProduksi::MenungguDp,
+                        "Harga dihitung oleh {$oleh->nama}", $oleh);
+                }
             });
         } catch (Throwable $e) {
             $this->buangFile([...array_column($fileBaru, 'path'), ...$dipindah]);
@@ -191,6 +228,7 @@ class PesananService
 
     /**
      * Simpan item dan hitung ulang total di server (subtotal = jumlah × harga_satuan).
+     * Harga kosong (null) = belum dihitung: subtotal null dan tidak ikut total.
      * Nilai subtotal/total kiriman form diabaikan.
      */
     private function isiItem(Pesanan $pesanan, array $item): void
@@ -199,9 +237,10 @@ class PesananService
 
         foreach (array_values($item) as $i => $baris) {
             $jumlah   = (int) $baris['jumlah'];
-            $harga    = (int) $baris['harga_satuan'];
-            $subtotal = $jumlah * $harga;
-            $total   += $subtotal;
+            $adaHarga = isset($baris['harga_satuan']) && $baris['harga_satuan'] !== '';
+            $harga    = $adaHarga ? (int) $baris['harga_satuan'] : null;
+            $subtotal = $adaHarga ? $jumlah * $harga : null;
+            $total   += (int) $subtotal;
 
             $pesanan->detailPesanan()->create([
                 'urutan'          => $i,
@@ -265,11 +304,147 @@ class PesananService
         }
     }
 
+    // ── Harga ──────────────────────────────────────────
+
+    /**
+     * Isi/ubah harga satuan per item (produksi selama hitung_harga, admin kapan saja).
+     * Item yang tidak ada di $harga tidak diubah; null = kosongkan (hanya boleh sebelum
+     * menunggu DP, dicek di Form Request). Total dihitung ulang. Bila status hitung_harga
+     * dan semua item kini berharga → otomatis menunggu_dp ("Harga dihitung oleh {nama}").
+     *
+     * @param  array<int, int|null>  $harga  detail_pesanan.id => harga satuan rupiah
+     * @param  ?string  $catatan  catatan perhitungan (null = tidak diubah, '' = dikosongkan)
+     * @return string pesan untuk pengguna
+     *
+     * @throws AksiDitolak bila produksi menyimpan setelah status bukan hitung_harga lagi
+     * @throws ValidationException bila total baru lebih kecil dari DP
+     */
+    public function isiHarga(Pesanan $pesanan, array $harga, ?string $catatan, Admin $oleh): string
+    {
+        $pesan = DB::transaction(function () use ($pesanan, $harga, $catatan, $oleh) {
+            $segar = Pesanan::whereKey($pesanan->id)->lockForUpdate()->first();
+            if (! $segar) {
+                throw $this->bentrok($pesanan);
+            }
+
+            $status = $segar->status_produksi;
+            if (! $oleh->isAdmin() && $status !== StatusProduksi::HitungHarga) {
+                throw new AksiDitolak(AksiDitolak::HARGA_DIKUNCI);
+            }
+
+            $totalLama = (float) $segar->total;
+            $item      = $segar->detailPesanan()->get();
+            $berubah   = false;
+            $total     = 0;
+
+            foreach ($item as $d) {
+                if (array_key_exists($d->id, $harga)) {
+                    $baru = $harga[$d->id] === null ? null : (int) $harga[$d->id];
+                    $lama = $d->harga_satuan === null ? null : (int) $d->harga_satuan;
+
+                    if ($baru !== $lama) {
+                        $d->forceFill([
+                            'harga_satuan' => $baru,
+                            'subtotal'     => $baru === null ? null : $baru * (int) $d->jumlah,
+                        ])->save();
+                        $berubah = true;
+                    }
+                }
+                $total += (int) $d->subtotal;
+            }
+
+            if ($total < (float) $segar->dp) {
+                throw ValidationException::withMessages([
+                    'harga' => 'Total baru (' . self::rupiah($total) . ') lebih kecil dari DP yang sudah dicatat ('
+                        . self::rupiah((float) $segar->dp) . ').',
+                ]);
+            }
+
+            $ubah = ['total' => $total];
+            if ($catatan !== null) {
+                $ubah['catatan_harga'] = trim($catatan) === '' ? null : trim($catatan);
+            }
+            $segar->forceFill($ubah)->save();
+            $segar->touch();
+
+            $tambahan = filled($catatan) ? "\nCatatan: " . trim($catatan) : '';
+            $lengkap  = $item->every(fn ($d) => $d->harga_satuan !== null);
+
+            if ($status === StatusProduksi::HitungHarga && $lengkap) {
+                $this->pindahStatusDalamTransaksi($segar, StatusProduksi::HitungHarga, StatusProduksi::MenungguDp,
+                    "Harga dihitung oleh {$oleh->nama}" . $tambahan, $oleh);
+
+                return 'Harga disimpan. SPP pindah ke ' . StatusProduksi::MenungguDp->label() . '.';
+            }
+
+            if ($status === StatusProduksi::HitungHarga) {
+                if ($berubah || $tambahan !== '') {
+                    $terisi = $item->filter(fn ($d) => $d->harga_satuan !== null)->count();
+                    $this->catat($segar, $oleh, null, null,
+                        "Harga disimpan sebagian oleh {$oleh->nama} ({$terisi} dari {$item->count()} item)" . $tambahan);
+                }
+
+                return 'Harga disimpan. Masih ada item yang belum diberi harga.';
+            }
+
+            if ($berubah || $tambahan !== '') {
+                $this->catat($segar, $oleh, null, null, 'Harga diubah oleh ' . $oleh->nama . ': total '
+                    . self::rupiah($totalLama) . ' → ' . self::rupiah($total) . $tambahan);
+            }
+
+            return 'Harga disimpan.';
+        });
+
+        $pesanan->refresh();
+
+        return $pesan;
+    }
+
+    private static function rupiah(float $n): string
+    {
+        return 'Rp ' . number_format($n, 0, ',', '.');
+    }
+
+    // ── DP & masuk produksi ────────────────────────────
+
+    /**
+     * Catat DP, beri nomor SPP, dan pindahkan menunggu_dp → proses (khusus admin).
+     *
+     * @throws StatusBentrok bila status bukan menunggu_dp lagi
+     * @throws ValidationException bila nomor SPP keduluan admin lain (indeks unik)
+     */
+    public function catatDp(Pesanan $pesanan, int $dp, Carbon $tanggal, int $nomor, Admin $oleh): void
+    {
+        $nomorLama = $pesanan->nomor_spp ? (int) $pesanan->nomor_spp : null;
+
+        try {
+            $this->pindahStatus(
+                $pesanan, StatusProduksi::MenungguDp, StatusProduksi::Proses,
+                'DP ' . self::rupiah($dp) . ' dicatat (' . $tanggal->translatedFormat('d/m/Y') . "), nomor SPP #{$nomor}",
+                $oleh,
+                kolom: ['dp' => $dp, 'tanggal_dp' => $tanggal->toDateString(), 'nomor_spp' => $nomor],
+                setelah: function (Pesanan $p) use ($nomorLama, $nomor, $oleh) {
+                    if ($nomorLama && $nomorLama !== $nomor) {
+                        $this->catat($p, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomor} oleh {$oleh->nama}");
+                    }
+                },
+            );
+        } catch (Throwable $e) {
+            $pesanan->refresh();
+
+            throw $this->terjemahkanDuplikat($e, $nomor);
+        }
+    }
+
     // ── Status produksi ────────────────────────────────
 
     /**
      * Maju/mundur SATU langkah. $dari = status yang dilihat pengguna di layar;
      * bila di database sudah berbeda, StatusBentrok dilempar dan tidak ada yang berubah.
+     *
+     * - hitung_harga → menunggu_dp hanya lewat isiHarga; menunggu_dp → proses hanya lewat catatDp.
+     * - proses → menunggu_dp khusus admin (nomor SPP tetap).
+     * - selesai_produksi → pengiriman wajib lunas (AksiDitolak::BELUM_LUNAS).
      */
     public function ubahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh): void
     {
@@ -279,56 +454,169 @@ class PesananService
             ]);
         }
 
-        $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh);
+        if ($dari === StatusProduksi::HitungHarga && $ke === StatusProduksi::MenungguDp) {
+            throw ValidationException::withMessages([
+                'status_baru' => 'Isi harga semua item dulu. SPP pindah ke Menunggu DP otomatis setelah harga disimpan.',
+            ]);
+        }
+
+        if ($dari === StatusProduksi::MenungguDp && $ke === StatusProduksi::Proses) {
+            throw ValidationException::withMessages([
+                'status_baru' => 'Gunakan "Catat DP & masukkan ke produksi" untuk memindahkan SPP ke Dalam Proses.',
+            ]);
+        }
+
+        if ($dari === StatusProduksi::Proses && $ke === StatusProduksi::MenungguDp && ! $oleh->isAdmin()) {
+            throw new AuthorizationException('Hanya admin yang bisa mengembalikan SPP ke Menunggu DP.');
+        }
+
+        $syarat = null;
+        if ($dari === StatusProduksi::SelesaiProduksi && $ke === StatusProduksi::Pengiriman) {
+            $syarat = function (Pesanan $segar) {
+                if (! $segar->tanggal_lunas) {
+                    throw new AksiDitolak(AksiDitolak::BELUM_LUNAS);
+                }
+            };
+        }
+
+        $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh, $syarat);
     }
 
-    /** Batalkan order aktif (khusus admin, dicek di Policy). */
+    /**
+     * Langkah maju/mundur yang boleh dipakai pengguna lewat tombol status (admin.pesanan.status).
+     * hitung_harga & menunggu_dp tidak punya tombol maju (lewat isi harga / Catat DP);
+     * proses → menunggu_dp hanya admin. Status di luar alur: tidak ada langkah.
+     *
+     * @return array{maju: ?StatusProduksi, mundur: ?StatusProduksi}
+     */
+    public static function langkahManual(StatusProduksi $status, ?Admin $pengguna): array
+    {
+        $maju   = $status->sebelumProduksi() ? null : $status->berikutnya();
+        $mundur = $status->sebelumnya();
+
+        if ($status === StatusProduksi::Proses && ! $pengguna?->isAdmin()) {
+            $mundur = null;
+        }
+
+        return ['maju' => $maju, 'mundur' => $mundur];
+    }
+
+    /** Batalkan SPP yang sudah masuk produksi (khusus admin, dicek di Policy). */
     public function batalkan(Pesanan $pesanan, StatusProduksi $dari, ?string $catatan, Admin $oleh): void
     {
         if (! $dari->bisaDibatalkan()) {
             throw ValidationException::withMessages([
-                'status_lama' => 'SPP yang sudah selesai atau dibatalkan tidak bisa dibatalkan.',
+                'status_lama' => $dari->sebelumProduksi()
+                    ? 'SPP yang belum masuk produksi ditandai "Tidak Jadi", bukan dibatalkan.'
+                    : 'SPP yang sudah selesai, tidak jadi, atau dibatalkan tidak bisa dibatalkan.',
             ]);
         }
 
         $this->pindahStatus($pesanan, $dari, StatusProduksi::Dibatalkan, $catatan, $oleh);
     }
 
-    /** Kembalikan order batal ke status sebelum dibatalkan (khusus admin). */
+    /** Tandai "Tidak Jadi" SPP yang belum masuk produksi (khusus admin). */
+    public function tidakJadi(Pesanan $pesanan, StatusProduksi $dari, ?string $catatan, Admin $oleh): void
+    {
+        if (! $dari->sebelumProduksi()) {
+            throw ValidationException::withMessages([
+                'status_lama' => 'Hanya SPP berstatus Hitung Harga atau Menunggu DP yang bisa ditandai Tidak Jadi. '
+                    . 'SPP yang sudah masuk produksi dibatalkan lewat "Batalkan SPP".',
+            ]);
+        }
+
+        $this->pindahStatus($pesanan, $dari, StatusProduksi::TidakJadi, $catatan, $oleh);
+    }
+
+    /**
+     * Kembalikan SPP "dibatalkan" / "tidak jadi" ke status sebelumnya (khusus admin).
+     * Status lama "antrian" dipulihkan ke proses; menunggu_dp dengan harga belum lengkap
+     * ke hitung_harga; status produksi tanpa nomor SPP ke menunggu_dp.
+     */
     public function pulihkan(Pesanan $pesanan, ?string $catatan, Admin $oleh): StatusProduksi
     {
+        $dari = $pesanan->status_produksi;
+
+        if ($dari !== StatusProduksi::Dibatalkan && $dari !== StatusProduksi::TidakJadi) {
+            throw ValidationException::withMessages([
+                'status_lama' => 'Hanya SPP yang dibatalkan atau tidak jadi yang bisa dipulihkan.',
+            ]);
+        }
+
         $ke = PesananRiwayat::where('pesanan_id', $pesanan->id)
-            ->where('status_ke', StatusProduksi::Dibatalkan->value)
+            ->where('status_ke', $dari->value)
             ->whereNotNull('status_dari')
             ->orderByDesc('created_at')->orderByDesc('id')
             ->value('status_dari');
 
-        $ke = $ke instanceof StatusProduksi ? $ke : (StatusProduksi::tryFrom((string) $ke) ?? StatusProduksi::Antrian);
+        $ke = $ke instanceof StatusProduksi ? $ke : StatusProduksi::tryFrom((string) $ke);
 
-        $this->pindahStatus($pesanan, StatusProduksi::Dibatalkan, $ke, $catatan, $oleh);
+        if ($ke === null || $ke === StatusProduksi::Dibatalkan || $ke === StatusProduksi::TidakJadi) {
+            $ke = $dari === StatusProduksi::TidakJadi ? StatusProduksi::MenungguDp : StatusProduksi::Proses;
+        }
+        if ($ke === StatusProduksi::Antrian) {
+            $ke = StatusProduksi::Proses;
+        }
+        if ($ke->sudahProduksi() && ! $pesanan->nomor_spp) {
+            $ke = StatusProduksi::MenungguDp;
+        }
+        if ($ke === StatusProduksi::MenungguDp && ! $pesanan->harga_lengkap) {
+            $ke = StatusProduksi::HitungHarga;
+        }
+
+        $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh);
 
         return $ke;
     }
 
-    private function pindahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh): void
+    /**
+     * Pindah status dengan kunci baris: hanya berhasil bila status di DB masih $dari
+     * (status yang dilihat pengguna). $syarat(Pesanan $segar) boleh melempar untuk menolak;
+     * $kolom = kolom tambahan yang ikut diubah; $setelah(Pesanan) dijalankan di transaksi yang sama.
+     */
+    private function pindahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh,
+        ?callable $syarat = null, array $kolom = [], ?callable $setelah = null): void
     {
-        DB::transaction(function () use ($pesanan, $dari, $ke, $catatan, $oleh) {
-            // Update bersyarat: hanya berhasil bila status di DB masih sama dengan yang dilihat pengguna
-            $berubah = Pesanan::whereKey($pesanan->id)
-                ->where('status_produksi', $dari->value)
-                ->update([
-                    'status_produksi' => $ke->value,
-                    'selesai_pada'    => $ke->riwayat() ? now() : null,
-                ]);
+        try {
+            DB::transaction(function () use ($pesanan, $dari, $ke, $catatan, $oleh, $syarat, $kolom, $setelah) {
+                $segar = Pesanan::whereKey($pesanan->id)->lockForUpdate()->first();
 
-            if ($berubah === 0) {
-                throw $this->bentrok($pesanan);
-            }
+                if (! $segar || $segar->status_produksi !== $dari) {
+                    throw $this->bentrok($pesanan);
+                }
 
-            $this->catat($pesanan, $oleh, $dari, $ke, $catatan);
-        });
+                if ($syarat) {
+                    $syarat($segar);
+                }
 
-        $pesanan->refresh();
+                $this->pindahStatusDalamTransaksi($segar, $dari, $ke, $catatan, $oleh, $kolom);
+
+                if ($setelah) {
+                    $setelah($segar);
+                }
+            });
+        } finally {
+            $pesanan->refresh();
+        }
+    }
+
+    /** Ubah status (+ kolom tambahan) dan catat riwayat; dipanggil di dalam transaksi. */
+    private function pindahStatusDalamTransaksi(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh, array $kolom = []): void
+    {
+        // Update bersyarat: hanya berhasil bila status di DB masih sama dengan yang dilihat pengguna
+        $berubah = Pesanan::whereKey($pesanan->id)
+            ->where('status_produksi', $dari->value)
+            ->update([
+                ...$kolom,
+                'status_produksi' => $ke->value,
+                'selesai_pada'    => $ke->riwayat() ? now() : null,
+            ]);
+
+        if ($berubah === 0) {
+            throw $this->bentrok($pesanan);
+        }
+
+        $this->catat($pesanan, $oleh, $dari, $ke, $catatan);
     }
 
     private function bentrok(Pesanan $pesanan): StatusBentrok

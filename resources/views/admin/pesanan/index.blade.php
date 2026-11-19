@@ -5,7 +5,8 @@
 @php
     $infoTab = [
         'semua'            => ['ikon' => 'fa-layer-group',       'pendek' => 'Semua'],
-        'antrian'          => ['ikon' => 'fa-hourglass-half',    'pendek' => 'Antrian'],
+        'hitung_harga'     => ['ikon' => 'fa-calculator',        'pendek' => 'Harga'],
+        'menunggu_dp'      => ['ikon' => 'fa-hourglass-half',    'pendek' => 'DP'],
         'proses'           => ['ikon' => 'fa-print',             'pendek' => 'Proses'],
         'selesai_produksi' => ['ikon' => 'fa-circle-check',      'pendek' => 'Selesai'],
         'pengiriman'       => ['ikon' => 'fa-truck',             'pendek' => 'Kirim'],
@@ -14,7 +15,8 @@
     // Label tab tampil (istilah SPP); kunci tetap dari backend
     $labelTab = [
         'semua'            => 'Semua',
-        'antrian'          => 'Antrian Produksi',
+        'hitung_harga'     => 'Hitung Harga',
+        'menunggu_dp'      => 'Menunggu DP',
         'proses'           => 'Dalam Proses',
         'selesai_produksi' => 'Pesanan Selesai',
         'pengiriman'       => 'Pengiriman',
@@ -23,8 +25,9 @@
     $labelUrut = ['terbaru' => 'SPP terbaru'];
     $kosong = [
         'semua'            => ['fa-box-open', 'Belum ada SPP', 'SPP baru yang ditambahkan admin akan muncul di sini.'],
-        'antrian'          => ['fa-hourglass-half', 'Antrian kosong', 'Tidak ada SPP yang menunggu dikerjakan.'],
-        'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'Pindahkan SPP dari Antrian saat mulai dikerjakan.'],
+        'hitung_harga'     => ['fa-calculator', 'Tidak ada yang perlu dihitung', 'Pesanan baru tanpa harga muncul di sini untuk dihitung produksi.'],
+        'menunggu_dp'      => ['fa-hourglass-half', 'Tidak ada yang menunggu DP', 'Pesanan yang harganya sudah dihitung menunggu DP customer di sini.'],
+        'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'SPP masuk ke sini setelah DP dicatat admin.'],
         'selesai_produksi' => ['fa-circle-check', 'Belum ada pesanan selesai', 'SPP yang selesai diproduksi menunggu dikirim di sini.'],
         'pengiriman'       => ['fa-truck', 'Tidak ada SPP dalam pengiriman', 'SPP yang sedang diantar atau dikirim muncul di sini.'],
         'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'SPP yang sudah selesai atau dibatalkan tersimpan di sini.'],
@@ -118,7 +121,7 @@
                 <a href="{{ route('admin.pesanan.create') }}" class="sg-btn sg-btn-utama"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah SPP</a>
             @endcan
         @elseif ($tab === 'proses')
-            <a href="{{ route('admin.pesanan.index', ['tab' => 'antrian']) }}" class="sg-btn sg-btn-sekunder">Lihat Antrian</a>
+            <a href="{{ route('admin.pesanan.index', ['tab' => 'menunggu_dp']) }}" class="sg-btn sg-btn-sekunder">Lihat Menunggu DP</a>
         @endif
     </div>
 @else

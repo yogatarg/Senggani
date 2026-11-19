@@ -9,7 +9,7 @@
     $tagJudul = ($tingkat ?? 'h2') === 'h3' ? 'h3' : 'h2';
     $tampilKode = $p->customer_id && ! ($tanpaKode ?? false) && \Illuminate\Support\Facades\Gate::allows('kelola-customer');
     $ringkasLabel = collect([
-        $p->nomor_spp_teks,
+        $p->kode_tampil,
         $p->nama_customer . ($p->nama_brand ? ' / ' . $p->nama_brand : ''),
         $p->status_produksi->label(),
         'bayar ' . $p->label_status_pembayaran,
@@ -20,7 +20,7 @@
 <article class="sg-order">
     <div class="sg-order-atas">
         <span class="sg-order-no">
-            {{ $p->nomor_spp_teks }}
+            {{ $p->kode_tampil }}
             @if ($tampilKode)
                 <span aria-hidden="true">·</span>
                 <a href="{{ route('admin.customer.show', $p->customer_id) }}" class="sg-order-kode" aria-label="Customer {{ \App\Models\Customer::kodeDari($p->customer_id) }}">{{ \App\Models\Customer::kodeDari($p->customer_id) }}</a>

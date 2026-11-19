@@ -2,15 +2,19 @@
 
 namespace App\Policies;
 
+use App\Enums\StatusProduksi;
+use App\Exceptions\AksiDitolak;
 use App\Models\Admin;
 use App\Models\Pesanan;
+use Illuminate\Auth\Access\Response;
 
 /**
  * Hak akses modul Pesanan.
  * - Admin: semua aksi.
- * - Produksi: lihat semua order (termasuk harga), ubah status maju/mundur satu langkah,
+ * - Produksi: lihat semua order (termasuk harga), isi harga selama status hitung_harga,
+ *   ubah status maju/mundur satu langkah (aturan alur di PesananService::ubahStatus),
  *   tambah catatan progres, lihat gambar. Tidak bisa membuat/mengubah/menghapus order,
- *   membatalkan/memulihkan, mencatat lunas, atau menghapus gambar.
+ *   mencatat DP/lunas, menandai tidak jadi, membatalkan/memulihkan, atau menghapus gambar.
  */
 class PesananPolicy
 {
@@ -32,6 +36,26 @@ class PesananPolicy
     public function tambahCatatan(Admin $pengguna, Pesanan $pesanan): bool
     {
         return true;
+    }
+
+    /** Isi/ubah harga item: admin kapan saja, produksi hanya saat status hitung_harga. */
+    public function isiHarga(Admin $pengguna, Pesanan $pesanan): Response
+    {
+        if ($pengguna->isAdmin() || $pesanan->status_produksi === StatusProduksi::HitungHarga) {
+            return Response::allow();
+        }
+
+        return Response::deny(AksiDitolak::HARGA_DIKUNCI);
+    }
+
+    public function catatDp(Admin $pengguna, Pesanan $pesanan): bool
+    {
+        return $pengguna->isAdmin();
+    }
+
+    public function tidakJadi(Admin $pengguna, Pesanan $pesanan): bool
+    {
+        return $pengguna->isAdmin();
     }
 
     public function create(Admin $pengguna): bool

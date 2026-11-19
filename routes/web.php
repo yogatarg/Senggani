@@ -52,6 +52,9 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
     Route::put('/pesanan/{pesanan}', [PesananController::class, 'update'])->name('pesanan.update');
     Route::delete('/pesanan/{pesanan}', [PesananController::class, 'destroy'])->name('pesanan.destroy');
 
+    Route::post('/pesanan/{pesanan}/harga', [PesananController::class, 'isiHarga'])->name('pesanan.harga');
+    Route::post('/pesanan/{pesanan}/dp', [PesananController::class, 'catatDp'])->name('pesanan.dp');
+    Route::post('/pesanan/{pesanan}/tidak-jadi', [PesananController::class, 'tidakJadi'])->name('pesanan.tidak_jadi');
     Route::post('/pesanan/{pesanan}/status', [PesananController::class, 'ubahStatus'])->name('pesanan.status');
     Route::post('/pesanan/{pesanan}/batal', [PesananController::class, 'batalkan'])->name('pesanan.batal');
     Route::post('/pesanan/{pesanan}/pulihkan', [PesananController::class, 'pulihkan'])->name('pesanan.pulihkan');

@@ -41,7 +41,6 @@ class PesananTest extends TestCase
     private function dataOrder(array $ubah = []): array
     {
         return array_replace_recursive([
-            'nomor_spp'      => (string) Pesanan::saranNomorSpp(),
             'jenis_deadline' => 'kirim',
             'nama_customer'  => 'Bu Rina Susanti',
             'nomor_whatsapp' => '0812-3456-7890',
@@ -49,7 +48,6 @@ class PesananTest extends TestCase
             'kota'           => 'Yogyakarta',
             'tanggal_order'  => today()->toDateString(),
             'deadline'       => today()->addDays(7)->toDateString(),
-            'dp'             => '500.000',
             'link_desain'    => 'https://drive.google.com/drive/folders/abc',
             'status_desain'  => 'menunggu',
             'item'           => [
@@ -74,6 +72,16 @@ class PesananTest extends TestCase
         return array_replace_recursive($this->dataOrder(['nomor_spp' => (string) $pesanan->nomor_spp]), $ubah);
     }
 
+    /** Catat DP & masukkan ke produksi (admin). */
+    private function masukProduksi(Pesanan $pesanan, int $nomor = 1, int $dp = 500000): Pesanan
+    {
+        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $pesanan), [
+            'dp' => (string) $dp, 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1',
+        ])->assertSessionHasNoErrors();
+
+        return $pesanan->fresh();
+    }
+
     private function buatOrder(array $ubah = []): Pesanan
     {
         $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->dataOrder($ubah))->assertRedirect();
@@ -89,8 +97,10 @@ class PesananTest extends TestCase
 
         $this->assertSame('6281234567890', $pesanan->nomor_whatsapp);
         $this->assertEquals(4250000, (float) $pesanan->total); // 500×2.500 + 1.000×3.000
-        $this->assertEquals(500000, (float) $pesanan->dp);
-        $this->assertSame('antrian', $pesanan->status_produksi->value);
+        $this->assertEquals(0, (float) $pesanan->dp);
+        $this->assertNull($pesanan->nomor_spp);
+        // Semua harga sudah diisi admin saat input → langsung Menunggu DP
+        $this->assertSame('menunggu_dp', $pesanan->status_produksi->value);
         $this->assertSame($this->admin->id, $pesanan->dibuat_oleh);
 
         $item = $pesanan->detailPesanan;
@@ -101,7 +111,7 @@ class PesananTest extends TestCase
         $this->assertSame('Dus custom', $item[1]->jenis_packaging);
 
         $this->assertDatabaseHas('pesanan_riwayat', [
-            'pesanan_id' => $pesanan->id, 'status_dari' => null, 'status_ke' => 'antrian',
+            'pesanan_id' => $pesanan->id, 'status_dari' => null, 'status_ke' => 'menunggu_dp',
             'catatan' => 'SPP dibuat', 'nama_pengguna' => 'Rina CS',
         ]);
     }
@@ -140,15 +150,17 @@ class PesananTest extends TestCase
         $this->assertDatabaseCount('pesanan', 0);
     }
 
-    public function test_dp_tidak_boleh_melebihi_total_dan_wa_dinormalisasi_divalidasi(): void
+    public function test_dp_lunas_dan_nomor_diabaikan_saat_tambah_dan_wa_divalidasi(): void
     {
-        $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->dataOrder(['dp' => '9.999.999']))
-            ->assertSessionHasErrors('dp');
-
         $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->dataOrder(['nomor_whatsapp' => '0812']))
             ->assertSessionHasErrors('nomor_whatsapp');
-
         $this->assertDatabaseCount('pesanan', 0);
+
+        // DP, pelunasan, dan nomor SPP dicatat belakangan (Catat DP / Catat lunas)
+        $pesanan = $this->buatOrder(['dp' => '9.999.999', 'tanggal_lunas' => today()->toDateString(), 'nomor_spp' => '176']);
+        $this->assertEquals(0, (float) $pesanan->dp);
+        $this->assertNull($pesanan->tanggal_lunas);
+        $this->assertNull($pesanan->nomor_spp);
     }
 
     public function test_edit_mengganti_item_dan_menghitung_ulang_total(): void
@@ -198,12 +210,17 @@ class PesananTest extends TestCase
     {
         $pesanan = $this->buatOrder();
 
+        // Belum masuk produksi: pelunasan belum bisa dicatat
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan))
+            ->assertSessionHasErrors(['tanggal_lunas' => 'Pelunasan dicatat setelah DP dicatat dan SPP masuk produksi.']);
+
+        $pesanan = $this->masukProduksi($pesanan);
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan))->assertRedirect();
 
         $pesanan->refresh();
         $this->assertSame('lunas', $pesanan->status_pembayaran);
         $this->assertTrue($pesanan->tanggal_lunas->isToday());
-        $this->assertSame('antrian', $pesanan->status_produksi->value);
+        $this->assertSame('proses', $pesanan->status_produksi->value);
 
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan), ['tanggal_lunas' => today()->addDay()->toDateString()])
             ->assertSessionHasErrors('tanggal_lunas');
@@ -220,8 +237,13 @@ class PesananTest extends TestCase
         $this->assertSame('lewat', Pesanan::factory()->status('proses')->make(['deadline' => today()->subDays(2)])->penanda_deadline);
         $this->assertSame(-2, Pesanan::factory()->make(['deadline' => today()->subDays(2)])->hari_menuju_deadline);
 
-        // Sudah selesai produksi: tidak diberi penanda
-        foreach (['selesai_produksi', 'pengiriman', 'selesai', 'dibatalkan'] as $s) {
+        // Dipantau: hitung harga, menunggu DP, proses, selesai produksi
+        foreach (['hitung_harga', 'menunggu_dp', 'proses', 'selesai_produksi'] as $s) {
+            $this->assertSame('lewat', Pesanan::factory()->status($s)->make(['deadline' => today()->subDay()])->penanda_deadline);
+        }
+
+        // Sudah dikirim / History: tidak diberi penanda
+        foreach (['pengiriman', 'selesai', 'tidak_jadi', 'dibatalkan'] as $s) {
             $this->assertNull(Pesanan::factory()->status($s)->make(['deadline' => today()->subDays(5)])->penanda_deadline);
         }
     }
@@ -230,22 +252,30 @@ class PesananTest extends TestCase
 
     public function test_tab_semua_hanya_order_aktif_dan_history_terpisah(): void
     {
-        $antrian = Pesanan::factory()->create(['deadline' => today()->addDays(5)]);
+        $hitung  = Pesanan::factory()->status('hitung_harga')->create(['deadline' => today()->addDays(6)]);
+        $dp      = Pesanan::factory()->status('menunggu_dp')->create(['deadline' => today()->addDays(5)]);
         $proses  = Pesanan::factory()->status('proses')->create(['deadline' => today()->addDay()]);
         $kirim   = Pesanan::factory()->status('pengiriman')->create();
-        $selesai = Pesanan::factory()->status('selesai')->create(['selesai_pada' => now()->subDays(2)]);
+        $selesai = Pesanan::factory()->status('selesai')->create(['selesai_pada' => now()->subDays(3)]);
+        $tidak   = Pesanan::factory()->status('tidak_jadi')->create(['selesai_pada' => now()->subDays(2)]);
         $batal   = Pesanan::factory()->status('dibatalkan')->create(['selesai_pada' => now()->subDay()]);
 
         $ids = fn ($res) => $res->viewData('pesanan')->pluck('id')->all();
+        $tab = fn ($t) => $ids($this->sebagai($this->produksi)->get(route('admin.pesanan.index', ['tab' => $t])));
 
         $semua = $this->sebagai($this->produksi)->get(route('admin.pesanan.index'));
-        $this->assertSame([$proses->id, $antrian->id, $kirim->id], $ids($semua)); // urut deadline terdekat
+        $this->assertSame([$proses->id, $dp->id, $hitung->id, $kirim->id], $ids($semua)); // urut deadline terdekat
 
-        $this->assertSame([$proses->id], $ids($this->sebagai($this->produksi)->get(route('admin.pesanan.index', ['tab' => 'proses']))));
-        $this->assertSame([$batal->id, $selesai->id], $ids($this->sebagai($this->produksi)->get(route('admin.pesanan.index', ['tab' => 'history']))));
+        $this->assertSame([$hitung->id], $tab('hitung_harga'));
+        $this->assertSame([$dp->id], $tab('menunggu_dp'));
+        $this->assertSame([$proses->id], $tab('proses'));
+        $this->assertSame([$batal->id, $tidak->id, $selesai->id], $tab('history'));
+        $this->assertSame(['semua', 'hitung_harga', 'menunggu_dp', 'proses', 'selesai_produksi', 'pengiriman', 'history'], array_keys(Pesanan::TAB));
 
         $jumlah = $this->sebagai($this->produksi)->getJson(route('admin.pesanan.jumlah'))->assertOk()->json();
-        $this->assertSame(['semua' => 3, 'antrian' => 1, 'proses' => 1, 'selesai_produksi' => 0, 'pengiriman' => 1, 'history' => 2], $jumlah['jumlah']);
+        $this->assertSame([
+            'semua' => 4, 'hitung_harga' => 1, 'menunggu_dp' => 1, 'proses' => 1, 'selesai_produksi' => 0, 'pengiriman' => 1, 'history' => 3,
+        ], $jumlah['jumlah']);
         $this->assertNotEmpty($jumlah['penanda']);
         $this->assertNotEmpty($jumlah['terakhir_diubah']);
     }
@@ -259,7 +289,7 @@ class PesananTest extends TestCase
         $brand   = Pesanan::factory()->create(['nama_customer' => 'Ismun', 'nama_brand' => 'Paperbag Alea']);
         Pesanan::factory()->create(['nama_customer' => 'Persen 100%']);
 
-        $cari = fn ($q, $tab = 'antrian') => $this->sebagai($this->admin)
+        $cari = fn ($q, $tab = 'proses') => $this->sebagai($this->admin)
             ->get(route('admin.pesanan.index', ['q' => $q, 'tab' => $tab]))
             ->viewData('pesanan')->pluck('id')->sort()->values()->all();
 
@@ -277,7 +307,7 @@ class PesananTest extends TestCase
         $sebelum = $this->sebagai($this->admin)->getJson(route('admin.pesanan.jumlah'))->json('penanda');
 
         $this->travel(5)->seconds();
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses']);
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi']);
 
         $sesudah = $this->sebagai($this->admin)->getJson(route('admin.pesanan.jumlah'))->json('penanda');
         $this->assertNotSame($sebelum, $sesudah);
@@ -299,19 +329,19 @@ class PesananTest extends TestCase
         $pesanan = Pesanan::factory()->create();
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
-            'status_lama' => 'antrian', 'status_baru' => 'proses', 'catatan' => 'Mulai cetak',
-        ])->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('success', 'Status diubah ke Dalam Proses.');
+            'status_lama' => 'proses', 'status_baru' => 'selesai_produksi', 'catatan' => 'Cetak selesai',
+        ])->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('success', 'Status diubah ke Selesai Produksi.');
 
-        $this->assertSame('proses', $pesanan->fresh()->status_produksi->value);
+        $this->assertSame('selesai_produksi', $pesanan->fresh()->status_produksi->value);
         $this->assertDatabaseHas('pesanan_riwayat', [
             'pesanan_id' => $pesanan->id, 'admin_id' => $this->produksi->id, 'nama_pengguna' => 'Ayah',
-            'status_dari' => 'antrian', 'status_ke' => 'proses', 'catatan' => 'Mulai cetak',
+            'status_dari' => 'proses', 'status_ke' => 'selesai_produksi', 'catatan' => 'Cetak selesai',
         ]);
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
-            'status_lama' => 'proses', 'status_baru' => 'antrian',
+            'status_lama' => 'selesai_produksi', 'status_baru' => 'proses',
         ])->assertSessionHas('success');
-        $this->assertSame('antrian', $pesanan->fresh()->status_produksi->value);
+        $this->assertSame('proses', $pesanan->fresh()->status_produksi->value);
         $this->assertSame('mundur', $pesanan->riwayat()->first()->jenis);
     }
 
@@ -320,14 +350,19 @@ class PesananTest extends TestCase
         $pesanan = Pesanan::factory()->create();
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
-            'status_lama' => 'antrian', 'status_baru' => 'selesai_produksi',
+            'status_lama' => 'proses', 'status_baru' => 'pengiriman',
         ])->assertSessionHasErrors(['status_baru' => 'Status hanya bisa dipindah satu langkah maju atau mundur.']);
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
-            'status_lama' => 'antrian', 'status_baru' => 'dibatalkan',
+            'status_lama' => 'proses', 'status_baru' => 'dibatalkan',
         ])->assertSessionHasErrors('status_baru');
 
-        $this->assertSame('antrian', $pesanan->fresh()->status_produksi->value);
+        // Status lama "antrian" sudah bukan bagian alur
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), [
+            'status_lama' => 'antrian', 'status_baru' => 'proses',
+        ])->assertSessionHasErrors('status_lama');
+
+        $this->assertSame('proses', $pesanan->fresh()->status_produksi->value);
     }
 
     public function test_selesai_mengisi_selesai_pada_dan_mundur_mengosongkannya(): void
@@ -347,17 +382,17 @@ class PesananTest extends TestCase
 
         // Perangkat 1 (Mamah) memajukan status
         $mamah = Admin::factory()->produksi()->create(['nama' => 'Mamah']);
-        $this->sebagai($mamah)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses']);
+        $this->sebagai($mamah)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi']);
 
-        // Perangkat 2 (Ayah) masih melihat "antrian" lalu menekan tombol yang sama
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses'])
+        // Perangkat 2 (Ayah) masih melihat "proses" lalu menekan tombol yang sama
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
             ->assertRedirect(route('admin.pesanan.show', $pesanan))
-            ->assertSessionHas('error', 'Status SPP ini sudah diubah oleh Mamah menjadi Dalam Proses. Tampilan sudah diperbarui.')
+            ->assertSessionHas('error', 'Status SPP ini sudah diubah oleh Mamah menjadi Selesai Produksi. Tampilan sudah diperbarui.')
             ->assertSessionHas('bentrok', true);
 
-        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses'])
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
             ->assertStatus(409)
-            ->assertJson(['bentrok' => true, 'status_sekarang' => 'proses']);
+            ->assertJson(['bentrok' => true, 'status_sekarang' => 'selesai_produksi']);
 
         // Hanya perubahan pertama yang tercatat (factory tidak membuat riwayat "Order dibuat")
         $this->assertSame(1, $pesanan->riwayat()->count());
@@ -367,9 +402,9 @@ class PesananTest extends TestCase
     {
         $pesanan = Pesanan::factory()->create();
 
-        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'antrian', 'status_baru' => 'proses'])
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.status', $pesanan), ['status_lama' => 'proses', 'status_baru' => 'selesai_produksi'])
             ->assertOk()
-            ->assertJson(['status' => 'proses', 'label_status' => 'Dalam Proses']);
+            ->assertJson(['status' => 'selesai_produksi', 'label_status' => 'Selesai Produksi', 'kode_tampil' => $pesanan->kode_tampil]);
     }
 
     public function test_admin_batal_dan_pulihkan_ke_status_sebelumnya(): void
@@ -383,8 +418,9 @@ class PesananTest extends TestCase
         $this->assertNotNull($pesanan->selesai_pada);
 
         // Produksi tidak boleh memulihkan, dan tidak bisa memakai tombol maju/mundur dari dibatalkan
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.pulihkan', $pesanan))->assertForbidden();
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'dibatalkan', 'status_baru' => 'antrian'])
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.pulihkan', $pesanan))->assertRedirect()->assertSessionHas('error', 'Aksi ini khusus admin.');
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.pulihkan', $pesanan))->assertForbidden();
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $pesanan), ['status_lama' => 'dibatalkan', 'status_baru' => 'proses'])
             ->assertSessionHasErrors('status_lama');
 
         $this->sebagai($this->admin)->post(route('admin.pesanan.pulihkan', $pesanan))
@@ -424,14 +460,29 @@ class PesananTest extends TestCase
 
     public function test_detail_order_tampil_untuk_admin(): void
     {
-        $pesanan = $this->buatOrder();
+        $pesanan = $this->masukProduksi($this->buatOrder(), 12);
 
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))
             ->assertOk()
-            ->assertSee($pesanan->nomor_spp_teks)
-            ->assertSee('Pindahkan ke Dalam Proses')
+            ->assertSee('SPP #12')
+            ->assertSee('Pindahkan ke Selesai Produksi')
             ->assertSee('Batalkan SPP')
-            ->assertViewHas('statusBerikutnya');
+            ->assertViewHas('statusBerikutnya', \App\Enums\StatusProduksi::SelesaiProduksi)
+            ->assertViewHas('statusSebelumnya', \App\Enums\StatusProduksi::MenungguDp);
+
+        // Produksi tidak punya tombol mundur dari Dalam Proses ke Menunggu DP
+        $this->sebagai($this->produksi)->get(route('admin.pesanan.show', $pesanan))
+            ->assertOk()->assertViewHas('statusSebelumnya', null);
+
+        // Sebelum produksi: tidak ada tombol maju manual, kode PNW
+        $baru = $this->buatOrder(['nomor_whatsapp' => '0813 5555 6666']);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $baru))
+            ->assertOk()
+            ->assertSee('PNW-' . $baru->id)
+            ->assertViewHas('statusBerikutnya', null)
+            ->assertViewHas('bisaCatatDp', true)
+            ->assertViewHas('bisaTidakJadi', true)
+            ->assertViewHas('teksSpp', null);
     }
 
     public function test_hapus_order_soft_delete_khusus_admin(): void
@@ -489,7 +540,9 @@ class PesananTest extends TestCase
         $pesanan = $this->buatOrder(['mockup' => [UploadedFile::fake()->image('a.jpg', 50, 50)]]);
         $file    = $pesanan->file->first();
 
-        $this->sebagai($this->produksi)->delete(route('admin.pesanan.file.hapus', [$pesanan, $file]))->assertForbidden();
+        $this->sebagai($this->produksi)->delete(route('admin.pesanan.file.hapus', [$pesanan, $file]))
+            ->assertRedirect()->assertSessionHas('error', 'Aksi ini khusus admin.');
+        $this->sebagai($this->produksi)->deleteJson(route('admin.pesanan.file.hapus', [$pesanan, $file]))->assertForbidden();
         Storage::disk('local')->assertExists($file->path);
 
         $this->sebagai($this->admin)->delete(route('admin.pesanan.file.hapus', [$pesanan, $file]))->assertRedirect();

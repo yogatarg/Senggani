@@ -13,6 +13,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Order internal (bukan dari customer langsung). total disimpan & dihitung server
  * dari item (lihat PesananService); sisa & status_pembayaran dihitung di sini.
+ *
+ * Alur: hitung_harga (harga belum lengkap) → menunggu_dp → proses (nomor SPP diberikan
+ * saat DP dicatat) → selesai_produksi → pengiriman (wajib lunas) → selesai.
+ * Sebelum punya nomor SPP, pesanan dikenali dengan kode penawaran PNW-{id}.
  */
 class Pesanan extends Model
 {
@@ -23,7 +27,8 @@ class Pesanan extends Model
     // Tab dashboard (kunci query string ?tab=)
     public const TAB = [
         'semua'            => 'Semua SPP',
-        'antrian'          => 'Antrian Produksi',
+        'hitung_harga'     => 'Hitung Harga',
+        'menunggu_dp'      => 'Menunggu DP',
         'proses'           => 'Dalam Proses',
         'selesai_produksi' => 'Pesanan Selesai',
         'pengiriman'       => 'Pengiriman',
@@ -42,6 +47,9 @@ class Pesanan extends Model
 
     // Ambang "mendekati deadline" (hari sebelum deadline, termasuk hari-H)
     public const HARI_MENDEKAT = 3;
+
+    // Awalan kode penawaran untuk pesanan yang belum punya nomor SPP (PNW-23)
+    public const AWALAN_PENAWARAN = 'PNW-';
 
     // Jenis deadline: barang harus siap (diambil) atau sudah dikirim pada tanggal itu
     public const JENIS_DEADLINE = [
@@ -63,13 +71,13 @@ class Pesanan extends Model
 
     protected $fillable = [
         'nomor_spp', 'customer_id', 'nama_customer', 'nama_brand', 'nomor_whatsapp', 'alamat', 'kota',
-        'tanggal_order', 'deadline', 'jenis_deadline', 'total', 'dp', 'tanggal_lunas',
-        'link_desain', 'catatan_desain', 'status_desain', 'catatan_admin',
+        'tanggal_order', 'deadline', 'jenis_deadline', 'total', 'dp', 'tanggal_dp', 'tanggal_lunas',
+        'link_desain', 'catatan_desain', 'status_desain', 'catatan_admin', 'catatan_harga',
         'status_produksi', 'selesai_pada', 'dibuat_oleh',
     ];
 
     protected $attributes = [
-        'status_produksi' => 'antrian',
+        'status_produksi' => 'hitung_harga',
         'status_desain'   => 'belum_dikirim',
         'jenis_deadline'  => 'kirim',
         'total'           => 0,
@@ -82,6 +90,7 @@ class Pesanan extends Model
             'nomor_spp'       => 'integer',
             'tanggal_order'   => 'date',
             'deadline'        => 'date',
+            'tanggal_dp'      => 'date',
             'tanggal_lunas'   => 'date',
             'selesai_pada'    => 'datetime',
             'total'           => 'decimal:2',
@@ -145,6 +154,34 @@ class Pesanan extends Model
         return Attribute::get(fn () => self::STATUS_BAYAR[$this->status_pembayaran]);
     }
 
+    /** Selesai produksi tetapi belum lunas: belum boleh dikirim (lihat PesananService::ubahStatus). */
+    protected function menungguPelunasan(): Attribute
+    {
+        return Attribute::get(fn () => $this->status_produksi === StatusProduksi::SelesaiProduksi && ! $this->tanggal_lunas);
+    }
+
+    // ── Harga ──────────────────────────────────────────
+
+    /** Semua item sudah punya harga satuan (minimal satu item). */
+    protected function hargaLengkap(): Attribute
+    {
+        return Attribute::get(function () {
+            $item = $this->relationLoaded('detailPesanan') ? $this->detailPesanan : $this->detailPesanan()->get();
+
+            return $item->isNotEmpty() && $item->every(fn ($d) => $d->harga_satuan !== null);
+        });
+    }
+
+    /** Jumlah item yang belum diberi harga. */
+    protected function jumlahItemTanpaHarga(): Attribute
+    {
+        return Attribute::get(function () {
+            $item = $this->relationLoaded('detailPesanan') ? $this->detailPesanan : $this->detailPesanan()->get();
+
+            return $item->filter(fn ($d) => $d->harga_satuan === null)->count();
+        });
+    }
+
     // ── Deadline (dihitung) ────────────────────────────
 
     /** Selisih hari kalender dari hari ini ke deadline (negatif = sudah lewat). */
@@ -156,13 +193,13 @@ class Pesanan extends Model
     }
 
     /**
-     * "lewat" | "mendekat" | null. Hanya untuk order yang belum selesai produksi
-     * (antrian/proses). Mendekat = deadline hari ini s.d. HARI_MENDEKAT hari lagi.
+     * "lewat" | "mendekat" | null. Hanya untuk status hitung_harga, menunggu_dp, proses,
+     * selesai_produksi. Mendekat = deadline hari ini s.d. HARI_MENDEKAT hari lagi.
      */
     protected function penandaDeadline(): Attribute
     {
         return Attribute::get(function () {
-            if (! $this->deadline || ! $this->status_produksi?->belumSelesaiProduksi()) {
+            if (! $this->deadline || ! $this->status_produksi?->pantauDeadline()) {
                 return null;
             }
 
@@ -179,21 +216,22 @@ class Pesanan extends Model
     // ── Nomor SPP ──────────────────────────────────────
 
     /**
-     * Saran nomor SPP berikutnya = nomor terbesar yang pernah dipakai (termasuk yang
-     * dihapus) + 1; 1 bila belum ada pesanan sama sekali.
+     * Saran nomor SPP berikutnya = nomor terbesar dari SPP yang TIDAK dihapus + 1;
+     * 1 bila belum ada. Keunikan tetap menghitung SPP yang dihapus (lihat validasi),
+     * jadi saran bisa saja sudah dipakai SPP terhapus; admin diberi tahu lewat galat unik.
      */
     public static function saranNomorSpp(): int
     {
-        return (int) static::withTrashed()->max('nomor_spp') + 1;
+        return (int) static::query()->max('nomor_spp') + 1;
     }
 
     /**
      * Nomor baru dianggap loncat bila selisihnya dari saran lebih dari AMBANG_LONCAT_NOMOR.
-     * Tidak berlaku untuk SPP pertama (admin melanjutkan nomor dari buku lama).
+     * Tidak berlaku untuk nomor SPP pertama (admin melanjutkan nomor dari buku lama).
      */
     public static function nomorSppLoncat(int $nomor): bool
     {
-        if (! static::withTrashed()->exists()) {
+        if (! static::query()->whereNotNull('nomor_spp')->exists()) {
             return false;
         }
 
@@ -210,10 +248,32 @@ class Pesanan extends Model
         return null;
     }
 
-    /** "SPP #176" */
+    /** Ambil id dari kode penawaran "PNW-23", "pnw23", "PNW 23"; null bila bukan kode itu. */
+    public static function idKodePenawaran(?string $kata): ?int
+    {
+        if (preg_match('/^\s*pnw\s*-?\s*(\d{1,18})\s*$/i', (string) $kata, $m)) {
+            return (int) $m[1];
+        }
+
+        return null;
+    }
+
+    /** "SPP #176"; null bila belum punya nomor. */
     protected function nomorSppTeks(): Attribute
     {
         return Attribute::get(fn () => $this->nomor_spp ? 'SPP #' . $this->nomor_spp : null);
+    }
+
+    /** "PNW-23" (kode penawaran; null sebelum tersimpan). */
+    protected function kodePenawaran(): Attribute
+    {
+        return Attribute::get(fn () => $this->id ? self::AWALAN_PENAWARAN . $this->id : null);
+    }
+
+    /** Kode untuk tampilan: "SPP #176" bila sudah bernomor, selain itu "PNW-23". */
+    protected function kodeTampil(): Attribute
+    {
+        return Attribute::get(fn () => $this->nomor_spp_teks ?? $this->kode_penawaran);
     }
 
     // ── Deadline: label & teks ─────────────────────────
@@ -244,10 +304,15 @@ class Pesanan extends Model
     /**
      * Teks SPP siap salin, format mengikuti contoh pengguna. Banyak item → blok
      * bernomor dalam satu pesan. Baris dengan isian kosong dilewati.
+     * null bila SPP belum punya nomor (belum masuk produksi).
      */
     protected function teksSpp(): Attribute
     {
         return Attribute::get(function () {
+            if (! $this->nomor_spp) {
+                return null;
+            }
+
             $item = $this->relationLoaded('detailPesanan') ? $this->detailPesanan : $this->detailPesanan()->get();
 
             $blok = [];
@@ -323,10 +388,10 @@ class Pesanan extends Model
         return $baris;
     }
 
-    /** "📌Harga : Rp4.300 /pcs" (dilewati bila harga 0). */
+    /** "📌Harga : Rp4.300 /pcs" (dilewati bila harga kosong/0). */
     private function barisHarga(DetailPesanan $d): ?string
     {
-        if ((float) $d->harga_satuan <= 0) {
+        if ($d->harga_satuan === null || (float) $d->harga_satuan <= 0) {
             return null;
         }
 
@@ -344,7 +409,7 @@ class Pesanan extends Model
     /** Link WA tanpa nomor tujuan: admin memilih sendiri kontak/grup produksi. */
     protected function linkWhatsappSpp(): Attribute
     {
-        return Attribute::get(fn () => 'https://wa.me/?text=' . rawurlencode($this->teks_spp));
+        return Attribute::get(fn () => $this->teks_spp === null ? null : 'https://wa.me/?text=' . rawurlencode($this->teks_spp));
     }
 
     // ── Lain-lain ──────────────────────────────────────
@@ -363,19 +428,32 @@ class Pesanan extends Model
 
     // ── Scope ──────────────────────────────────────────
 
-    /** Filter tab dashboard. Semua = order aktif saja; History = selesai + dibatalkan. */
+    /** Filter tab dashboard. Semua = status aktif; History = selesai + tidak jadi + dibatalkan. */
     public function scopeTab(Builder $query, string $tab): Builder
     {
         return match ($tab) {
             'history' => $query->whereIn('status_produksi', StatusProduksi::nilaiRiwayat()),
-            'antrian', 'proses', 'selesai_produksi', 'pengiriman' => $query->where('status_produksi', $tab),
-            default   => $query->whereNotIn('status_produksi', StatusProduksi::nilaiRiwayat()),
+            'hitung_harga', 'menunggu_dp', 'proses', 'selesai_produksi', 'pengiriman' => $query->where('status_produksi', $tab),
+            default   => $query->whereIn('status_produksi', StatusProduksi::AKTIF),
         };
     }
 
     /**
-     * Cari nama customer, nama brand, atau nomor SPP ("176" / "#176" / "SPP #176"
-     * cocok persis ke nomor_spp). Karakter wildcard LIKE di-escape.
+     * Pesanan untuk notifikasi deadline: status yang dipantau dan deadline sudah lewat
+     * atau paling lambat HARI_MENDEKAT hari lagi. Urut paling mendesak dulu.
+     */
+    public function scopeDeadlineDekat(Builder $query): Builder
+    {
+        return $query->whereIn('status_produksi', StatusProduksi::PANTAU_DEADLINE)
+            ->whereNotNull('deadline')
+            ->whereDate('deadline', '<=', today()->addDays(self::HARI_MENDEKAT)->toDateString())
+            ->orderBy('deadline')->orderBy('id');
+    }
+
+    /**
+     * Cari nama customer, nama brand, nomor SPP ("176" / "#176" / "SPP #176" cocok persis
+     * ke nomor_spp), atau kode penawaran ("PNW-23" / "pnw23" cocok ke id).
+     * Karakter wildcard LIKE di-escape.
      */
     public function scopeCari(Builder $query, ?string $kata): Builder
     {
@@ -386,13 +464,17 @@ class Pesanan extends Model
 
         $pola  = '%' . addcslashes($kata, '\\%_') . '%';
         $nomor = self::angkaNomorSpp($kata);
+        $idPnw = self::idKodePenawaran($kata);
 
-        return $query->where(function (Builder $q) use ($pola, $nomor) {
+        return $query->where(function (Builder $q) use ($pola, $nomor, $idPnw) {
             $q->where('nama_customer', 'like', $pola)
                 ->orWhere('nama_brand', 'like', $pola);
 
             if ($nomor !== null) {
                 $q->orWhere('nomor_spp', $nomor);
+            }
+            if ($idPnw !== null) {
+                $q->orWhere('id', $idPnw);
             }
         });
     }
@@ -400,7 +482,7 @@ class Pesanan extends Model
     public function scopeUrutkan(Builder $query, string $urut, string $tab): Builder
     {
         if ($tab === 'history' && $urut === 'deadline') {
-            // Bawaan History: yang paling baru selesai/dibatalkan di atas
+            // Bawaan History: yang paling baru selesai/tidak jadi/dibatalkan di atas
             return $query->orderByDesc('selesai_pada')->orderByDesc('id');
         }
 

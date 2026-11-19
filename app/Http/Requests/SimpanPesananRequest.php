@@ -3,6 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enums\StatusDesain;
+use App\Enums\StatusProduksi;
+use App\Http\Requests\Concerns\AngkaRupiah;
+use App\Http\Requests\Concerns\PeriksaNomorSpp;
 use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Pesanan;
 use App\Models\PesananFile;
@@ -19,10 +22,15 @@ use Illuminate\Validation\Validator;
  *   lalu isi item[i][<field>_lainnya].
  * - item[i][finishing][]: daftar nama finishing (multi) + item[i][finishing_lainnya] teks bebas.
  * - Harga & DP boleh dikirim dengan pemisah ribuan ("2.500" / "Rp 2.500"); disimpan rupiah bulat.
+ * - item[i][harga_satuan]: OPSIONAL (kosong = belum dihitung). Wajib saat edit SPP yang sudah
+ *   melewati Hitung Harga (menunggu_dp dst.).
  * - mockup[] dan referensi[]: gambar baru (maks 5 MB per file, total maks 10 file per order).
- * - nomor_spp: angka bulat ≥1 unik (boleh "#176" / "SPP #176"; "12.5" / "1e3" ditolak). Nomor yang loncat jauh dari saran ditolak dengan
- *   error di kunci "konfirmasi_nomor" kecuali dikirim konfirmasi_nomor=1. Saat edit, mengganti
+ * - nomor_spp: TIDAK dipakai saat tambah (nomor diberikan saat Catat DP). Saat edit SPP yang sudah
+ *   bernomor: angka bulat ≥1 unik (boleh "#176" / "SPP #176"; "12.5" / "1e3" ditolak); mengganti
  *   nomor ditolak dengan error di kunci "konfirmasi_ganti_nomor" kecuali dikirim konfirmasi_ganti_nomor=1.
+ *   Saat edit SPP yang belum bernomor, nomor_spp diabaikan.
+ * - dp & tanggal_lunas: diabaikan saat tambah dan saat edit SPP yang belum masuk produksi
+ *   (DP dicatat lewat "Catat DP", pelunasan lewat "Catat lunas").
  * - customer_id (opsional) + perbarui_customer=1 (opsional): lihat PesananService::tentukanCustomer.
  * - lepas_customer=1 (opsional, saat edit): customer_id kosong berarti SPP dilepas dari customer lama
  *   dan customer ditentukan ulang dari isian (pemilik WA bila ada, jika tidak customer baru).
@@ -31,13 +39,10 @@ use Illuminate\Validation\Validator;
  */
 class SimpanPesananRequest extends FormRequest
 {
-    use PesanIndonesia;
+    use AngkaRupiah, PeriksaNomorSpp, PesanIndonesia;
 
     // Batas total order agar muat di kolom decimal(15,2)
-    private const MAKS_TOTAL = 9_999_999_999_999;
-
-    // Batas kolom unsignedInteger yang masuk akal untuk nomor SPP
-    private const MAKS_NOMOR = 99_999_999;
+    public const MAKS_TOTAL = 9_999_999_999_999;
 
     private const PESAN_BUKAN_GAMBAR = 'File harus berupa gambar JPG, PNG, atau WebP.';
 
@@ -73,17 +78,41 @@ class SimpanPesananRequest extends FormRequest
             $this->merge(['item' => $item]);
         }
 
-        if ($this->has('nomor_spp') && is_string($this->input('nomor_spp'))) {
-            // "#176" / "SPP #176" → "176". Format lain ("12.5", "1e3", "1.000") dibiarkan apa adanya
-            // supaya ditolak aturan integer, bukan diubah diam-diam menjadi angka lain.
-            $mentah = trim($this->input('nomor_spp'));
-            $nomor  = Pesanan::angkaNomorSpp($mentah);
-            $this->merge(['nomor_spp' => $nomor ?? ($mentah === '' ? null : $mentah)]);
-        }
+        // "#176" / "SPP #176" → "176". Format lain ("12.5", "1e3", "1.000") dibiarkan apa adanya
+        // supaya ditolak aturan integer, bukan diubah diam-diam menjadi angka lain.
+        $this->rapikanNomorSpp();
 
         if ($this->has('dp')) {
             $this->merge(['dp' => $this->keAngka($this->input('dp'))]);
         }
+    }
+
+    /** Pesanan yang diedit (null saat tambah). */
+    private function pesananEdit(): ?Pesanan
+    {
+        $pesanan = $this->route('pesanan');
+
+        return $pesanan instanceof Pesanan ? $pesanan : null;
+    }
+
+    /** Nomor SPP ikut divalidasi & disimpan hanya saat edit SPP yang sudah bernomor. */
+    private function pakaiNomor(): bool
+    {
+        return (bool) $this->pesananEdit()?->nomor_spp;
+    }
+
+    /** DP & tanggal lunas lewat form hanya untuk SPP yang sudah masuk produksi. */
+    private function pakaiPembayaran(): bool
+    {
+        return (bool) $this->pesananEdit()?->status_produksi?->sudahProduksi();
+    }
+
+    /** Harga wajib bila SPP sudah melewati Hitung Harga (menunggu_dp, proses, dst.). */
+    private function hargaWajib(): bool
+    {
+        $status = $this->pesananEdit()?->status_produksi;
+
+        return $status !== null && $status !== StatusProduksi::HitungHarga && $status !== StatusProduksi::TidakJadi;
     }
 
     public function rules(): array
@@ -91,10 +120,10 @@ class SimpanPesananRequest extends FormRequest
         // bail: file bukan gambar cukup satu galat (tanpa galat ukuran/dimensi menyusul)
         $gambar = ['bail', 'image', 'mimes:jpg,jpeg,png,webp', 'max:' . PesananFile::MAKS_KB, 'dimensions:max_width=8000,max_height=8000'];
         $lainnya = Pesanan::LAINNYA;
+        $bayar   = $this->pakaiPembayaran();
 
         return [
-            'nomor_spp'              => ['required', 'integer', 'min:1', 'max:' . self::MAKS_NOMOR],
-            'konfirmasi_nomor'       => ['nullable', 'boolean'],
+            'nomor_spp'              => $this->pakaiNomor() ? ['required', 'integer', 'min:1', 'max:' . self::MAKS_NOMOR] : ['exclude'],
             'konfirmasi_ganti_nomor' => ['nullable', 'boolean'],
             'customer_id'            => ['nullable', 'integer', Rule::exists('customer', 'id')],
             'perbarui_customer'      => ['nullable', 'boolean'],
@@ -108,8 +137,8 @@ class SimpanPesananRequest extends FormRequest
             'kota'            => ['required', 'string', 'max:100'],
             'tanggal_order'   => ['required', 'date'],
             'deadline'        => ['required', 'date', 'after_or_equal:tanggal_order'],
-            'dp'              => ['nullable', 'integer', 'min:0'],
-            'tanggal_lunas'   => ['nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'],
+            'dp'              => $bayar ? ['nullable', 'integer', 'min:0'] : ['exclude'],
+            'tanggal_lunas'   => $bayar ? ['nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'] : ['exclude'],
             'link_desain'     => ['nullable', 'url', 'max:500', 'starts_with:https://drive.google.com/,https://docs.google.com/'],
             'catatan_desain'  => ['nullable', 'string', 'max:5000'],
             'status_desain'   => ['nullable', Rule::enum(StatusDesain::class)],
@@ -133,7 +162,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.finishing_lainnya'       => ['nullable', 'string', 'max:255'],
             'item.*.aksesori'                => ['nullable', 'string', 'max:255'],
             'item.*.jumlah'                  => ['required', 'integer', 'min:1', 'max:10000000'],
-            'item.*.harga_satuan'            => ['required', 'integer', 'min:0', 'max:1000000000'],
+            'item.*.harga_satuan'            => [$this->hargaWajib() ? 'required' : 'nullable', 'integer', 'min:0', 'max:1000000000'],
 
             'mockup'      => ['nullable', 'array', 'max:' . PesananFile::MAKS_PER_ORDER],
             'mockup.*'    => $gambar,
@@ -147,7 +176,7 @@ class SimpanPesananRequest extends FormRequest
         return [function (Validator $validator) {
             $adaGalatDasar = $validator->errors()->isNotEmpty();
 
-            if (! $validator->errors()->has('nomor_spp')) {
+            if ($this->pakaiNomor() && ! $validator->errors()->has('nomor_spp')) {
                 $this->periksaNomorSpp($validator);
             }
 
@@ -165,16 +194,20 @@ class SimpanPesananRequest extends FormRequest
                 $validator->errors()->add('item', 'Total SPP terlalu besar.');
             }
 
-            if ((int) $this->input('dp', 0) > $total) {
-                $validator->errors()->add('dp', 'DP tidak boleh lebih dari total SPP (Rp ' . number_format($total, 0, ',', '.') . ').');
+            $pesanan = $this->pesananEdit();
+
+            // DP yang dibandingkan: isian form (SPP produksi) atau DP yang sudah tercatat
+            $dp = $this->pakaiPembayaran() ? (int) $this->input('dp', 0) : (int) ($pesanan?->dp ?? 0);
+            if ($dp > $total) {
+                $validator->errors()->add($this->pakaiPembayaran() ? 'dp' : 'item',
+                    'DP (Rp ' . number_format($dp, 0, ',', '.') . ') tidak boleh lebih dari total SPP (Rp ' . number_format($total, 0, ',', '.') . ').');
             }
 
-            if ($this->filled('tanggal_lunas') && $total <= 0) {
+            if ($this->pakaiPembayaran() && $this->filled('tanggal_lunas') && $total <= 0) {
                 $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total SPP lebih dari Rp 0.');
             }
 
-            $pesanan = $this->route('pesanan');
-            $sudahAda = $pesanan instanceof Pesanan ? $pesanan->file()->count() : 0;
+            $sudahAda = $pesanan ? $pesanan->file()->count() : 0;
             $baru = count($this->file('mockup', [])) + count($this->file('referensi', []));
             if ($sudahAda + $baru > PesananFile::MAKS_PER_ORDER) {
                 $sisa = max(PesananFile::MAKS_PER_ORDER - $sudahAda, 0);
@@ -183,41 +216,21 @@ class SimpanPesananRequest extends FormRequest
         }];
     }
 
-    /** Unik (termasuk SPP yang dihapus), konfirmasi loncatan, dan konfirmasi ganti nomor. */
+    /** Edit SPP bernomor: unik (termasuk SPP yang dihapus) dan konfirmasi ganti nomor. */
     private function periksaNomorSpp(Validator $validator): void
     {
         $nomor   = (int) $this->input('nomor_spp');
-        $pesanan = $this->route('pesanan');
-        $edit    = $pesanan instanceof Pesanan;
+        $pesanan = $this->pesananEdit();
 
-        $pemilik = Pesanan::withTrashed()
-            ->where('nomor_spp', $nomor)
-            ->when($edit, fn ($q) => $q->whereKeyNot($pesanan->id))
-            ->first(['id', 'nama_customer', 'deleted_at']);
-
-        if ($pemilik) {
-            $validator->errors()->add('nomor_spp', "SPP #{$nomor} sudah dipakai oleh {$pemilik->nama_customer}"
-                . ($pemilik->trashed() ? ' (SPP itu sudah dihapus).' : '.'));
-
+        if ($this->periksaNomorUnik($validator, $nomor, $pesanan)) {
             return;
         }
 
-        if ($edit) {
-            $lama = (int) $pesanan->nomor_spp;
-            if ($nomor !== $lama && ! $this->boolean('konfirmasi_ganti_nomor')) {
-                $validator->errors()->add('konfirmasi_ganti_nomor',
-                    "Nomor SPP akan diganti dari #{$lama} menjadi #{$nomor}. Produksi mungkin sudah menerima nomor lama "
-                    . 'lewat WhatsApp, jadi kabari mereka setelah menyimpan. Centang konfirmasi lalu simpan lagi bila yakin.');
-            }
-
-            return;
-        }
-
-        if (! $this->boolean('konfirmasi_nomor') && Pesanan::nomorSppLoncat($nomor)) {
-            $saran = Pesanan::saranNomorSpp();
-            $validator->errors()->add('konfirmasi_nomor',
-                "Nomor SPP #{$nomor} jauh dari nomor berikutnya (#{$saran}). Periksa lagi; bila memang benar, "
-                . 'centang konfirmasi lalu simpan lagi.');
+        $lama = (int) $pesanan->nomor_spp;
+        if ($nomor !== $lama && ! $this->boolean('konfirmasi_ganti_nomor')) {
+            $validator->errors()->add('konfirmasi_ganti_nomor',
+                "Nomor SPP akan diganti dari #{$lama} menjadi #{$nomor}. Produksi mungkin sudah menerima nomor lama "
+                . 'lewat WhatsApp, jadi kabari mereka setelah menyimpan. Centang konfirmasi lalu simpan lagi bila yakin.');
         }
     }
 
@@ -235,6 +248,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.jenis_bahan_lainnya.required_if'     => 'Tulis jenis bahan lainnya.',
             'item.*.jenis_cetak_lainnya.required_if'     => 'Tulis jenis cetak lainnya.',
             'item.*.jumlah.min' => 'Jumlah item ke-:position minimal 1.',
+            'item.*.harga_satuan.required' => 'Harga satuan item ke-:position wajib diisi karena SPP sudah melewati tahap Hitung Harga.',
             'mockup.*.image'         => self::PESAN_BUKAN_GAMBAR,
             'mockup.*.mimes'         => self::PESAN_BUKAN_GAMBAR,
             'referensi.*.image'      => self::PESAN_BUKAN_GAMBAR,
@@ -293,13 +307,15 @@ class SimpanPesananRequest extends FormRequest
 
     // ── Data siap simpan (dipakai controller setelah validasi) ──
 
-    /** Kolom tabel pesanan (tanpa customer_id, total, status_produksi). */
+    /**
+     * Kolom tabel pesanan (tanpa customer_id, total, status_produksi). nomor_spp, dp, dan
+     * tanggal_lunas hanya ada bila boleh diubah lewat form (lihat pakaiNomor/pakaiPembayaran).
+     */
     public function dataPesanan(): array
     {
         $v = $this->validated();
 
-        return [
-            'nomor_spp'      => (int) $v['nomor_spp'],
+        $data = [
             'nama_customer'  => trim($v['nama_customer']),
             'nama_brand'     => filled($v['nama_brand'] ?? null) ? trim($v['nama_brand']) : null,
             'jenis_deadline' => $v['jenis_deadline'],
@@ -308,13 +324,21 @@ class SimpanPesananRequest extends FormRequest
             'kota'           => trim($v['kota']),
             'tanggal_order'  => $v['tanggal_order'],
             'deadline'       => $v['deadline'],
-            'dp'             => (int) ($v['dp'] ?? 0),
-            'tanggal_lunas'  => $v['tanggal_lunas'] ?? null,
             'link_desain'    => $v['link_desain'] ?? null,
             'catatan_desain' => $v['catatan_desain'] ?? null,
             'status_desain'  => $v['status_desain'] ?? StatusDesain::BelumDikirim->value,
             'catatan_admin'  => $v['catatan_admin'] ?? null,
         ];
+
+        if ($this->pakaiNomor()) {
+            $data['nomor_spp'] = (int) $v['nomor_spp'];
+        }
+        if ($this->pakaiPembayaran()) {
+            $data['dp']            = (int) ($v['dp'] ?? 0);
+            $data['tanggal_lunas'] = $v['tanggal_lunas'] ?? null;
+        }
+
+        return $data;
     }
 
     /** Customer yang dipilih admin (null = cari lewat WA / buat baru). */
@@ -418,22 +442,4 @@ class SimpanPesananRequest extends FormRequest
         return preg_match('/^\d+,\d+$/', $nilai) ? str_replace(',', '.', $nilai) : $nilai;
     }
 
-    // "Rp 2.500" → "2500"; nilai kosong dibiarkan kosong agar aturan required bekerja
-    private function keAngka(mixed $nilai): mixed
-    {
-        if (! is_string($nilai)) {
-            return $nilai;
-        }
-
-        $nilai = trim($nilai);
-        if ($nilai === '') {
-            return null;
-        }
-
-        // Buang sen ",00" bila ada, lalu semua pemisah ribuan
-        $nilai = preg_replace('/,\d{1,2}$/', '', $nilai);
-        $angka = preg_replace('/[^\d\-]/', '', $nilai);
-
-        return $angka === '' ? $nilai : $angka;
-    }
 }

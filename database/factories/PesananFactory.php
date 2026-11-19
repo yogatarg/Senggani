@@ -30,16 +30,21 @@ class PesananFactory extends Factory
             'jenis_deadline'  => 'kirim',
             'total'           => 0,
             'dp'              => 0,
-            'status_produksi' => 'antrian',
+            'status_produksi' => 'proses',
             'status_desain'   => 'belum_dikirim',
         ];
     }
 
+    /**
+     * Status tertentu. Status sebelum produksi (hitung_harga, menunggu_dp, tidak_jadi)
+     * belum punya nomor SPP; selesai/tidak_jadi/dibatalkan mengisi selesai_pada.
+     */
     public function status(string $status): static
     {
         return $this->state(fn () => [
             'status_produksi' => $status,
-            'selesai_pada'    => in_array($status, ['selesai', 'dibatalkan'], true) ? now() : null,
+            'selesai_pada'    => in_array($status, ['selesai', 'tidak_jadi', 'dibatalkan'], true) ? now() : null,
+            ...(in_array($status, ['hitung_harga', 'menunggu_dp', 'tidak_jadi'], true) ? ['nomor_spp' => null] : []),
         ]);
     }
 }

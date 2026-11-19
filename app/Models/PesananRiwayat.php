@@ -41,7 +41,8 @@ class PesananRiwayat extends Model
 
     /**
      * Jenis entri untuk memilih ikon di timeline:
-     * dibuat | maju | mundur | batal | pulihkan | catatan.
+     * dibuat | maju | mundur | batal | tidak_jadi | pulihkan | catatan.
+     * Riwayat lama dengan status "antrian" tetap terbaca (label "Antrian Produksi").
      */
     protected function jenis(): Attribute
     {
@@ -55,11 +56,14 @@ class PesananRiwayat extends Model
             if ($this->status_ke === StatusProduksi::Dibatalkan) {
                 return 'batal';
             }
-            if ($this->status_dari === StatusProduksi::Dibatalkan) {
+            if ($this->status_ke === StatusProduksi::TidakJadi) {
+                return 'tidak_jadi';
+            }
+            if ($this->status_dari === StatusProduksi::Dibatalkan || $this->status_dari === StatusProduksi::TidakJadi) {
                 return 'pulihkan';
             }
 
-            return $this->status_ke->urutan() > $this->status_dari->urutan() ? 'maju' : 'mundur';
+            return (float) $this->status_ke->posisi() > (float) $this->status_dari->posisi() ? 'maju' : 'mundur';
         });
     }
 }

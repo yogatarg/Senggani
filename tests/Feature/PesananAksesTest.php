@@ -32,19 +32,22 @@ class PesananAksesTest extends TestCase
             ->assertSessionHas('admin_peran', 'produksi');
     }
 
-    public function test_login_dengan_email_di_field_login_admin_ke_dashboard(): void
+    public function test_login_dengan_email_di_field_login_admin_ke_pesanan(): void
     {
         $admin = Admin::factory()->create(['email' => 'cs@contoh.test', 'username' => 'cs']);
 
         $this->post('/admin/login', ['login' => 'cs@contoh.test', 'password' => 'password'])
-            ->assertRedirect(route('admin.dashboard'))
+            ->assertRedirect(route('admin.pesanan.index'))
             ->assertSessionHas('admin_peran', 'admin');
 
         $this->post('/admin/logout');
 
         $this->post('/admin/login', ['login' => 'cs', 'password' => 'password'])
-            ->assertRedirect(route('admin.dashboard'))
+            ->assertRedirect(route('admin.pesanan.index'))
             ->assertSessionHas('admin_id', $admin->id);
+
+        // Sudah login lalu membuka halaman login: ke daftar Pesanan juga
+        $this->get('/admin/login')->assertRedirect(route('admin.pesanan.index'));
     }
 
     public function test_login_username_salah_pesan_sama_dan_terkena_limit(): void
@@ -111,9 +114,12 @@ class PesananAksesTest extends TestCase
             $this->sebagai($produksi)->get($url)->assertRedirect(route('admin.pesanan.index'));
         }
 
-        $this->sebagai($produksi)->post('/admin/bahan', ['nama_bahan' => 'Kraft'])->assertForbidden();
-        $this->sebagai($produksi)->post('/admin/kategori-produk', ['nama_kategori' => 'X'])->assertForbidden();
-        $this->sebagai($produksi)->post('/admin/pengguna', [])->assertForbidden();
+        // Form biasa: kembali dengan pesan (bukan JSON mentah); JSON tetap 403
+        $pesan = 'Anda tidak punya akses ke halaman tersebut.';
+        $this->sebagai($produksi)->post('/admin/bahan', ['nama_bahan' => 'Kraft'])->assertRedirect()->assertSessionHas('error', $pesan);
+        $this->sebagai($produksi)->post('/admin/kategori-produk', ['nama_kategori' => 'X'])->assertRedirect()->assertSessionHas('error', $pesan);
+        $this->sebagai($produksi)->post('/admin/pengguna', [])->assertRedirect()->assertSessionHas('error', $pesan);
+        $this->sebagai($produksi)->postJson('/admin/bahan', ['nama_bahan' => 'Kraft'])->assertForbidden()->assertExactJson(['pesan' => $pesan]);
         $this->assertDatabaseCount('bahan', 0);
     }
 
@@ -124,17 +130,29 @@ class PesananAksesTest extends TestCase
 
         $this->sebagai($produksi)->get(route('admin.pesanan.create'))
             ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Halaman ini khusus admin.');
-        $this->sebagai($produksi)->post(route('admin.pesanan.store'), [])->assertForbidden();
         $this->sebagai($produksi)->get(route('admin.pesanan.edit', $pesanan))
             ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Halaman ini khusus admin.');
-        $this->sebagai($produksi)->put(route('admin.pesanan.update', $pesanan), [])->assertForbidden();
-        $this->sebagai($produksi)->delete(route('admin.pesanan.destroy', $pesanan))->assertForbidden();
-        $this->sebagai($produksi)->post(route('admin.pesanan.batal', $pesanan), ['status_lama' => 'antrian'])->assertForbidden();
-        $this->sebagai($produksi)->post(route('admin.pesanan.pulihkan', $pesanan))->assertForbidden();
-        $this->sebagai($produksi)->post(route('admin.pesanan.lunas', $pesanan))->assertForbidden();
+
+        $aksi = [
+            ['post', route('admin.pesanan.store'), []],
+            ['put', route('admin.pesanan.update', $pesanan), []],
+            ['delete', route('admin.pesanan.destroy', $pesanan), []],
+            ['post', route('admin.pesanan.batal', $pesanan), ['status_lama' => 'proses']],
+            ['post', route('admin.pesanan.pulihkan', $pesanan), []],
+            ['post', route('admin.pesanan.lunas', $pesanan), []],
+            ['post', route('admin.pesanan.dp', $pesanan), ['dp' => '1', 'nomor_spp' => '1']],
+            ['post', route('admin.pesanan.tidak_jadi', $pesanan), ['status_lama' => 'proses']],
+        ];
+        foreach ($aksi as [$metode, $url, $data]) {
+            // Form biasa → kembali ke halaman asal dengan pesan; JSON → 403
+            $this->sebagai($produksi)->from(route('admin.pesanan.show', $pesanan))->{$metode}($url, $data)
+                ->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('error', 'Aksi ini khusus admin.');
+            $this->sebagai($produksi)->{$metode . 'Json'}($url, $data)
+                ->assertForbidden()->assertExactJson(['pesan' => 'Aksi ini khusus admin.']);
+        }
 
         $this->assertNotSoftDeleted($pesanan);
-        $this->assertSame('antrian', $pesanan->fresh()->status_produksi->value);
+        $this->assertSame('proses', $pesanan->fresh()->status_produksi->value);
     }
 
     public function test_produksi_boleh_lihat_daftar_detail_harga_dan_ubah_password(): void

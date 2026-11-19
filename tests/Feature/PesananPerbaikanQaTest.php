@@ -66,6 +66,16 @@ class PesananPerbaikanQaTest extends TestCase
         return array_replace_recursive($this->data(['nomor_spp' => (string) $pesanan->nomor_spp]), $ubah);
     }
 
+    /** Catat DP & masukkan ke produksi (admin). */
+    private function masukProduksi(Pesanan $pesanan, int $nomor = 1): Pesanan
+    {
+        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $pesanan), [
+            'dp' => '100.000', 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1',
+        ])->assertSessionHasNoErrors();
+
+        return $pesanan->fresh();
+    }
+
     // ── 1. Lepas customer saat edit ────────────────────
 
     public function test_edit_dengan_lepas_customer_membuat_customer_baru_dari_isian(): void
@@ -126,6 +136,9 @@ class PesananPerbaikanQaTest extends TestCase
             ['post', route('admin.pesanan.batal', $pesanan)],
             ['post', route('admin.pesanan.pulihkan', $pesanan)],
             ['post', route('admin.pesanan.lunas', $pesanan)],
+            ['post', route('admin.pesanan.harga', $pesanan)],
+            ['post', route('admin.pesanan.dp', $pesanan)],
+            ['post', route('admin.pesanan.tidak_jadi', $pesanan)],
             ['put', route('admin.pesanan.update', $pesanan)],
         ];
         foreach ($html as [$metode, $url]) {
@@ -176,7 +189,12 @@ class PesananPerbaikanQaTest extends TestCase
         $this->sebagai($this->produksi)->get(route('admin.pesanan.edit', $pesanan))
             ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Halaman ini khusus admin.');
 
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.store'), [])
+        // Form biasa (bukan JSON): redirect back dengan flash, bukan JSON mentah
+        $this->sebagai($this->produksi)->from(route('admin.pesanan.create'))->post(route('admin.pesanan.store'), [])
+            ->assertRedirect(route('admin.pesanan.create'))->assertSessionHas('error', 'Aksi ini khusus admin.');
+        $this->sebagai($this->produksi)->from(route('admin.pesanan.show', $pesanan))->delete(route('admin.pesanan.destroy', $pesanan))
+            ->assertRedirect(route('admin.pesanan.show', $pesanan))->assertSessionHas('error', 'Aksi ini khusus admin.');
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.store'), [])
             ->assertForbidden()->assertExactJson(['pesan' => 'Aksi ini khusus admin.']);
         $this->sebagai($this->produksi)->putJson(route('admin.pesanan.update', $pesanan), [])
             ->assertForbidden()->assertExactJson(['pesan' => 'Aksi ini khusus admin.']);
@@ -188,28 +206,38 @@ class PesananPerbaikanQaTest extends TestCase
 
     public function test_nomor_spp_format_aneh_ditolak(): void
     {
-        foreach (['12.5', '1e3', '1.000', '17a', '-5x'] as $nomor) {
-            $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->data(['nomor_spp' => $nomor]))
-                ->assertSessionHasErrors(['nomor_spp' => 'Nomor SPP harus angka bulat, mis. 176.']);
-        }
-        $this->assertSame(0, Pesanan::count());
+        $dp = fn (Pesanan $p, string $nomor) => $this->sebagai($this->admin)
+            ->post(route('admin.pesanan.dp', $p), ['dp' => '100.000', 'nomor_spp' => $nomor]);
 
-        $this->assertSame(1, $this->buat(['nomor_spp' => 'SPP #1'])->nomor_spp);
-        $this->assertSame(2, $this->buat(['nomor_spp' => '#2'])->nomor_spp);
-        $this->assertSame(3, $this->buat(['nomor_spp' => ' 3 '])->nomor_spp);
+        $a = $this->buat();
+        foreach (['12.5', '1e3', '1.000', '17a', '-5x'] as $nomor) {
+            $dp($a, $nomor)->assertSessionHasErrors(['nomor_spp' => 'Nomor SPP harus angka bulat, mis. 176.']);
+        }
+        $this->assertNull($a->fresh()->nomor_spp);
+
+        $dp($a, 'SPP #1')->assertSessionHasNoErrors();
+        $this->assertSame(1, $a->fresh()->nomor_spp);
+        $b = $this->buat();
+        $dp($b, '#2')->assertSessionHasNoErrors();
+        $this->assertSame(2, $b->fresh()->nomor_spp);
+        $c = $this->buat();
+        $dp($c, ' 3 ')->assertSessionHasNoErrors();
+        $this->assertSame(3, $c->fresh()->nomor_spp);
     }
 
     // ── 5. Tanggal lunas ───────────────────────────────
 
     public function test_tanggal_lunas_tidak_boleh_sebelum_tanggal_spp(): void
     {
-        $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->data(['tanggal_lunas' => '2026-11-09']))
-            ->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh sebelum tanggal SPP.']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->data(['tanggal_lunas' => '2026-11-19']))
-            ->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh setelah hari ini.']);
+        // Lewat form edit: hanya untuk SPP yang sudah masuk produksi
+        $pesanan = $this->masukProduksi($this->buat());
+        $edit = fn (string $tgl) => $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan),
+            $this->dataEdit($pesanan, ['dp' => '100.000', 'tanggal_lunas' => $tgl]));
 
-        $pesanan = $this->buat(['tanggal_lunas' => '2026-11-10']);
-        $this->assertSame('2026-11-10', $pesanan->tanggal_lunas->toDateString());
+        $edit('2026-11-09')->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh sebelum tanggal SPP.']);
+        $edit('2026-11-19')->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh setelah hari ini.']);
+        $edit('2026-11-10')->assertSessionHasNoErrors();
+        $this->assertSame('2026-11-10', $pesanan->fresh()->tanggal_lunas->toDateString());
 
         $lain = Pesanan::factory()->create(['tanggal_order' => '2026-11-15', 'total' => 100000]);
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $lain), ['tanggal_lunas' => '2026-11-14'])
@@ -241,7 +269,7 @@ class PesananPerbaikanQaTest extends TestCase
 
     public function test_ukuran_dengan_koma_diterima_dan_bulat_tanpa_desimal(): void
     {
-        $pesanan = $this->buat(['item' => [['panjang' => '12,5', 'lebar' => ' 10 ', 'tinggi' => '7.25']]]);
+        $pesanan = $this->masukProduksi($this->buat(['item' => [['panjang' => '12,5', 'lebar' => ' 10 ', 'tinggi' => '7.25']]]));
         $item    = $pesanan->detailPesanan->first();
 
         $this->assertEquals(12.5, (float) $item->panjang);

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Enums\Peran;
 use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,10 +23,10 @@ class AuthController extends Controller
         return view('admin.auth.login');
     }
 
-    /** Halaman pertama setelah login: admin ke dashboard katalog, produksi ke Pesanan. */
+    /** Halaman pertama setelah login: semua peran (admin & produksi) ke daftar Pesanan. */
     public static function ruteAwal(?string $peran): string
     {
-        return $peran === Peran::Produksi->value ? 'admin.pesanan.index' : 'admin.dashboard';
+        return 'admin.pesanan.index';
     }
 
     // Proses login. Field "login" berisi email ATAU username (field lama "email" tetap diterima).

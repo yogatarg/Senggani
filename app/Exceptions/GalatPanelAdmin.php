@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Models\Admin;
 use App\Models\Pesanan;
 use App\Models\PesananFile;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -13,12 +14,28 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
  * Galat 403/404 untuk pengguna yang sudah login di /admin: jangan tampilkan halaman
  * error bawaan/publik. Halaman error publik (pengunjung situs) tidak berubah.
  *
- * - 404 (termasuk SPP yang sudah di-soft-delete): HTML → redirect ke daftar SPP dengan
- *   flash 'error'; JSON → {"pesan": ...} dengan 410 (SPP dihapus) atau 404.
- * - 403: GET HTML → redirect ke daftar SPP dengan flash 'error'; selain itu JSON 403 {"pesan": ...}.
+ * - 404 (termasuk SPP yang sudah di-soft-delete): HTML → redirect dengan flash 'error' ke
+ *   daftar SPP, atau (untuk URL katalog: produk/kategori/banner/bahan/finishing/cetak) ke
+ *   halaman index katalog yang sesuai bila pengguna admin; JSON → {"pesan": ...} dengan
+ *   410 (SPP dihapus) atau 404.
+ * - 403: HTML GET → redirect ke daftar SPP; HTML POST/PUT/PATCH/DELETE → redirect back
+ *   (cadangan: daftar SPP); keduanya dengan flash 'error'. JSON → 403 {"pesan": ...}.
  */
 class GalatPanelAdmin
 {
+    // Segmen URL /admin/<segmen>/... → rute index katalog tujuan saat 404
+    private const INDEX_KATALOG = [
+        'produk'          => 'admin.produk.index',
+        'galeri'          => 'admin.produk.index',
+        'ukuran'          => 'admin.produk.index',
+        'kategori-produk' => 'admin.kategori-produk.index',
+        'banner'          => 'admin.banner.index',
+        'bahan'           => 'admin.bahan.index',
+        'finishing'       => 'admin.finishing.index',
+        'cetak'           => 'admin.cetak.index',
+        'dashboard'       => 'admin.dashboard',
+    ];
+
     public const PESAN_KHUSUS_ADMIN = 'Halaman ini khusus admin.';
 
     public const PESAN_AKSI_KHUSUS_ADMIN = 'Aksi ini khusus admin.';
@@ -60,7 +77,7 @@ class GalatPanelAdmin
             $dihapus = ctype_digit($id) ? Pesanan::onlyTrashed()->find((int) $id) : null;
 
             if ($dihapus) {
-                $pesan  = "{$dihapus->nomor_spp_teks} sudah dihapus oleh admin.";
+                $pesan  = "{$dihapus->kode_tampil} sudah dihapus oleh admin.";
                 $status = 410;
             } else {
                 $pesan = 'SPP tidak ditemukan.';
@@ -75,7 +92,26 @@ class GalatPanelAdmin
             return response()->json(['pesan' => $pesan], $status);
         }
 
-        return redirect()->route('admin.pesanan.index')->with('error', $pesan);
+        $tujuan = self::tujuanKatalog($request) ?? 'admin.pesanan.index';
+
+        // Hindari loop bila halaman tujuan sendiri yang 404
+        if (rtrim(route($tujuan, [], false), '/') === '/' . trim($request->path(), '/')) {
+            return null;
+        }
+
+        return redirect()->route($tujuan)->with('error', $pesan);
+    }
+
+    /** Rute index katalog untuk URL katalog (khusus admin; produksi tetap ke daftar SPP). */
+    private static function tujuanKatalog(Request $request): ?string
+    {
+        // 404 binding model terjadi sebelum middleware auth.admin, jadi peran dibaca langsung dari akun di session
+        $id = $request->session()->get('admin_id');
+        if (! $id || ! Admin::find($id)?->isAdmin()) {
+            return null;
+        }
+
+        return self::INDEX_KATALOG[(string) $request->segment(2)] ?? null;
     }
 
     private static function ditolak(HttpExceptionInterface $e, Request $request)
@@ -87,10 +123,15 @@ class GalatPanelAdmin
             $pesan = $get ? self::PESAN_KHUSUS_ADMIN : self::PESAN_AKSI_KHUSUS_ADMIN;
         }
 
-        if ($get && ! $request->expectsJson()) {
+        if ($request->expectsJson()) {
+            return response()->json(['pesan' => $pesan], 403);
+        }
+
+        if ($get) {
             return redirect()->route('admin.pesanan.index')->with('error', $pesan);
         }
 
-        return response()->json(['pesan' => $pesan], 403);
+        // Form biasa (POST/PUT/PATCH/DELETE): kembali ke halaman asal dengan pesan, bukan JSON mentah
+        return redirect()->back(302, [], route('admin.pesanan.index'))->with('error', $pesan);
     }
 }

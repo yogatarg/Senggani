@@ -78,7 +78,10 @@ class CustomerController extends Controller
             ->with('detailPesanan')
             ->withCount('detailPesanan')
             ->withSum('detailPesanan as total_jumlah', 'jumlah')
+            // Penawaran (belum bernomor SPP) di atas, lalu nomor SPP terbesar
+            ->orderByRaw('nomor_spp IS NULL DESC')
             ->orderByDesc('nomor_spp')
+            ->orderByDesc('id')
             ->paginate(self::PER_HALAMAN)
             ->withQueryString();
 

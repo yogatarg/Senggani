@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Validator;
 
-/** Catat pelunasan (khusus admin). Tanggal bawaan: hari ini. */
+/** Catat pelunasan (khusus admin, SPP yang sudah masuk produksi). Tanggal bawaan: hari ini. */
 class LunasPesananRequest extends FormRequest
 {
     use PesanIndonesia;
@@ -38,6 +38,11 @@ class LunasPesananRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
+            if (! $this->route('pesanan')->status_produksi->sudahProduksi()) {
+                $validator->errors()->add('tanggal_lunas', 'Pelunasan dicatat setelah DP dicatat dan SPP masuk produksi.');
+
+                return;
+            }
             if ((float) $this->route('pesanan')->total <= 0) {
                 $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total SPP lebih dari Rp 0.');
             }
