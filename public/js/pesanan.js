@@ -500,6 +500,27 @@
         }
     }
 
+    // ── Rupiah minimal Rp 1 (harga satuan, DP) ─────────
+    // Input teks berformat "4.300", jadi pakai pesan validasi sendiri; kosong ditangani "required" (bila ada)
+    var cekMinRupiah = function (el) {
+        var v = el.value.trim();
+        el.setCustomValidity(v !== '' && keAngka(v) < 1 ? el.getAttribute('data-min-rupiah') : '');
+    };
+    $$('[data-min-rupiah]').forEach(cekMinRupiah);
+    document.addEventListener('input', function (e) {
+        if (e.target.matches && e.target.matches('[data-min-rupiah]')) cekMinRupiah(e.target);
+    });
+    // Form ber-novalidate (Hitung Harga): tetap cegah kirim harga Rp 0
+    $$('form[novalidate]').forEach(function (f) {
+        if (!$('[data-min-rupiah]', f)) return;
+        f.addEventListener('submit', function (e) {
+            var salah = $$('[data-min-rupiah]', f).filter(function (el) { cekMinRupiah(el); return !el.checkValidity(); })[0];
+            if (!salah) return;
+            e.preventDefault();
+            salah.reportValidity();
+        });
+    });
+
     // ════════════════════════════════════════════════
     // Detail order
     // ════════════════════════════════════════════════

@@ -109,7 +109,7 @@
         @if ($tampilHitungHarga)
             <section class="sg-kartu sg-kartu-harga sg-o-harga" aria-labelledby="judul-hitung">
                 <h2 class="sg-kartu-judul" id="judul-hitung"><i class="fa-solid fa-calculator" aria-hidden="true"></i> Hitung Harga</h2>
-                <p class="sg-bantu mt-0 mb-3">Isi harga satuan tiap item. Setelah semua item berharga, pesanan otomatis pindah ke <strong>Menunggu DP</strong>. Boleh disimpan sebagian dulu.</p>
+                <p class="sg-bantu mt-0 mb-3">Isi harga satuan tiap item. Setelah semua item berharga, pesanan otomatis pindah ke <strong>Menunggu DP</strong>. Boleh disimpan sebagian dulu. Harga yang diisi minimal Rp 1.</p>
                 <form method="POST" action="{{ route('admin.pesanan.harga', $pesanan) }}" id="form-harga" data-kirim data-form-harga novalidate>
                     @csrf
                     <div id="f-harga">
@@ -138,6 +138,7 @@
                                     <div class="sg-imbuh sg-imbuh-depan">
                                         <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
                                         <input type="text" inputmode="numeric" id="f-harga-{{ $d->id }}" name="harga[{{ $d->id }}]" value="{{ $nilaiH }}" autocomplete="off" placeholder="Belum diisi"
+                                               pattern=".*[1-9].*" data-min-rupiah="Harga satuan minimal Rp 1."
                                                class="form-control sg-angka @error($kunciH) is-invalid @enderror" data-rupiah data-harga-input
                                                aria-describedby="sub-harga-{{ $d->id }}{{ $errors->has($kunciH) ? ' ' . $gid($kunciH) : '' }}" @error($kunciH) aria-invalid="true" @enderror>
                                     </div>

@@ -166,12 +166,13 @@
             <div class="sg-imbuh sg-imbuh-depan">
                 <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
                 <input type="text" inputmode="numeric" id="{{ $fidI('harga_satuan') }}" name="{{ $n }}[harga_satuan]" value="{{ $hargaTampil }}" @if ($hargaWajib) required @endif autocomplete="off"
+                       pattern=".*[1-9].*" data-min-rupiah="Harga satuan minimal Rp 1."
                        class="form-control sg-angka @error($k('harga_satuan')) is-invalid @enderror" data-rupiah data-harga
                        @if ($errors->has($k('harga_satuan'))) aria-invalid="true" aria-describedby="{{ $gid($k('harga_satuan')) }}" @elseif (! $hargaWajib) aria-describedby="{{ $fidI('bantu-harga') }}" @endif>
             </div>
             {!! $galat($k('harga_satuan')) !!}
             @unless ($hargaWajib)
-                <p class="sg-bantu" id="{{ $fidI('bantu-harga') }}">Boleh dikosongkan — harga dihitung produksi.</p>
+                <p class="sg-bantu" id="{{ $fidI('bantu-harga') }}">Boleh dikosongkan — harga dihitung produksi. Bila diisi, minimal Rp 1.</p>
             @endunless
         </div>
     </div>

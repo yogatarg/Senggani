@@ -10,7 +10,7 @@
         'hitung_harga'     => ['ikon' => 'fa-calculator',        'pendek' => 'Harga'],
         'menunggu_dp'      => ['ikon' => 'fa-hourglass-half',    'pendek' => 'DP'],
         'proses'           => ['ikon' => 'fa-print',             'pendek' => 'Proses'],
-        'selesai_produksi' => ['ikon' => 'fa-circle-check',      'pendek' => 'Siap'],
+        'selesai_produksi' => ['ikon' => 'fa-circle-check',      'pendek' => 'Pesanan Selesai'],
         'pengiriman'       => ['ikon' => 'fa-truck',             'pendek' => 'Kirim'],
         'history'          => ['ikon' => 'fa-clock-rotate-left', 'pendek' => 'History'],
     ];

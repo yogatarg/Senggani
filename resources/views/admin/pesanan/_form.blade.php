@@ -62,6 +62,8 @@
     // Lihat SimpanPesananRequest: pakaiNomor, pakaiPembayaran, hargaWajib
     $pakaiNomor = $pesanan->exists && (bool) $pesanan->nomor_spp;
     $pakaiBayar = (bool) $statusSpp?->sudahProduksi();
+    // Kunci pelunasan: SPP dikirim/selesai wajib tetap tercatat lunas
+    $lunasWajib = in_array($statusSpp, [\App\Enums\StatusProduksi::Pengiriman, \App\Enums\StatusProduksi::Selesai], true);
     $hargaWajib = $statusSpp !== null && ! in_array($statusSpp, [\App\Enums\StatusProduksi::HitungHarga, \App\Enums\StatusProduksi::TidakJadi], true);
     // Edit SPP bernomor: konfirmasi_ganti_nomor (nomor diganti)
     $kunciKonfirmasi = 'konfirmasi_ganti_nomor';
@@ -333,23 +335,25 @@
             @if ($pakaiBayar)
             <div class="sg-dua mt-2">
                 <div class="sg-field">
-                    <label class="sg-label" for="f-dp">DP / sudah dibayar</label>
+                    <label class="sg-label" for="f-dp">DP / sudah dibayar <span class="sg-wajib" aria-hidden="true">*</span></label>
                     <div class="sg-imbuh sg-imbuh-depan">
                         <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                        <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpTampil }}" autocomplete="off" placeholder="0"
+                        <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpTampil }}" autocomplete="off" placeholder="0" required
+                               pattern=".*[1-9].*" data-min-rupiah="DP minimal Rp 1 karena SPP sudah masuk produksi."
                                class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp
-                               aria-describedby="peringatan-dp {{ $errors->has('dp') ? $gid('dp') : '' }}" @error('dp') aria-invalid="true" @enderror>
+                               aria-describedby="bantu-dp peringatan-dp {{ $errors->has('dp') ? $gid('dp') : '' }}" @error('dp') aria-invalid="true" @enderror>
                     </div>
                     {!! $galat('dp') !!}
+                    <p class="sg-bantu" id="bantu-dp">SPP sudah masuk produksi, DP wajib diisi minimal Rp 1.</p>
                     <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
                 </div>
                 <div class="sg-field">
-                    <label class="sg-label" for="f-tanggal_lunas">Tanggal lunas</label>
-                    <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', $tgl($pesanan->tanggal_lunas)) }}" max="{{ today()->toDateString() }}"
+                    <label class="sg-label" for="f-tanggal_lunas">Tanggal lunas @if ($lunasWajib)<span class="sg-wajib" aria-hidden="true">*</span>@endif</label>
+                    <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', $tgl($pesanan->tanggal_lunas)) }}" max="{{ today()->toDateString() }}" @if ($lunasWajib) required @endif
                            class="form-control @error('tanggal_lunas') is-invalid @enderror" data-tanggal-lunas
                            aria-describedby="bantu-lunas {{ $errors->has('tanggal_lunas') ? $gid('tanggal_lunas') : '' }}" @error('tanggal_lunas') aria-invalid="true" @enderror>
                     {!! $galat('tanggal_lunas') !!}
-                    <p class="sg-bantu" id="bantu-lunas">Isi bila customer sudah melunasi.</p>
+                    <p class="sg-bantu" id="bantu-lunas">{{ $lunasWajib ? 'Kembalikan status ke Pesanan Selesai bila pelunasan perlu dikoreksi.' : 'Isi bila customer sudah melunasi.' }}</p>
                 </div>
             </div>
 
