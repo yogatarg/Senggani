@@ -1,6 +1,7 @@
 {{--
     Modal konfirmasi ubah status (maju/mundur/batal/pulihkan), form POST biasa.
-    Variabel: $idModal, $judul, $aksi, $ke (StatusProduksi|null), $placeholder, $tombol, $gaya, $keterangan (opsional).
+    Variabel: $idModal, $judul, $aksi, $ke (StatusProduksi|null), $placeholder, $tombol, $gaya, $keterangan (opsional),
+    $kirimStatusBaru (bawaan true; false untuk batal/tidak jadi), $labelCatatan (bawaan "Catatan").
     Bila status sudah diubah orang lain, backend menolak (bentrok) dan halaman memuat ulang dengan pesan.
 --}}
 <div class="modal fade modal-sheet" id="{{ $idModal }}" tabindex="-1" aria-labelledby="{{ $idModal }}Judul" aria-hidden="true">
@@ -8,7 +9,7 @@
         <form class="modal-content" method="POST" action="{{ $aksi }}" data-kirim>
             @csrf
             <input type="hidden" name="status_lama" value="{{ $pesanan->status_produksi->value }}">
-            @if ($ke && $idModal !== 'modalBatal')
+            @if ($ke && ($kirimStatusBaru ?? true))
                 <input type="hidden" name="status_baru" value="{{ $ke->value }}">
             @endif
             <div class="modal-header">
@@ -24,7 +25,7 @@
                     </p>
                 @endif
                 @isset($keterangan)<p class="mb-3">{{ $keterangan }}</p>@endisset
-                <label for="{{ $idModal }}Catatan" class="sg-label">Catatan</label>
+                <label for="{{ $idModal }}Catatan" class="sg-label">{{ $labelCatatan ?? 'Catatan' }}</label>
                 <textarea id="{{ $idModal }}Catatan" name="catatan" rows="2" maxlength="500" class="form-control" style="min-height:72px" placeholder="{{ $placeholder }}"></textarea>
             </div>
             <div class="modal-footer">

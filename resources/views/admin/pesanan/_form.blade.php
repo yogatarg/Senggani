@@ -4,9 +4,10 @@
     $statusDesain (nilai => label), $lainnya (nilai opsi "Lainnya"), $labelSimpan, $urlBatal,
     $saranNomor (int), $jenisDeadline (nilai => label), $urlCariCustomer (endpoint JSON autocomplete).
 
-    Peringatan nomor SPP datang sebagai error validasi di kunci:
-    - konfirmasi_nomor        (tambah: nomor loncat jauh dari saran)   → kirim konfirmasi_nomor=1
-    - konfirmasi_ganti_nomor  (edit: nomor diganti)                    → kirim konfirmasi_ganti_nomor=1
+    Alur baru: tambah SPP TANPA nomor, DP, dan (boleh) tanpa harga. Nomor SPP diberikan saat "Catat DP".
+    - Nomor SPP tampil & wajib hanya saat edit SPP yang sudah bernomor (ganti nomor → konfirmasi_ganti_nomor=1).
+    - DP & tanggal lunas hanya saat edit SPP yang sudah masuk produksi.
+    - Harga satuan wajib hanya bila status sudah melewati Hitung Harga.
 --}}
 @php
     // Ubah item tersimpan ke bentuk input form: nilai di luar master menjadi "Lainnya" + teks bebas
@@ -26,7 +27,8 @@
             'jenis_cetak' => $ct, 'jenis_cetak_lainnya' => $ctL, 'warna_cetak' => $d->warna_cetak,
             'finishing' => array_values(array_intersect($fin, $masterFinishing)),
             'finishing_lainnya' => implode(', ', array_diff($fin, $masterFinishing)),
-            'aksesori' => $d->aksesori, 'jumlah' => $d->jumlah, 'harga_satuan' => (int) $d->harga_satuan,
+            'aksesori' => $d->aksesori, 'jumlah' => $d->jumlah,
+            'harga_satuan' => $d->harga_satuan === null ? null : (int) $d->harga_satuan,
         ];
     };
     $daftarItem = old('item', $pesanan->exists ? $pesanan->detailPesanan->map($keInput)->all() : [[]]);
@@ -56,8 +58,13 @@
     // Data chip customer terpilih (edit, atau setelah gagal validasi)
     $customerAwal = $customerTerpilih ? \App\Models\Customer::withCount('pesanan')->find($customerTerpilih) : null;
     if (! $customerAwal) { $customerTerpilih = null; }
-    // Tambah: konfirmasi_nomor (nomor loncat); edit: konfirmasi_ganti_nomor (nomor diganti)
-    $kunciKonfirmasi = $pesanan->exists ? 'konfirmasi_ganti_nomor' : 'konfirmasi_nomor';
+    $statusSpp = $pesanan->exists ? $pesanan->status_produksi : null;
+    // Lihat SimpanPesananRequest: pakaiNomor, pakaiPembayaran, hargaWajib
+    $pakaiNomor = $pesanan->exists && (bool) $pesanan->nomor_spp;
+    $pakaiBayar = (bool) $statusSpp?->sudahProduksi();
+    $hargaWajib = $statusSpp !== null && ! in_array($statusSpp, [\App\Enums\StatusProduksi::HitungHarga, \App\Enums\StatusProduksi::TidakJadi], true);
+    // Edit SPP bernomor: konfirmasi_ganti_nomor (nomor diganti)
+    $kunciKonfirmasi = 'konfirmasi_ganti_nomor';
     $tampilKonfirmasi = $errors->has($kunciKonfirmasi) || old($kunciKonfirmasi);
     $maksFile = \App\Models\PesananFile::MAKS_PER_ORDER;
 @endphp
@@ -69,7 +76,8 @@
         <section class="sg-kartu" id="bagian-customer" aria-labelledby="judul-customer">
             <h2 class="sg-kartu-judul" id="judul-customer"><span class="sg-no" aria-hidden="true">1</span> SPP &amp; customer</h2>
 
-            {{-- Nomor SPP --}}
+            {{-- Nomor SPP: hanya untuk SPP yang sudah bernomor (masuk produksi) --}}
+            @if ($pakaiNomor)
             <div class="sg-field sg-nomor-spp">
                 <label class="sg-label" for="f-nomor_spp">Nomor SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
                 <div class="sg-imbuh sg-imbuh-depan sg-nomor-spp-isian">
@@ -80,11 +88,7 @@
                 </div>
                 {!! $galat('nomor_spp') !!}
                 <p class="sg-bantu" id="bantu-nomor-spp">
-                    @if ($pesanan->exists)
-                        Nomor saat ini <strong class="sg-angka">#{{ $pesanan->nomor_spp }}</strong>. Ganti hanya bila salah input.
-                    @else
-                        Saran nomor berikutnya: <strong class="sg-angka">#{{ $saranNomor }}</strong>. Boleh diganti bila melanjutkan nomor buku.
-                    @endif
+                    Nomor saat ini <strong class="sg-angka">#{{ $pesanan->nomor_spp }}</strong>. Ganti hanya bila salah input.
                 </p>
 
                 {{-- Kotak konfirmasi nomor: tampil dari error server, atau dari cek browser sebelum kirim (server tetap penentu) --}}
@@ -101,6 +105,17 @@
                     </div>
                 </div>
             </div>
+            @else
+            <p class="sg-status-info mb-0">
+                <i class="fa-solid fa-hashtag" aria-hidden="true"></i>
+                <span>
+                    @if ($pesanan->exists)
+                        Kode sementara <strong class="sg-angka">{{ $pesanan->kode_tampil }}</strong>.
+                    @endif
+                    Nomor SPP diberikan saat admin mencatat DP dan memasukkan pesanan ke produksi.
+                </span>
+            </p>
+            @endif
 
             <hr class="sg-pemisah my-3">
 
@@ -282,7 +297,7 @@
 
         {{-- ④ Jadwal & harga --}}
         <section class="sg-kartu" id="bagian-harga" aria-labelledby="judul-harga">
-            <h2 class="sg-kartu-judul" id="judul-harga"><span class="sg-no" aria-hidden="true">4</span> Jadwal &amp; harga</h2>
+            <h2 class="sg-kartu-judul" id="judul-harga"><span class="sg-no" aria-hidden="true">4</span> Jadwal &amp; {{ $pakaiBayar ? 'pembayaran' : 'total' }}</h2>
             <div class="sg-jadwal">
                 <div class="sg-field">
                     <label class="sg-label" for="f-tanggal_order">Tanggal SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
@@ -315,6 +330,7 @@
 
             <div class="sg-otomatis"><span>Total <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
 
+            @if ($pakaiBayar)
             <div class="sg-dua mt-2">
                 <div class="sg-field">
                     <label class="sg-label" for="f-dp">DP / sudah dibayar</label>
@@ -339,6 +355,15 @@
 
             <div class="sg-otomatis"><span>Sisa <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-sisa>Rp 0</strong></div>
             <p class="mb-3">@include('admin.pesanan._badge-bayar-live')</p>
+            @else
+            <p class="sg-bantu mt-0 mb-3" data-bantu-total>
+                @if ($hargaWajib)
+                    DP dicatat lewat tombol <strong>Catat DP &amp; masukkan ke produksi</strong> di halaman detail.
+                @else
+                    Harga boleh dikosongkan; produksi menghitungnya. DP dicatat setelah harga lengkap, lewat halaman detail.
+                @endif
+            </p>
+            @endif
 
             <div class="sg-field">
                 <label class="sg-label" for="f-catatan_admin">Catatan SPP</label>
@@ -355,18 +380,22 @@
             <h2 class="sg-kartu-judul">Ringkasan</h2>
             <dl>
                 <div><dt>Item</dt><dd data-jumlah-item>1</dd></div>
-                <div><dt>Total</dt><dd data-total>Rp 0</dd></div>
-                <div><dt>DP</dt><dd data-dp-tampil>Rp 0</dd></div>
-                <div class="sg-sisa"><dt>Sisa</dt><dd data-sisa>Rp 0</dd></div>
+                <div @unless ($pakaiBayar) class="sg-sisa" @endunless><dt>Total</dt><dd data-total>Rp 0</dd></div>
+                @if ($pakaiBayar)
+                    <div><dt>DP</dt><dd data-dp-tampil>Rp 0</dd></div>
+                    <div class="sg-sisa"><dt>Sisa</dt><dd data-sisa>Rp 0</dd></div>
+                @endif
             </dl>
-            <p class="mt-2">@include('admin.pesanan._badge-bayar-live')</p>
+            @if ($pakaiBayar)
+                <p class="mt-2">@include('admin.pesanan._badge-bayar-live')</p>
+            @endif
             <hr class="sg-pemisah my-3">
             <nav aria-label="Lompat ke bagian">
                 <ol class="sg-lompat">
                     <li><a href="#bagian-customer">1. SPP &amp; customer</a></li>
                     <li><a href="#bagian-item">2. Item (<span data-jumlah-item>1</span>)</a></li>
                     <li><a href="#bagian-desain">3. Desain</a></li>
-                    <li><a href="#bagian-harga">4. Jadwal &amp; harga</a></li>
+                    <li><a href="#bagian-harga">4. Jadwal &amp; {{ $pakaiBayar ? 'pembayaran' : 'total' }}</a></li>
                 </ol>
             </nav>
             <hr class="sg-pemisah my-3">
@@ -382,7 +411,11 @@
 <div class="sg-bilah sg-bilah-form">
     <div class="sg-bilah-ringkas sg-angka">
         <strong>Total <span data-total>Rp 0</span></strong>
-        <span>Sisa <span data-sisa>Rp 0</span></span>
+        @if ($pakaiBayar)
+            <span>Sisa <span data-sisa>Rp 0</span></span>
+        @else
+            <span data-total-ket>{{ $hargaWajib ? 'Dihitung dari item' : 'Harga boleh menyusul' }}</span>
+        @endif
     </div>
     <a href="{{ $urlBatal }}" class="sg-btn sg-btn-sekunder d-none d-sm-inline-flex" data-batal-form>Batal</a>
     <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…">Simpan</button>

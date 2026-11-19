@@ -7,12 +7,16 @@
     $jumlahItem = (int) $p->detail_pesanan_count;
     $totalPcs = number_format((int) $p->total_jumlah, 0, ',', '.');
     $tagJudul = ($tingkat ?? 'h2') === 'h3' ? 'h3' : 'h2';
+    // Info harga hanya selama Hitung Harga; tanda pelunasan di status mana pun ia muncul
+    $tanpaHarga = $p->status_produksi === \App\Enums\StatusProduksi::HitungHarga ? $p->jumlah_item_tanpa_harga : 0;
+    $tungguLunas = $p->menunggu_pelunasan;
     $tampilKode = $p->customer_id && ! ($tanpaKode ?? false) && \Illuminate\Support\Facades\Gate::allows('kelola-customer');
     $ringkasLabel = collect([
         $p->kode_tampil,
         $p->nama_customer . ($p->nama_brand ? ' / ' . $p->nama_brand : ''),
         $p->status_produksi->label(),
-        'bayar ' . $p->label_status_pembayaran,
+        $tanpaHarga ? $tanpaHarga . ' item belum diberi harga' : null,
+        $tungguLunas ? 'menunggu pelunasan' : null,
         $p->penanda_deadline === 'lewat' ? 'lewat deadline ' . abs($p->hari_menuju_deadline) . ' hari'
             : ($p->penanda_deadline === 'mendekat' ? 'deadline dekat, ' . $p->deadline->translatedFormat('j F') : null),
     ])->filter()->implode(', ');
@@ -44,8 +48,13 @@
             {{ $totalPcs }} pcs
         @endif
     </p>
-    <dl class="sg-order-status">
-        <div><dt>Produksi</dt><dd>@include('admin.pesanan._badge-status', ['status' => $p->status_produksi])</dd></div>
-        <div><dt>Bayar</dt><dd>@include('admin.pesanan._badge-bayar', ['p' => $p, 'tanpaLabel' => true])</dd></div>
-    </dl>
+    <div class="sg-order-status sg-order-tanda">
+        @include('admin.pesanan._badge-status', ['status' => $p->status_produksi])
+        @if ($tungguLunas)
+            <span class="sg-bayar sg-by-dp"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i>Menunggu pelunasan</span>
+        @endif
+        @if ($tanpaHarga)
+            <span class="sg-info-harga"><i class="fa-solid fa-calculator" aria-hidden="true"></i>{{ $tanpaHarga }} item belum diberi harga</span>
+        @endif
+    </div>
 </article>

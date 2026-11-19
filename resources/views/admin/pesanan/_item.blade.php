@@ -13,12 +13,14 @@
     $hargaTampil = $v('harga_satuan');
     // Hanya angka murni yang diformat; isian lama (old) seperti "2.500" dibiarkan apa adanya (is_numeric akan membacanya 2,5)
     if (is_int($hargaTampil) || (is_string($hargaTampil) && ctype_digit($hargaTampil))) { $hargaTampil = number_format((int) $hargaTampil, 0, ',', '.'); }
-    // Ukuran: buang nol desimal hanya bila ada titik desimal (30.00→30, 20.50→20.5); 30, 100, "12,5" tampil apa adanya
+    // Ukuran: buang nol desimal & pakai koma desimal (30.00→30, 12.50→"12,5"); isian lama "12,5" tampil apa adanya
     $ukuranTampil = function ($x) {
         if ($x === null || $x === '') return '';
         $s = trim((string) $x);
-        return preg_match('/^\d+\.\d*$/', $s) ? rtrim(rtrim($s, '0'), '.') : $s;
+        return preg_match('/^\d+\.\d*$/', $s) ? str_replace('.', ',', rtrim(rtrim($s, '0'), '.')) : $s;
     };
+    // $hargaWajib dari _form (false saat tambah / Hitung Harga)
+    $hargaWajib = $hargaWajib ?? false;
     $finDipilih = (array) $v('finishing');
     $adaFinLain = filled($v('finishing_lainnya'));
 @endphp
@@ -160,13 +162,17 @@
             {!! $galat($k('jumlah')) !!}
         </div>
         <div class="sg-field">
-            <label class="sg-label" for="{{ $fidI('harga_satuan') }}">Harga satuan <span class="sg-wajib" aria-hidden="true">*</span></label>
+            <label class="sg-label" for="{{ $fidI('harga_satuan') }}">Harga satuan @if ($hargaWajib)<span class="sg-wajib" aria-hidden="true">*</span>@else<span class="fw-normal sg-muted">(opsional)</span>@endif</label>
             <div class="sg-imbuh sg-imbuh-depan">
                 <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                <input type="text" inputmode="numeric" id="{{ $fidI('harga_satuan') }}" name="{{ $n }}[harga_satuan]" value="{{ $hargaTampil }}" required autocomplete="off"
-                       class="form-control sg-angka @error($k('harga_satuan')) is-invalid @enderror" data-rupiah data-harga {!! $aria($k('harga_satuan')) !!}>
+                <input type="text" inputmode="numeric" id="{{ $fidI('harga_satuan') }}" name="{{ $n }}[harga_satuan]" value="{{ $hargaTampil }}" @if ($hargaWajib) required @endif autocomplete="off"
+                       class="form-control sg-angka @error($k('harga_satuan')) is-invalid @enderror" data-rupiah data-harga
+                       @if ($errors->has($k('harga_satuan'))) aria-invalid="true" aria-describedby="{{ $gid($k('harga_satuan')) }}" @elseif (! $hargaWajib) aria-describedby="{{ $fidI('bantu-harga') }}" @endif>
             </div>
             {!! $galat($k('harga_satuan')) !!}
+            @unless ($hargaWajib)
+                <p class="sg-bantu" id="{{ $fidI('bantu-harga') }}">Boleh dikosongkan — harga dihitung produksi.</p>
+            @endunless
         </div>
     </div>
 

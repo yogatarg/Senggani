@@ -21,6 +21,15 @@
     $diPassword = request()->routeIs('admin.password.*');
     $adaBottomNav = ! $__env->hasSection('tanpa_bottomnav');
 
+    // Notifikasi deadline (view composer). Chip: "Lewat 2 hari" / "Hari ini" / "H-2"
+    $notifDeadline = $notifDeadline ?? ['total' => 0, 'lewat' => 0, 'mendekat' => 0, 'item' => []];
+    $chipNotif = function (array $n) {
+        $hari = $n['hari_menuju_deadline'];
+        if ($hari === null) return [null, 'netral'];
+        if ($hari < 0) return ['Lewat ' . abs($hari) . ' hari', 'lewat'];
+        return [$hari === 0 ? 'Hari ini' : 'H-' . $hari, 'mendekat'];
+    };
+
     // id field untuk link di ringkasan error: item.0.jumlah → f-item-0-jumlah
     $idField = function (string $kunci) {
         $kunci = preg_replace('/^(mockup|referensi)\..*$/', '$1', $kunci);
@@ -57,6 +66,7 @@
         <img src="{{ asset('icon-192.png') }}" alt="" class="sg-topbar-ikon" width="32" height="32">
     @endif
     <p class="sg-topbar-judul">{!! $__env->hasSection('judul_bar') ? $__env->yieldContent('judul_bar') : $__env->yieldContent('title', 'Pesanan') !!}</p>
+    @include('admin.layouts._lonceng')
     <button type="button" class="sg-avatar" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" aria-label="Menu akun {{ $namaPengguna }}">
         <span aria-hidden="true">{{ $inisial }}</span>
     </button>
@@ -74,6 +84,7 @@
                 <div class="sg-profil-nama" title="{{ $namaPengguna }}">{{ $namaPengguna }}</div>
                 <span class="sg-chip-peran">{{ $peranProduksi ? 'Produksi' : 'Admin' }}</span>
             </div>
+            @include('admin.layouts._lonceng')
         </div>
         <hr class="sg-pemisah">
         <nav aria-label="Menu kerja">
@@ -143,6 +154,15 @@
                 </div>
             @endif
 
+            @hasSection('banner_lewat')
+                @php $jmlLewat = (int) ($notifDeadline['lewat']); @endphp
+                <div class="sg-alert sg-alert-galat sg-alert-lewat" role="status" data-banner-lewat @if ($jmlLewat === 0) hidden @endif>
+                    <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                    <p><strong data-banner-lewat-teks>{{ $jmlLewat }} pesanan lewat deadline</strong></p>
+                    <button type="button" class="sg-btn sg-btn-sekunder" data-bs-toggle="modal" data-bs-target="#panelNotif" aria-label="Lihat pesanan yang lewat deadline">Lihat</button>
+                </div>
+            @endif
+
             @yield('content')
         </div>
     </main>
@@ -195,6 +215,60 @@
                 </form>
             </li>
         </ul>
+    </div>
+</div>
+
+{{-- Panel notifikasi deadline (sheet di HP, panel di samping sidebar di desktop). Isi diperbarui JS tiap 60 detik. --}}
+<div class="modal fade sg-notif" id="panelNotif" tabindex="-1" aria-labelledby="panelNotifJudul" aria-hidden="true"
+     data-panel-notif data-url="{{ route('admin.pesanan.jumlah') }}" data-url-daftar="{{ route('admin.pesanan.index', ['urut' => 'deadline']) }}">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="sg-sheet-pegangan d-lg-none" aria-hidden="true"></div>
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" id="panelNotifJudul">Deadline mendesak</h2>
+                    <p class="sg-notif-sub" data-notif-sub>
+                        @if ($notifDeadline['total'])
+                            {{ $notifDeadline['lewat'] }} lewat · {{ $notifDeadline['mendekat'] }} mendekati (≤ {{ \App\Models\Pesanan::HARI_MENDEKAT }} hari)
+                        @else
+                            Pesanan yang belum selesai produksi
+                        @endif
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body" data-notif-isi>
+                @if ($notifDeadline['item'])
+                    <ul class="sg-notif-daftar">
+                        @foreach ($notifDeadline['item'] as $n)
+                            @php [$teksChip, $jenisChip] = $chipNotif($n); @endphp
+                            <li>
+                                <a class="sg-notif-tautan" href="{{ $n['url'] }}">
+                                    <span>
+                                        <span class="sg-notif-kode">{{ $n['kode_tampil'] }}</span>
+                                        <span class="sg-notif-nama">{{ $n['nama_customer'] }}@if ($n['nama_brand']) / {{ $n['nama_brand'] }}@endif</span>
+                                        <span class="sg-notif-meta">{{ $n['label_status'] }} · deadline {{ $n['deadline_teks'] }}</span>
+                                    </span>
+                                    @if ($teksChip)
+                                        <span class="sg-deadline sg-deadline-{{ $jenisChip }} sg-notif-chip"><i class="fa-solid {{ $jenisChip === 'lewat' ? 'fa-circle-exclamation' : 'fa-clock' }}" aria-hidden="true"></i>{{ $teksChip }}</span>
+                                    @endif
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <div class="sg-notif-kosong">
+                        <i class="fa-regular fa-bell-slash" aria-hidden="true"></i>
+                        <p>Tidak ada deadline mendesak</p>
+                    </div>
+                @endif
+            </div>
+            <div class="modal-footer" data-notif-lain @if ($notifDeadline['total'] <= count($notifDeadline['item'])) hidden @endif>
+                <a class="sg-tautan-aksi" href="{{ route('admin.pesanan.index', ['urut' => 'deadline']) }}" data-notif-lain-link>
+                    Lihat {{ max(0, $notifDeadline['total'] - count($notifDeadline['item'])) }} lainnya di daftar pesanan
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -6,12 +6,19 @@
 
 @php
     use App\Enums\StatusProduksi;
+    use Illuminate\Support\Facades\Gate;
 
     $rp = fn ($n) => 'Rp ' . number_format((float) $n, 0, ',', '.');
     $angka = fn ($n) => number_format((float) $n, 0, ',', '.');
     $status = $pesanan->status_produksi;
-    $dibatalkan = $status === \App\Enums\StatusProduksi::Dibatalkan;
+    $dibatalkan = $status === StatusProduksi::Dibatalkan;
+    $tidakJadi = $status === StatusProduksi::TidakJadi;
+    $diArsipBatal = $dibatalkan || $tidakJadi;
+    $hitungHarga = $status === StatusProduksi::HitungHarga;
+    $menungguDp = $status === StatusProduksi::MenungguDp;
+    $sudahProduksi = $status->sudahProduksi();
     $urutanKini = $status->urutan();
+    $isAdmin = Gate::allows('update', $pesanan);
 
     // 6281234567890 → +62 812-3456-7890
     $wa = (string) $pesanan->nomor_whatsapp;
@@ -24,11 +31,35 @@
 
     $file = $pesanan->file;
     $riwayat = $pesanan->riwayat;
-    $bisaUbahStatus = \Illuminate\Support\Facades\Gate::allows('ubahStatus', $pesanan);
-    $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && \Illuminate\Support\Facades\Gate::allows('batalkan', $pesanan);
-    $bisaHapus = \Illuminate\Support\Facades\Gate::allows('delete', $pesanan);
-    $bisaPulihkan = $dibatalkan && \Illuminate\Support\Facades\Gate::allows('pulihkan', $pesanan);
-    $judulOrder = $pesanan->kode_tampil . ' · ' . $pesanan->nama_customer;
+    $item = $pesanan->detailPesanan;
+    $jumlahItem = $item->count();
+    $tanpaHarga = $pesanan->jumlah_item_tanpa_harga;
+
+    $bisaUbahStatus = Gate::allows('ubahStatus', $pesanan);
+    $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && Gate::allows('batalkan', $pesanan);
+    $bisaHapus = Gate::allows('delete', $pesanan);
+    $bisaPulihkan = $diArsipBatal && Gate::allows('pulihkan', $pesanan);
+    $bisaCatatLunas = $sudahProduksi && ! $pesanan->tanggal_lunas && (float) $pesanan->total > 0 && Gate::allows('catatLunas', $pesanan);
+    $tampilHitungHarga = $hitungHarga && $bisaIsiHarga;
+
+    // Ke Pengiriman dikunci sampai lunas (backend menolak; tombol ditampilkan nonaktif dengan keterangan)
+    $majuTerkunci = $menungguPelunasan && $statusBerikutnya === StatusProduksi::Pengiriman;
+    $teksKunci = 'Belum lunas — minta admin mencatat pelunasan dulu.';
+
+    // Alasan "tidak jadi" = catatan pada riwayat terakhir yang memindahkan ke tidak_jadi
+    $riwayatTidakJadi = $tidakJadi ? $riwayat->first(fn ($r) => $r->status_ke === StatusProduksi::TidakJadi) : null;
+
+    // Teks total: harga bisa belum lengkap sebelum produksi
+    $teksTotal = $sudahProduksi || $pesanan->harga_lengkap
+        ? $rp($pesanan->total)
+        : ((float) $pesanan->total > 0 ? $rp($pesanan->total) . ' (belum lengkap)' : 'Belum dihitung');
+
+    // Modal yang dibuka ulang otomatis bila ada galat validasi dari form di dalamnya
+    $galatDp = $errors->hasAny(['dp', 'tanggal_dp', 'nomor_spp', 'konfirmasi_nomor', 'status']);
+    $galatLunas = $errors->has('tanggal_lunas');
+    $saranNomorBaru = \App\Models\Pesanan::saranNomorSpp();
+
+    $gid = fn (string $kunci) => 'g-' . str_replace('.', '-', $kunci);
 @endphp
 
 @section('content')
@@ -42,7 +73,7 @@
             <p class="sg-brand">{{ $pesanan->nama_brand }}</p>
         @endif
         <p class="sg-kontak sg-angka">
-            @if ($pesanan->customer && \Illuminate\Support\Facades\Gate::allows('kelola-customer'))
+            @if ($pesanan->customer && Gate::allows('kelola-customer'))
                 <a href="{{ route('admin.customer.show', $pesanan->customer) }}" class="sg-kode-customer" aria-label="Lihat customer {{ $pesanan->customer->kode }}"><i class="fa-solid fa-address-book" aria-hidden="true"></i>{{ $pesanan->customer->kode }}</a>
                 <span aria-hidden="true">·</span>
             @endif
@@ -50,29 +81,98 @@
         </p>
         <div class="sg-lencana">
             @include('admin.pesanan._badge-status', ['status' => $status])
-            @include('admin.pesanan._badge-bayar', ['p' => $pesanan])
+            @if ($sudahProduksi)
+                @include('admin.pesanan._badge-bayar', ['p' => $pesanan])
+            @endif
+            @if ($menungguPelunasan)
+                <span class="sg-bayar sg-by-dp"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i>Menunggu pelunasan</span>
+            @endif
             @include('admin.pesanan._deadline', ['p' => $pesanan])
         </div>
     </div>
-    @can('update', $pesanan)
-        <div class="sg-lencana-aksi">
-            <a href="{{ $pesanan->link_whatsapp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp Customer</a>
-            <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
-            <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
+    @if ($isAdmin || $teksSpp)
+        <div class="sg-lencana-aksi {{ $isAdmin ? '' : 'd-xl-none' }}">
+            @if ($isAdmin)
+                <a href="{{ $pesanan->link_whatsapp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp Customer</a>
+                <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
+            @endif
+            @if ($teksSpp)
+                <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
+            @endif
         </div>
-    @else
-        <div class="sg-lencana-aksi d-xl-none">
-            <button type="button" class="sg-btn sg-btn-sekunder" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
-        </div>
-    @endcan
+    @endif
 </header>
 
 <div class="sg-detail">
     <div class="sg-detail-utama">
+        {{-- Hitung Harga: tugas utama selama status hitung_harga (produksi & admin) --}}
+        @if ($tampilHitungHarga)
+            <section class="sg-kartu sg-kartu-harga sg-o-harga" aria-labelledby="judul-hitung">
+                <h2 class="sg-kartu-judul" id="judul-hitung"><i class="fa-solid fa-calculator" aria-hidden="true"></i> Hitung Harga</h2>
+                <p class="sg-bantu mt-0 mb-3">Isi harga satuan tiap item. Setelah semua item berharga, pesanan otomatis pindah ke <strong>Menunggu DP</strong>. Boleh disimpan sebagian dulu.</p>
+                <form method="POST" action="{{ route('admin.pesanan.harga', $pesanan) }}" id="form-harga" data-kirim data-form-harga novalidate>
+                    @csrf
+                    <div id="f-harga">
+                        @error('harga')<p class="sg-galat mb-3" id="g-harga"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                    </div>
+                    @foreach ($item as $d)
+                        @php
+                            $kunciH = 'harga.' . $d->id;
+                            $nilaiH = old($kunciH, $d->harga_satuan === null ? '' : number_format((int) $d->harga_satuan, 0, ',', '.'));
+                            $spek = collect([
+                                trim($d->jenis_bahan . ' ' . $d->gramasi),
+                                trim($d->jenis_cetak . ' ' . $d->warna_cetak),
+                                $d->daftar_finishing ? implode(', ', $d->daftar_finishing) : null,
+                                $d->aksesori,
+                            ])->filter()->implode(' · ');
+                        @endphp
+                        <div class="sg-harga-item" data-harga-item data-jumlah="{{ (int) $d->jumlah }}">
+                            <div class="sg-harga-item-kepala">
+                                <h3><span class="sg-muted">{{ $loop->iteration }}.</span> {{ $d->jenis_packaging }}@if ($d->ukuran_teks) · <span class="sg-angka">{{ $d->ukuran_teks }}</span>@endif</h3>
+                                <span class="sg-jumlah-besar" style="font-size:18px">{{ $angka($d->jumlah) }} pcs</span>
+                            </div>
+                            @if ($spek)<p class="sg-harga-item-spek">{{ $spek }}</p>@else<div class="mb-2"></div>@endif
+                            <div class="sg-harga-isian">
+                                <div>
+                                    <label class="sg-label" for="f-harga-{{ $d->id }}">Harga satuan<span class="visually-hidden"> item {{ $loop->iteration }}, {{ $d->jenis_packaging }}</span></label>
+                                    <div class="sg-imbuh sg-imbuh-depan">
+                                        <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
+                                        <input type="text" inputmode="numeric" id="f-harga-{{ $d->id }}" name="harga[{{ $d->id }}]" value="{{ $nilaiH }}" autocomplete="off" placeholder="Belum diisi"
+                                               class="form-control sg-angka @error($kunciH) is-invalid @enderror" data-rupiah data-harga-input
+                                               aria-describedby="sub-harga-{{ $d->id }}{{ $errors->has($kunciH) ? ' ' . $gid($kunciH) : '' }}" @error($kunciH) aria-invalid="true" @enderror>
+                                    </div>
+                                    @error($kunciH)<p class="sg-galat" id="{{ $gid($kunciH) }}"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                                </div>
+                                <p class="sg-harga-sub m-0" id="sub-harga-{{ $d->id }}"><span>Subtotal</span> <strong data-harga-sub>{{ $d->harga_satuan === null ? 'Belum dihitung' : $rp($d->subtotal) }}</strong></p>
+                            </div>
+                        </div>
+                    @endforeach
+
+                    <div class="sg-harga-total">
+                        <div>
+                            <span>Total</span>
+                            <small data-harga-ket>{{ $tanpaHarga ? 'Belum lengkap: ' . $tanpaHarga . ' dari ' . $jumlahItem . ' item belum berharga' : 'Semua item sudah berharga' }}</small>
+                        </div>
+                        <strong data-harga-total aria-live="polite">{{ (float) $pesanan->total > 0 ? $rp($pesanan->total) : 'Belum dihitung' }}</strong>
+                    </div>
+
+                    <div class="sg-field mt-3">
+                        <label class="sg-label" for="f-catatan_harga">Catatan perhitungan <span class="fw-normal sg-muted">(opsional)</span></label>
+                        <textarea id="f-catatan_harga" name="catatan_harga" rows="2" maxlength="2000" style="min-height:72px"
+                                  class="form-control @error('catatan_harga') is-invalid @enderror" placeholder="Mis. harga sudah termasuk laminasi, ongkir terpisah"
+                                  @error('catatan_harga') aria-invalid="true" aria-describedby="g-catatan_harga" @enderror>{{ old('catatan_harga', $pesanan->catatan_harga) }}</textarea>
+                        @error('catatan_harga')<p class="sg-galat" id="g-catatan_harga"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                    </div>
+                    {{-- Di HP tombol ini ada di bilah bawah (selalu terjangkau jempol) --}}
+                    <button type="submit" class="sg-btn sg-btn-utama sg-btn-penuh d-none d-lg-flex" style="min-height:56px" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan harga</button>
+                </form>
+            </section>
+        @endif
+
         {{-- Item --}}
         <section class="sg-kartu sg-o-item" aria-labelledby="judul-item">
-            <h2 class="sg-kartu-judul" id="judul-item">Item SPP ({{ $pesanan->detailPesanan->count() }})</h2>
-            @forelse ($pesanan->detailPesanan as $d)
+            <h2 class="sg-kartu-judul" id="judul-item">Item SPP ({{ $jumlahItem }})</h2>
+            @forelse ($item as $d)
                 <article class="sg-item-detail">
                     <div class="sg-item-detail-kepala">
                         <h3><span class="sg-muted">{{ $loop->iteration }}.</span> {{ $d->jenis_packaging }}@if ($d->ukuran_teks) · <span class="sg-angka">{{ $d->ukuran_teks }}</span>@endif</h3>
@@ -83,7 +183,12 @@
                         @if ($d->jenis_cetak || $d->warna_cetak)<dt>Cetak</dt><dd>{{ trim($d->jenis_cetak . ' ' . $d->warna_cetak) }}</dd>@endif
                         @if ($d->daftar_finishing)<dt>Finishing</dt><dd>{{ implode(', ', $d->daftar_finishing) }}</dd>@endif
                         @if ($d->aksesori)<dt>Tali/aksesori</dt><dd>{{ $d->aksesori }}</dd>@endif
-                        <dt>Harga</dt><dd class="sg-angka">{{ $rp($d->harga_satuan) }} × {{ $angka($d->jumlah) }} = <strong>{{ $rp($d->subtotal) }}</strong></dd>
+                        <dt>Harga</dt>
+                        @if ($d->harga_satuan === null)
+                            <dd class="sg-belum-harga">Belum dihitung</dd>
+                        @else
+                            <dd class="sg-angka">{{ $rp($d->harga_satuan) }} × {{ $angka($d->jumlah) }} = <strong>{{ $rp($d->subtotal) }}</strong></dd>
+                        @endif
                     </dl>
                 </article>
             @empty
@@ -166,27 +271,45 @@
                 <ol class="sg-timeline">
                     @foreach ($riwayat as $r)
                         @php
-                            [$ikonR, $kelasR] = match ($r->jenis) {
-                                'dibuat'   => ['fa-plus', ''],
-                                'maju'     => ['fa-arrow-right', 'sg-st-' . $r->status_ke->value],
-                                'mundur'   => ['fa-rotate-left', 'sg-st-' . $r->status_ke->value],
-                                'batal'    => ['fa-ban', 'sg-st-dibatalkan'],
-                                'pulihkan' => ['fa-arrow-rotate-left', 'sg-st-' . $r->status_ke->value],
-                                default    => ['fa-note-sticky', ''],
+                            $dari = $r->status_dari;
+                            $ke = $r->status_ke;
+                            // Langkah khusus alur baru: harga dihitung (→ Menunggu DP) & DP dicatat (→ Dalam Proses)
+                            $hargaDihitung = $r->jenis === 'maju' && $dari === StatusProduksi::HitungHarga && $ke === StatusProduksi::MenungguDp;
+                            $dpDicatat = $r->jenis === 'maju' && $dari === StatusProduksi::MenungguDp && $ke === StatusProduksi::Proses;
+                            [$ikonR, $kelasR] = match (true) {
+                                $hargaDihitung                => ['fa-calculator', 'sg-st-menunggu_dp'],
+                                $dpDicatat                    => ['fa-coins', 'sg-st-proses'],
+                                $r->jenis === 'dibuat'        => ['fa-plus', ''],
+                                $r->jenis === 'maju'          => ['fa-arrow-right', 'sg-st-' . $ke->value],
+                                $r->jenis === 'mundur'        => ['fa-rotate-left', 'sg-st-' . $ke->value],
+                                $r->jenis === 'batal'         => ['fa-ban', 'sg-st-dibatalkan'],
+                                $r->jenis === 'tidak_jadi'    => ['fa-circle-xmark', 'sg-st-tidak_jadi'],
+                                $r->jenis === 'pulihkan'      => ['fa-arrow-rotate-left', 'sg-st-' . $ke->value],
+                                str_starts_with((string) $r->catatan, 'Harga ')       => ['fa-calculator', ''],
+                                str_starts_with((string) $r->catatan, 'Pelunasan')    => ['fa-hand-holding-dollar', ''],
+                                str_starts_with((string) $r->catatan, 'Nomor SPP')    => ['fa-hashtag', ''],
+                                default                       => ['fa-note-sticky', ''],
                             };
                         @endphp
                         <li @if ($loop->index >= 10) data-riwayat-lain hidden @endif>
                             <span class="sg-tl-ikon {{ $kelasR }}" aria-hidden="true"><i class="fa-solid {{ $ikonR }}"></i></span>
                             <div style="min-width:0">
                                 <div class="sg-tl-meta">{{ $r->created_at->translatedFormat('j M Y, H.i') }} · {{ $r->nama_pengguna }}</div>
-                                @switch($r->jenis)
-                                    @case('dibuat') <p class="sg-tl-isi">SPP dibuat</p> @break
-                                    @case('maju') <p class="sg-tl-isi">Status: <strong>{{ $r->status_dari->label() }}</strong> → <strong>{{ $r->status_ke->label() }}</strong></p> @break
-                                    @case('mundur') <p class="sg-tl-isi">Dikembalikan ke <strong>{{ $r->status_ke->label() }}</strong></p> @break
-                                    @case('batal') <p class="sg-tl-isi">SPP dibatalkan</p> @break
-                                    @case('pulihkan') <p class="sg-tl-isi">SPP dipulihkan ke <strong>{{ $r->status_ke->label() }}</strong></p> @break
-                                    @default <p class="sg-tl-isi sg-teks-catatan">{{ $r->catatan }}</p>
-                                @endswitch
+                                @if ($hargaDihitung)
+                                    <p class="sg-tl-isi">Harga dihitung · pindah ke <strong>{{ $ke->label() }}</strong></p>
+                                @elseif ($dpDicatat)
+                                    <p class="sg-tl-isi">DP dicatat · masuk <strong>{{ $ke->label() }}</strong></p>
+                                @else
+                                    @switch($r->jenis)
+                                        @case('dibuat') <p class="sg-tl-isi">SPP dibuat</p> @break
+                                        @case('maju') <p class="sg-tl-isi">Status: <strong>{{ $dari->label() }}</strong> → <strong>{{ $ke->label() }}</strong></p> @break
+                                        @case('mundur') <p class="sg-tl-isi">Dikembalikan ke <strong>{{ $ke->label() }}</strong></p> @break
+                                        @case('batal') <p class="sg-tl-isi">SPP dibatalkan</p> @break
+                                        @case('tidak_jadi') <p class="sg-tl-isi">Ditandai <strong>tidak jadi</strong></p> @break
+                                        @case('pulihkan') <p class="sg-tl-isi">SPP dipulihkan ke <strong>{{ $ke->label() }}</strong></p> @break
+                                        @default <p class="sg-tl-isi sg-teks-catatan">{{ $r->catatan }}</p>
+                                    @endswitch
+                                @endif
                                 @if ($r->catatan && ! in_array($r->jenis, ['dibuat', 'catatan'], true))
                                     <p class="sg-tl-catatan">{{ $r->catatan }}</p>
                                 @endif
@@ -202,29 +325,52 @@
     </div>
 
     <div class="sg-detail-samping">
-        {{-- Teks SPP siap salin (admin & produksi). Sistem tidak mengirim apa pun; admin memilih sendiri kontak/grup WA. --}}
-        <section class="sg-kartu sg-o-teks" aria-labelledby="judul-teks-spp">
-            <h2 class="sg-kartu-judul" id="judul-teks-spp">Teks SPP</h2>
-            <p class="sg-bantu mt-0 mb-3">Salin lalu kirim sendiri ke kontak atau grup produksi.</p>
-            <div class="sg-teks-spp-aksi">
-                <button type="button" class="sg-btn sg-btn-utama" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks</span></button>
-                <a href="{{ $linkWhatsappSpp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Buka di WhatsApp<span class="visually-hidden"> (tab baru)</span></a>
-            </div>
-            <div class="sg-teks-spp" id="teks-spp" tabindex="0" role="region" aria-label="Pratinjau teks SPP">{{ $teksSpp }}</div>
-        </section>
+        {{-- Teks SPP siap salin (admin & produksi). Hanya setelah bernomor (DP dicatat). --}}
+        @if ($teksSpp)
+            <section class="sg-kartu sg-o-teks" aria-labelledby="judul-teks-spp">
+                <h2 class="sg-kartu-judul" id="judul-teks-spp">Teks SPP</h2>
+                <p class="sg-bantu mt-0 mb-3">Salin lalu kirim sendiri ke kontak atau grup produksi.</p>
+                <div class="sg-teks-spp-aksi">
+                    <button type="button" class="sg-btn sg-btn-utama" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks</span></button>
+                    <a href="{{ $linkWhatsappSpp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Buka di WhatsApp<span class="visually-hidden"> (tab baru)</span></a>
+                </div>
+                <div class="sg-teks-spp" id="teks-spp" tabindex="0" role="region" aria-label="Pratinjau teks SPP">{{ $teksSpp }}</div>
+            </section>
+        @elseif (! $diArsipBatal)
+            <section class="sg-kartu sg-o-teks" aria-labelledby="judul-teks-spp">
+                <h2 class="sg-kartu-judul" id="judul-teks-spp">Teks SPP</h2>
+                <p class="sg-status-info m-0"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>Teks SPP tersedia setelah DP dicatat dan pesanan mendapat nomor SPP.</span></p>
+            </section>
+        @endif
 
         {{-- Status produksi --}}
         <section class="sg-kartu sg-o-status" aria-labelledby="judul-status">
             <h2 class="sg-kartu-judul" id="judul-status">Status produksi</h2>
             @if ($dibatalkan)
                 <div class="sg-alert sg-alert-peringatan mb-3"><i class="fa-solid fa-ban" aria-hidden="true"></i><p>SPP ini dibatalkan{{ isset($waktuStatus['dibatalkan']) ? ' pada ' . $waktuStatus['dibatalkan']->translatedFormat('j M Y') : '' }}.</p></div>
+            @elseif ($tidakJadi)
+                <div class="sg-alert sg-alert-peringatan mb-3">
+                    <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+                    <div>
+                        <p>Customer tidak jadi memesan{{ isset($waktuStatus['tidak_jadi']) ? ' (' . $waktuStatus['tidak_jadi']->translatedFormat('j M Y') . ')' : '' }}.</p>
+                        <p class="mt-1 sg-teks-catatan" style="color:var(--sg-text)"><strong>Alasan:</strong> {{ $riwayatTidakJadi?->catatan ?: 'tidak dicatat' }}</p>
+                    </div>
+                </div>
+            @elseif ($hitungHarga)
+                <p class="sg-status-info"><i class="fa-solid fa-calculator" aria-hidden="true"></i>
+                    <span>Menunggu harga dihitung produksi. {{ $jumlahItem - $tanpaHarga }} dari {{ $jumlahItem }} item sudah berharga.</span></p>
+            @elseif ($menungguDp)
+                <p class="sg-status-info"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
+                    <span>{{ $bisaCatatDp ? 'Harga sudah dihitung. Catat DP saat customer membayar; SPP lalu masuk produksi dan mendapat nomor.' : 'Menunggu DP dari customer. Admin memasukkan SPP ke produksi setelah DP dicatat.' }}</span></p>
+                <div class="sg-total-dp"><span>Total</span><strong>{{ $teksTotal }}</strong></div>
             @endif
+
             <ol class="sg-stepper">
                 @foreach ($alurStatus as $s)
                     @php
-                        $ke = $loop->iteration;
-                        $kelas = $urutanKini === null ? (isset($waktuStatus[$s->value]) ? 'sg-lewat' : '') : ($ke < $urutanKini ? 'sg-lewat' : ($ke === $urutanKini ? 'sg-kini' : ''));
-                        if ($s === \App\Enums\StatusProduksi::Selesai && $status === \App\Enums\StatusProduksi::Selesai) { $kelas = 'sg-lewat'; }
+                        $keStep = $loop->iteration;
+                        $kelas = $urutanKini === null ? (isset($waktuStatus[$s->value]) ? 'sg-lewat' : '') : ($keStep < $urutanKini ? 'sg-lewat' : ($keStep === $urutanKini ? 'sg-kini' : ''));
+                        if ($s === StatusProduksi::Selesai && $status === StatusProduksi::Selesai) { $kelas = 'sg-lewat'; }
                     @endphp
                     <li class="{{ $kelas }}" @if ($kelas === 'sg-kini') aria-current="step" @endif>
                         <span class="sg-step-titik" aria-hidden="true">@if ($kelas === 'sg-lewat')<i class="fa-solid fa-check"></i>@endif</span>
@@ -241,64 +387,83 @@
                 @endforeach
             </ol>
 
+            {{-- Tombol status (desktop). Di HP ada di bilah bawah. --}}
             <div class="d-none d-lg-grid gap-2">
-                @if ($dibatalkan)
+                @if ($diArsipBatal)
                     @if ($bisaPulihkan)
                         <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan SPP</button>
                     @endif
-                @elseif ($bisaUbahStatus)
-                    @if ($statusBerikutnya)
+                @elseif ($menungguDp)
+                    @if ($bisaCatatDp)
+                        <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalCatatDp"><i class="fa-solid fa-coins" aria-hidden="true"></i> Catat DP &amp; masukkan ke produksi</button>
+                    @endif
+                @elseif ($bisaUbahStatus && ! $hitungHarga)
+                    @if ($majuTerkunci)
+                        <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" aria-disabled="true" aria-describedby="ket-kunci-desktop">Pindahkan ke {{ $statusBerikutnya->label() }} <i class="fa-solid fa-lock" aria-hidden="true"></i></button>
+                        <p class="sg-kunci-ket" id="ket-kunci-desktop"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ $teksKunci }}</p>
+                        @if ($bisaCatatLunas)
+                            <button type="button" class="sg-btn sg-btn-sekunder sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalLunas"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i> Catat lunas</button>
+                        @endif
+                    @elseif ($statusBerikutnya)
                         <button type="button" class="sg-btn sg-btn-utama sg-btn-penuh" data-bs-toggle="modal" data-bs-target="#modalMaju">Pindahkan ke {{ $statusBerikutnya->label() }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
-                    @else
+                    @elseif ($status === StatusProduksi::Selesai)
                         <p class="sg-muted m-0"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> SPP sudah selesai.</p>
                     @endif
-                    @if ($statusSebelumnya)
-                        <button type="button" class="sg-btn sg-btn-teks" data-bs-toggle="modal" data-bs-target="#modalMundur"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Kembalikan ke {{ $statusSebelumnya->label() }}</button>
-                    @endif
+                @endif
+                @if (! $diArsipBatal && $bisaUbahStatus && $statusSebelumnya)
+                    <button type="button" class="sg-btn sg-btn-teks" data-bs-toggle="modal" data-bs-target="#modalMundur"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Kembalikan ke {{ $statusSebelumnya->label() }}</button>
                 @endif
             </div>
+
+            {{-- HP: keterangan kunci pengiriman juga tampil di kartu --}}
+            @if ($majuTerkunci && $bisaUbahStatus)
+                <p class="sg-kunci-ket d-lg-none"><i class="fa-solid fa-lock" aria-hidden="true"></i>Ke Pengiriman terkunci. {{ $teksKunci }}</p>
+            @endif
         </section>
 
         {{-- Pembayaran --}}
         <section class="sg-kartu sg-o-bayar sg-ringkas" aria-labelledby="judul-bayar">
             <h2 class="sg-kartu-judul" id="judul-bayar">Pembayaran</h2>
             <dl>
-                <div><dt>Total</dt><dd>{{ $rp($pesanan->total) }}</dd></div>
-                <div><dt>DP</dt><dd>{{ $rp($pesanan->dp) }}</dd></div>
-                <div class="sg-sisa"><dt>Sisa</dt><dd>{{ $rp($pesanan->sisa) }}</dd></div>
+                <div @unless ($sudahProduksi) class="sg-sisa" @endunless><dt>Total</dt><dd @if (! $sudahProduksi && ! $pesanan->harga_lengkap) class="sg-belum-harga" @endif>{{ $teksTotal }}</dd></div>
+                @if ($sudahProduksi)
+                    <div><dt>DP</dt><dd>{{ $rp($pesanan->dp) }}@if ($pesanan->tanggal_dp)<small class="d-block sg-muted fw-normal sg-kecil">{{ $pesanan->tanggal_dp->translatedFormat('j M Y') }}</small>@endif</dd></div>
+                    <div class="sg-sisa"><dt>Sisa</dt><dd>{{ $rp($pesanan->sisa) }}</dd></div>
+                @endif
             </dl>
-            <p class="mt-2 mb-0 d-flex align-items-center gap-2 flex-wrap">
-                @include('admin.pesanan._badge-bayar', ['p' => $pesanan])
-                @if ($pesanan->tanggal_lunas)<span class="sg-muted sg-kecil">lunas {{ $pesanan->tanggal_lunas->translatedFormat('j M Y') }}</span>@endif
-            </p>
+            @if ($sudahProduksi)
+                <p class="mt-2 mb-0 d-flex align-items-center gap-2 flex-wrap">
+                    @include('admin.pesanan._badge-bayar', ['p' => $pesanan])
+                    @if ($pesanan->tanggal_lunas)<span class="sg-muted sg-kecil">lunas {{ $pesanan->tanggal_lunas->translatedFormat('j M Y') }}</span>@endif
+                </p>
+            @elseif (! $diArsipBatal)
+                <p class="sg-bantu mb-0">DP dicatat saat pesanan masuk produksi.</p>
+            @endif
+            @if ($pesanan->catatan_harga && ! $tampilHitungHarga)
+                <h3 class="sg-label mt-3">Catatan perhitungan</h3>
+                <p class="sg-teks-catatan mb-0">{{ $pesanan->catatan_harga }}</p>
+            @endif
             <hr class="sg-pemisah my-3">
             <dl>
                 <div><dt>Tanggal SPP</dt><dd>{{ $pesanan->tanggal_order?->translatedFormat('j M Y') }}</dd></div>
                 <div><dt>Deadline</dt><dd>{{ $pesanan->deadline?->translatedFormat('j M Y') }}@if ($pesanan->label_jenis_deadline) <span class="sg-chip-kecil">{{ $pesanan->label_jenis_deadline }}</span>@endif</dd></div>
             </dl>
 
-            @if (! $pesanan->tanggal_lunas && (float) $pesanan->total > 0)
-                @can('catatLunas', $pesanan)
-                    <form method="POST" action="{{ route('admin.pesanan.lunas', $pesanan) }}" class="mt-3" data-kirim>
-                        @csrf
-                        <label for="f-tanggal_lunas" class="sg-label">Tanggal lunas</label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', today()->toDateString()) }}" max="{{ today()->toDateString() }}" class="form-control flex-grow-1 @error('tanggal_lunas') is-invalid @enderror" style="width:auto">
-                            <button type="submit" class="sg-btn sg-btn-sekunder" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Catat lunas</button>
-                        </div>
-                        @error('tanggal_lunas')<p class="sg-galat"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
-                    </form>
-                @endcan
+            @if ($bisaCatatLunas)
+                <button type="button" class="sg-btn sg-btn-sekunder sg-btn-penuh mt-3" data-bs-toggle="modal" data-bs-target="#modalLunas"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i> Catat lunas</button>
             @endif
-            @can('update', $pesanan)
-                <p class="mt-3 mb-0"><a href="{{ route('admin.pesanan.edit', $pesanan) }}#bagian-harga">Ubah pembayaran</a></p>
-            @endcan
+            @if ($isAdmin && $sudahProduksi)
+                <p class="mt-2 mb-0"><a href="{{ route('admin.pesanan.edit', $pesanan) }}#bagian-harga" class="sg-tautan-aksi"><i class="fa-solid fa-pen" aria-hidden="true" style="font-size:14px"></i> Ubah pembayaran</a></p>
+            @endif
         </section>
 
-        @if ($bisaBatal || $bisaHapus)
+        @if ($bisaTidakJadi || $bisaBatal || $bisaHapus)
             <section class="sg-kartu sg-o-admin" aria-labelledby="judul-admin">
                 <h2 class="sg-kartu-judul" id="judul-admin">Tindakan admin</h2>
                 <div class="d-grid gap-2">
+                    @if ($bisaTidakJadi)
+                        <button type="button" class="sg-btn sg-btn-bahaya" data-bs-toggle="modal" data-bs-target="#modalTidakJadi"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> Tidak Jadi</button>
+                    @endif
                     @if ($bisaBatal)
                         <button type="button" class="sg-btn sg-btn-bahaya" data-bs-toggle="modal" data-bs-target="#modalBatal"><i class="fa-solid fa-ban" aria-hidden="true"></i> Batalkan SPP</button>
                     @endif
@@ -311,16 +476,42 @@
     </div>
 </div>
 
-{{-- Bilah aksi sticky HP & tablet --}}
-@if (($dibatalkan && $bisaPulihkan) || (! $dibatalkan && $bisaUbahStatus))
+{{-- ── Bilah aksi sticky HP & tablet ─────────────── --}}
+@php
+    $mundurBilah = ! $diArsipBatal && $bisaUbahStatus && $statusSebelumnya;
+    $adaBilah = ($diArsipBatal && $bisaPulihkan) || $tampilHitungHarga || $menungguDp
+        || (! $diArsipBatal && ! $hitungHarga && $bisaUbahStatus);
+@endphp
+@if ($adaBilah)
     <div class="sg-bilah sg-bilah-detail">
-        @if ($dibatalkan)
+        @if ($diArsipBatal)
             <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalPulihkan"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> Pulihkan SPP</button>
+        @elseif ($tampilHitungHarga)
+            <button type="submit" form="form-harga" class="sg-btn sg-btn-utama flex-grow-1" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan harga</button>
         @else
-            @if ($statusSebelumnya)
+            @if ($mundurBilah)
                 <button type="button" class="sg-btn sg-btn-sekunder sg-btn-ikon" style="width:56px" data-bs-toggle="modal" data-bs-target="#modalMundur" aria-label="Kembalikan ke {{ $statusSebelumnya->label() }}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
             @endif
-            @if ($statusBerikutnya)
+            @if ($menungguDp)
+                @if ($bisaCatatDp)
+                    <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalCatatDp" aria-label="Catat DP dan masukkan ke produksi">
+                        <i class="fa-solid fa-coins" aria-hidden="true"></i>
+                        <span class="d-sm-none">Catat DP</span><span class="d-none d-sm-inline">Catat DP &amp; masukkan ke produksi</span>
+                    </button>
+                @else
+                    <p class="sg-bilah-teks"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i> Menunggu DP dari customer</p>
+                @endif
+            @elseif ($majuTerkunci)
+                <div class="sg-bilah-kolom">
+                    <p class="sg-kunci-ket" id="ket-kunci-hp"><i class="fa-solid fa-lock" aria-hidden="true"></i>{{ $teksKunci }}</p>
+                    <div class="sg-bilah-baris">
+                        @if ($bisaCatatLunas)
+                            <button type="button" class="sg-btn sg-btn-utama" data-bs-toggle="modal" data-bs-target="#modalLunas"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i> Catat lunas</button>
+                        @endif
+                        <button type="button" class="sg-btn sg-btn-sekunder" aria-disabled="true" aria-describedby="ket-kunci-hp" aria-label="Ke {{ $statusBerikutnya->label() }} (terkunci)"><span class="d-sm-none">Kirim</span><span class="d-none d-sm-inline">Ke {{ $statusBerikutnya->label() }}</span> <i class="fa-solid fa-lock" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+            @elseif ($statusBerikutnya)
                 {{-- Label pendek di HP kecil supaya tetap satu baris; nama aksesibel tetap lengkap --}}
                 <button type="button" class="sg-btn sg-btn-utama flex-grow-1" data-bs-toggle="modal" data-bs-target="#modalMaju" aria-label="Pindahkan ke {{ $statusBerikutnya->label() }}">
                     <span class="d-sm-none">Ke {{ $statusBerikutnya->label() }}</span><span class="d-none d-sm-inline">Pindahkan ke {{ $statusBerikutnya->label() }}</span>
@@ -334,25 +525,34 @@
 @endif
 
 {{-- ── Modal konfirmasi ─────────────────────────── --}}
-@if (! $dibatalkan && $bisaUbahStatus && $statusBerikutnya)
+@if (! $diArsipBatal && $bisaUbahStatus && $statusBerikutnya && ! $majuTerkunci)
     @include('admin.pesanan._modal-status', [
         'idModal' => 'modalMaju', 'judul' => 'Pindahkan ke ' . $statusBerikutnya->label() . '?',
         'aksi' => route('admin.pesanan.status', $pesanan), 'ke' => $statusBerikutnya,
         'placeholder' => 'Tambahkan catatan (opsional)', 'tombol' => 'Ya, pindahkan', 'gaya' => 'sg-btn-utama',
     ])
 @endif
-@if (! $dibatalkan && $bisaUbahStatus && $statusSebelumnya)
+@if ($mundurBilah)
     @include('admin.pesanan._modal-status', [
         'idModal' => 'modalMundur', 'judul' => 'Kembalikan ke ' . $statusSebelumnya->label() . '?',
         'aksi' => route('admin.pesanan.status', $pesanan), 'ke' => $statusSebelumnya,
         'placeholder' => 'Kenapa dikembalikan? (dianjurkan)', 'tombol' => 'Ya, kembalikan', 'gaya' => 'sg-btn-utama',
+        'keterangan' => $statusSebelumnya === StatusProduksi::HitungHarga ? 'Harga bisa direvisi lagi oleh produksi atau admin.' : null,
+    ])
+@endif
+@if ($bisaTidakJadi)
+    @include('admin.pesanan._modal-status', [
+        'idModal' => 'modalTidakJadi', 'judul' => 'Tandai tidak jadi?',
+        'aksi' => route('admin.pesanan.tidak_jadi', $pesanan), 'ke' => StatusProduksi::TidakJadi, 'kirimStatusBaru' => false,
+        'labelCatatan' => 'Alasan tidak jadi', 'placeholder' => 'Mis. customer batal karena harga', 'tombol' => 'Ya, tidak jadi', 'gaya' => 'sg-btn-bahaya-isi',
+        'keterangan' => 'Pesanan pindah ke History dan bisa dipulihkan lagi oleh admin.',
     ])
 @endif
 @if ($bisaBatal)
     @include('admin.pesanan._modal-status', [
         'idModal' => 'modalBatal', 'judul' => 'Batalkan SPP ini?',
-        'aksi' => route('admin.pesanan.batal', $pesanan), 'ke' => \App\Enums\StatusProduksi::Dibatalkan,
-        'placeholder' => 'Alasan pembatalan (opsional)', 'tombol' => 'Ya, batalkan', 'gaya' => 'sg-btn-bahaya-isi',
+        'aksi' => route('admin.pesanan.batal', $pesanan), 'ke' => StatusProduksi::Dibatalkan, 'kirimStatusBaru' => false,
+        'labelCatatan' => 'Alasan pembatalan', 'placeholder' => 'Alasan pembatalan (opsional)', 'tombol' => 'Ya, batalkan', 'gaya' => 'sg-btn-bahaya-isi',
         'keterangan' => 'SPP pindah ke History dan bisa dipulihkan lagi oleh admin.',
     ])
 @endif
@@ -361,9 +561,119 @@
         'idModal' => 'modalPulihkan', 'judul' => 'Pulihkan SPP ini?',
         'aksi' => route('admin.pesanan.pulihkan', $pesanan), 'ke' => null,
         'placeholder' => 'Catatan (opsional)', 'tombol' => 'Ya, pulihkan', 'gaya' => 'sg-btn-utama',
-        'keterangan' => 'SPP kembali ke status terakhir sebelum dibatalkan.',
+        'keterangan' => $tidakJadi ? 'Pesanan kembali ke status sebelum ditandai tidak jadi.' : 'SPP kembali ke status terakhir sebelum dibatalkan.',
     ])
 @endif
+
+{{-- Catat DP & masukkan ke produksi (admin, status Menunggu DP). Nomor SPP diberikan di sini. --}}
+@if ($bisaCatatDp)
+    @php
+        $nomorLama = $pesanan->nomor_spp;
+        $tampilKonfNomor = $errors->has('konfirmasi_nomor') || old('konfirmasi_nomor');
+        $dpLama = old('dp', '');
+    @endphp
+    <div class="modal fade modal-sheet" id="modalCatatDp" tabindex="-1" aria-labelledby="modalCatatDpJudul" aria-hidden="true" @if ($galatDp) data-buka-otomatis @endif>
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" method="POST" action="{{ route('admin.pesanan.dp', $pesanan) }}" data-kirim data-form-dp data-total="{{ (int) $pesanan->total }}" novalidate>
+                @csrf
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modalCatatDpJudul">Catat DP &amp; masukkan ke produksi</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="m-0 sg-muted">{{ $pesanan->kode_tampil }} · {{ $pesanan->nama_customer }}</p>
+                    <div class="sg-total-dp"><span>Total SPP</span><strong>{{ $rp($pesanan->total) }}</strong></div>
+                    @error('status')<p class="sg-galat mb-3"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-dp">DP diterima <span class="sg-wajib" aria-hidden="true">*</span></label>
+                        <div class="sg-imbuh sg-imbuh-depan">
+                            <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
+                            <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpLama }}" autocomplete="off" required placeholder="0"
+                                   class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp-input
+                                   aria-describedby="peringatan-dp{{ $errors->has('dp') ? ' g-dp' : '' }}" @error('dp') aria-invalid="true" @enderror>
+                        </div>
+                        @error('dp')<p class="sg-galat" id="g-dp"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                        <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
+                    </div>
+
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-tanggal_dp">Tanggal DP</label>
+                        <input type="date" id="f-tanggal_dp" name="tanggal_dp" value="{{ old('tanggal_dp', today()->toDateString()) }}"
+                               min="{{ $pesanan->tanggal_order?->toDateString() }}" max="{{ today()->toDateString() }}"
+                               class="form-control @error('tanggal_dp') is-invalid @enderror" @error('tanggal_dp') aria-invalid="true" aria-describedby="g-tanggal_dp" @enderror>
+                        @error('tanggal_dp')<p class="sg-galat" id="g-tanggal_dp"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                    </div>
+
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-nomor_spp">Nomor SPP <span class="sg-wajib" aria-hidden="true">*</span></label>
+                        <div class="sg-imbuh sg-imbuh-depan sg-nomor-spp-isian">
+                            <span class="sg-imbuh-teks" aria-hidden="true">#</span>
+                            <input type="text" inputmode="numeric" id="f-nomor_spp" name="nomor_spp" value="{{ old('nomor_spp', $saranNomor) }}" maxlength="9" required autocomplete="off"
+                                   class="form-control sg-angka @error('nomor_spp') is-invalid @enderror" data-nomor-dp data-saran-nomor="{{ $saranNomorBaru }}" data-nomor-lama="{{ $nomorLama }}"
+                                   aria-describedby="bantu-nomor-dp{{ $errors->has('nomor_spp') ? ' g-nomor_spp' : '' }}" @error('nomor_spp') aria-invalid="true" @enderror>
+                        </div>
+                        @error('nomor_spp')<p class="sg-galat" id="g-nomor_spp"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                        <p class="sg-bantu" id="bantu-nomor-dp">
+                            @if ($nomorLama)
+                                Nomor lama SPP ini <strong class="sg-angka">#{{ $nomorLama }}</strong>. Saran nomor baru: #{{ $saranNomorBaru }}.
+                            @else
+                                Saran nomor berikutnya: <strong class="sg-angka">#{{ $saranNomorBaru }}</strong>. Boleh diganti bila melanjutkan nomor buku.
+                            @endif
+                        </p>
+                        <div class="sg-alert sg-alert-peringatan sg-konfirmasi-nomor" data-konfirmasi-nomor="konfirmasi_nomor" @unless ($tampilKonfNomor) hidden @endunless>
+                            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                            <div>
+                                <p class="mb-2" id="pesan-konfirmasi_nomor" data-pesan-konfirmasi>{{ $errors->first('konfirmasi_nomor') }}</p>
+                                <label class="sg-centang" for="f-konfirmasi_nomor">
+                                    <input type="checkbox" id="f-konfirmasi_nomor" name="konfirmasi_nomor" value="1" class="form-check-input" @checked(old('konfirmasi_nomor'))
+                                           aria-describedby="pesan-konfirmasi_nomor" @error('konfirmasi_nomor') aria-invalid="true" @enderror>
+                                    <span>Ya, saya yakin pakai nomor ini</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="sg-btn sg-btn-sekunder" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…">Catat DP &amp; masukkan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
+
+{{-- Catat lunas (admin, SPP yang sudah produksi) --}}
+@if ($bisaCatatLunas)
+    <div class="modal fade modal-sheet" id="modalLunas" tabindex="-1" aria-labelledby="modalLunasJudul" aria-hidden="true" @if ($galatLunas) data-buka-otomatis @endif>
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" method="POST" action="{{ route('admin.pesanan.lunas', $pesanan) }}" data-kirim>
+                @csrf
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modalLunasJudul">Catat pelunasan</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="m-0 sg-muted">{{ $pesanan->kode_tampil }} · {{ $pesanan->nama_customer }}</p>
+                    <div class="sg-total-dp"><span>Sisa tagihan</span><strong>{{ $rp($pesanan->sisa) }}</strong></div>
+                    <label for="f-tanggal_lunas" class="sg-label">Tanggal lunas</label>
+                    <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', today()->toDateString()) }}"
+                           min="{{ $pesanan->tanggal_order?->toDateString() }}" max="{{ today()->toDateString() }}"
+                           class="form-control @error('tanggal_lunas') is-invalid @enderror" @error('tanggal_lunas') aria-invalid="true" aria-describedby="g-tanggal_lunas" @enderror>
+                    @error('tanggal_lunas')<p class="sg-galat" id="g-tanggal_lunas"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
+                    @if ($menungguPelunasan)
+                        <p class="sg-bantu mb-2">Setelah lunas, SPP bisa dipindahkan ke Pengiriman.</p>
+                    @endif
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="sg-btn sg-btn-sekunder" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Catat lunas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
+
 @if ($bisaHapus)
     <div class="modal fade modal-sheet" id="modalHapus" tabindex="-1" aria-labelledby="modalHapusJudul" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -374,7 +684,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="m-0">Gunakan hanya untuk SPP <strong>salah input</strong>. SPP yang batal sebaiknya dibatalkan, bukan dihapus, supaya riwayatnya tetap ada. Nomornya tidak dipakai ulang.</p>
+                    <p class="m-0">Gunakan hanya untuk SPP <strong>salah input</strong>. Pesanan yang batal sebaiknya ditandai {{ ($status->sebelumProduksi() || $tidakJadi) ? 'tidak jadi' : 'dibatalkan' }}, bukan dihapus, supaya riwayatnya tetap ada.@if ($pesanan->nomor_spp) Nomornya tidak dipakai ulang.@endif</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="sg-btn sg-btn-sekunder" data-bs-dismiss="modal">Batal</button>

@@ -299,35 +299,141 @@
         });
     }
 
-    // Pembaruan otomatis jumlah tab tiap 60 detik
+    // ── Notifikasi deadline (lonceng) ──────────────────
+    var panelNotif = $('[data-panel-notif]');
+    var penerimaJumlah = [];
+
+    var teksChipNotif = function (hari) {
+        if (hari === null || hari === undefined) return null;
+        if (hari < 0) return ['Lewat ' + Math.abs(hari) + ' hari', 'lewat'];
+        return [hari === 0 ? 'Hari ini' : 'H-' + hari, 'mendekat'];
+    };
+    var buatEl = function (tag, kelas, teks) {
+        var el = document.createElement(tag);
+        if (kelas) el.className = kelas;
+        if (teks !== undefined && teks !== null) el.textContent = teks;
+        return el;
+    };
+
+    function perbaruiLonceng(d) {
+        var total = d.total || 0, lewat = d.lewat || 0;
+        var label = total === 0
+            ? 'Notifikasi deadline, tidak ada yang mendesak'
+            : 'Notifikasi deadline: ' + total + ' pesanan mendesak' + (lewat ? ', ' + lewat + ' lewat deadline' : '');
+        $$('[data-lonceng]').forEach(function (b) {
+            b.setAttribute('aria-label', label);
+            var angka = $('[data-lonceng-angka]', b);
+            angka.hidden = total === 0;
+            angka.textContent = total > 99 ? '99+' : String(total);
+            angka.classList.toggle('sg-lewat', lewat > 0);
+        });
+        // Banner "lewat deadline" di atas daftar pesanan
+        var banner = $('[data-banner-lewat]');
+        if (banner) {
+            banner.hidden = lewat === 0;
+            $('[data-banner-lewat-teks]', banner).textContent = lewat + ' pesanan lewat deadline';
+        }
+    }
+
+    function isiPanelNotif(d) {
+        var isi = $('[data-notif-isi]', panelNotif);
+        var item = d.item || [];
+        isi.innerHTML = '';
+        if (!item.length) {
+            var kosong = buatEl('div', 'sg-notif-kosong');
+            kosong.innerHTML = '<i class="fa-regular fa-bell-slash" aria-hidden="true"></i>';
+            kosong.appendChild(buatEl('p', null, 'Tidak ada deadline mendesak'));
+            isi.appendChild(kosong);
+        } else {
+            var ul = buatEl('ul', 'sg-notif-daftar');
+            item.forEach(function (n) {
+                var li = document.createElement('li');
+                var a = buatEl('a', 'sg-notif-tautan');
+                a.href = n.url;
+                var kiri = document.createElement('span');
+                kiri.appendChild(buatEl('span', 'sg-notif-kode', n.kode_tampil));
+                kiri.appendChild(buatEl('span', 'sg-notif-nama', n.nama_customer + (n.nama_brand ? ' / ' + n.nama_brand : '')));
+                kiri.appendChild(buatEl('span', 'sg-notif-meta', n.label_status + ' · deadline ' + (n.deadline_teks || '-')));
+                a.appendChild(kiri);
+                var chip = teksChipNotif(n.hari_menuju_deadline);
+                if (chip) {
+                    var c = buatEl('span', 'sg-deadline sg-deadline-' + chip[1] + ' sg-notif-chip');
+                    c.innerHTML = '<i class="fa-solid ' + (chip[1] === 'lewat' ? 'fa-circle-exclamation' : 'fa-clock') + '" aria-hidden="true"></i>';
+                    c.appendChild(document.createTextNode(chip[0]));
+                    a.appendChild(c);
+                }
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            isi.appendChild(ul);
+        }
+        var sub = $('[data-notif-sub]', panelNotif);
+        sub.textContent = d.total
+            ? d.lewat + ' lewat · ' + d.mendekat + ' mendekati'
+            : 'Pesanan yang belum selesai produksi';
+        var lain = $('[data-notif-lain]', panelNotif);
+        var sisaLain = (d.total || 0) - item.length;
+        lain.hidden = sisaLain <= 0;
+        $('[data-notif-lain-link]', lain).textContent = 'Lihat ' + Math.max(sisaLain, 0) + ' lainnya di daftar pesanan';
+    }
+
+    if (panelNotif) {
+        var notifTertunda = null;
+        var aturExpanded = function (v) { $$('[data-lonceng]').forEach(function (b) { b.setAttribute('aria-expanded', v); }); };
+        panelNotif.addEventListener('show.bs.modal', function () { aturExpanded('true'); });
+        panelNotif.addEventListener('hidden.bs.modal', function () {
+            aturExpanded('false');
+            // Isi panel tidak diganti saat sedang dibuka (fokus pengguna tidak hilang)
+            if (notifTertunda) { isiPanelNotif(notifTertunda); notifTertunda = null; }
+        });
+        penerimaJumlah.push(function (data) {
+            if (!data || !data.deadline) return;
+            perbaruiLonceng(data.deadline);
+            if (panelNotif.classList.contains('show')) notifTertunda = data.deadline;
+            else isiPanelNotif(data.deadline);
+        });
+    }
+
+    // ── Pembaruan otomatis tiap 60 detik (jumlah tab + lonceng) ──
     var segar = $('[data-segar-otomatis]');
     if (segar) {
         var penanda = segar.getAttribute('data-penanda');
-        var gagal = 0;
-        var terakhirCek = Date.now();
         var teksSegar = $('[data-teks-segar]');
         var teksAsli = teksSegar ? teksSegar.innerHTML : '';
+        penerimaJumlah.push(function (data, galat) {
+            if (galat) {
+                if (galat >= 3 && teksSegar) {
+                    teksSegar.textContent = 'Tidak tersambung · coba lagi';
+                    teksSegar.classList.add('sg-tak-tersambung');
+                }
+                return;
+            }
+            if (teksSegar) { teksSegar.innerHTML = teksAsli; teksSegar.classList.remove('sg-tak-tersambung'); }
+            Object.keys(data.jumlah || {}).forEach(function (k) {
+                var el = $('[data-jumlah-tab="' + k + '"]');
+                if (!el) return;
+                el.firstChild.nodeValue = data.jumlah[k];
+                el.classList.toggle('sg-nol', data.jumlah[k] === 0);
+            });
+            if (data.penanda && data.penanda !== penanda) $('#ada-perubahan').hidden = false;
+        });
+    }
+
+    var urlJumlah = (segar && segar.getAttribute('data-url')) || (panelNotif && panelNotif.getAttribute('data-url'));
+    if (urlJumlah && penerimaJumlah.length) {
+        var gagal = 0;
+        var terakhirCek = Date.now();
         var cek = function () {
             terakhirCek = Date.now();
-            fetch(segar.getAttribute('data-url'), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+            fetch(urlJumlah, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
                 .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
                 .then(function (data) {
                     gagal = 0;
-                    if (teksSegar) { teksSegar.innerHTML = teksAsli; teksSegar.classList.remove('sg-tak-tersambung'); }
-                    Object.keys(data.jumlah || {}).forEach(function (k) {
-                        var el = $('[data-jumlah-tab="' + k + '"]');
-                        if (!el) return;
-                        el.firstChild.nodeValue = data.jumlah[k];
-                        el.classList.toggle('sg-nol', data.jumlah[k] === 0);
-                    });
-                    if (data.penanda && data.penanda !== penanda) $('#ada-perubahan').hidden = false;
+                    penerimaJumlah.forEach(function (f) { f(data, 0); });
                 })
                 .catch(function () {
                     gagal++;
-                    if (gagal >= 3 && teksSegar) {
-                        teksSegar.textContent = 'Tidak tersambung · coba lagi';
-                        teksSegar.classList.add('sg-tak-tersambung');
-                    }
+                    penerimaJumlah.forEach(function (f) { f(null, gagal); });
                 });
         };
         setInterval(function () { if (document.visibilityState === 'visible') cek(); }, 60000);
@@ -339,6 +445,105 @@
     // ════════════════════════════════════════════════
     // Detail order
     // ════════════════════════════════════════════════
+    // Input rupiah di luar form order (Hitung Harga, Catat DP): pemisah ribuan saat blur
+    $$('[data-form-harga], [data-form-dp]').forEach(function (f) {
+        f.addEventListener('focusout', function (e) {
+            if (e.target.matches('[data-rupiah]') && e.target.value.trim() !== '') e.target.value = formatAngka(keAngka(e.target.value));
+        });
+    });
+
+    // Hitung Harga: subtotal & total langsung saat mengetik
+    var formHarga = $('[data-form-harga]');
+    if (formHarga) {
+        var hitungHarga = function () {
+            var total = 0, kosong = 0, semua = $$('[data-harga-item]', formHarga);
+            semua.forEach(function (item) {
+                var input = $('[data-harga-input]', item);
+                var sub = $('[data-harga-sub]', item);
+                if (input.value.trim() === '') {
+                    kosong++;
+                    sub.textContent = 'Belum dihitung';
+                    sub.classList.add('sg-belum-harga');
+                    return;
+                }
+                var n = keAngka(input.value) * (parseInt(item.getAttribute('data-jumlah'), 10) || 0);
+                total += n;
+                sub.textContent = rupiah(n);
+                sub.classList.remove('sg-belum-harga');
+            });
+            var elTotal = $('[data-harga-total]', formHarga);
+            elTotal.textContent = total > 0 || kosong === 0 ? rupiah(total) : 'Belum dihitung';
+            $('[data-harga-ket]', formHarga).textContent = kosong === 0
+                ? 'Semua item berharga · pindah ke Menunggu DP saat disimpan'
+                : 'Belum lengkap: ' + kosong + ' dari ' + semua.length + ' item belum berharga';
+        };
+        formHarga.addEventListener('input', function (e) { if (e.target.matches('[data-harga-input]')) hitungHarga(); });
+        hitungHarga();
+    }
+
+    // Catat DP: peringatan DP > total & nomor SPP loncat (server tetap penentu)
+    var formDp = $('[data-form-dp]');
+    if (formDp) {
+        var totalDp = parseInt(formDp.getAttribute('data-total'), 10) || 0;
+        var inputDp = $('[data-dp-input]', formDp);
+        var peringatanDp = $('[data-peringatan-dp]', formDp);
+        var cekDp = function () {
+            var dp = keAngka(inputDp.value);
+            var lebih = dp > totalDp;
+            peringatanDp.hidden = !lebih;
+            if (lebih) $('span', peringatanDp).textContent = 'DP melebihi total SPP sebesar ' + rupiah(dp - totalDp) + '.';
+        };
+        inputDp.addEventListener('input', cekDp);
+
+        var inputNoDp = $('[data-nomor-dp]', formDp);
+        var kotakNoDp = $('[data-konfirmasi-nomor]', formDp);
+        var cekNomorDp = function () {
+            var teks = inputNoDp.value.replace(/^\s*(spp\s*)?#?\s*/i, '').trim();
+            if (!/^\d{1,9}$/.test(teks)) return false;
+            var n = parseInt(teks, 10);
+            var saran = parseInt(inputNoDp.getAttribute('data-saran-nomor'), 10) || 0;
+            var lama = inputNoDp.getAttribute('data-nomor-lama');
+            var centang = $('input[type="checkbox"]', kotakNoDp);
+            // Nomor lama SPP ini sendiri tidak dianggap loncat; nomor SPP pertama juga tidak (saran 1)
+            var loncat = !(lama && n === parseInt(lama, 10)) && saran > 1 && Math.abs(n - saran) > 10;
+            if (!loncat) { kotakNoDp.hidden = true; centang.checked = false; return false; }
+            if (kotakNoDp.hidden || kotakNoDp.getAttribute('data-nomor-pesan') !== String(n)) {
+                $('[data-pesan-konfirmasi]', kotakNoDp).textContent = 'Nomor SPP #' + n + ' jauh dari nomor berikutnya (#' + saran + '). Periksa lagi; bila memang benar, centang konfirmasi lalu simpan.';
+                kotakNoDp.setAttribute('data-nomor-pesan', String(n));
+            }
+            kotakNoDp.hidden = false;
+            return !centang.checked;
+        };
+        if (!kotakNoDp.hidden) kotakNoDp.setAttribute('data-nomor-pesan', String(keAngka(inputNoDp.value)));
+        inputNoDp.addEventListener('change', cekNomorDp);
+        formDp.addEventListener('submit', function (e) {
+            if (!cekNomorDp()) return;
+            e.preventDefault();
+            var centang = $('input[type="checkbox"]', kotakNoDp);
+            kotakNoDp.scrollIntoView({ block: 'nearest' });
+            centang.focus();
+        });
+        cekDp();
+    }
+
+    // Tombol yang dikunci (aria-disabled, tetap bisa difokus supaya keterangannya terbaca)
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('.sg-btn[aria-disabled="true"]');
+        if (b && b.tagName === 'BUTTON') e.preventDefault();
+    });
+
+    // Modal dengan galat validasi dari server dibuka lagi otomatis
+    if (window.bootstrap) {
+        var modalGalat = $('.modal[data-buka-otomatis]');
+        if (modalGalat) {
+            bootstrap.Modal.getOrCreateInstance(modalGalat).show();
+            modalGalat.addEventListener('shown.bs.modal', function () {
+                var salah = $('[aria-invalid="true"]', modalGalat);
+                if (salah) salah.focus();
+            }, { once: true });
+        }
+    }
+
     var formCatatan = $('[data-form-catatan]');
     if (formCatatan) {
         var area = $('textarea', formCatatan);
@@ -613,19 +818,37 @@
             });
         });
 
-        // Hitung subtotal, total, sisa, status bayar
+        // Hitung subtotal, total, sisa, status bayar. Harga boleh kosong (dihitung produksi):
+        // item tanpa harga → "Belum dihitung", total → "Belum lengkap". DP/lunas hanya ada untuk SPP yang sudah produksi.
         var hitungTotal = function () {
             var total = 0;
+            var tanpaHarga = 0;
             $$('[data-item]', wadahItem).forEach(function (item) {
-                var sub = keAngka($('[data-jumlah]', item).value) * keAngka($('[data-harga]', item).value);
+                var inputHarga = $('[data-harga]', item);
+                var kosong = inputHarga.value.trim() === '';
+                var sub = keAngka($('[data-jumlah]', item).value) * keAngka(inputHarga.value);
+                if (kosong) tanpaHarga++;
                 total += sub;
-                $('[data-subtotal]', item).textContent = rupiah(sub);
+                var elSub = $('[data-subtotal]', item);
+                elSub.textContent = kosong ? 'Belum dihitung' : rupiah(sub);
+                elSub.classList.toggle('sg-belum-harga', kosong);
             });
+            var lengkap = tanpaHarga === 0;
+            var teksTotal = lengkap ? rupiah(total) : (total > 0 ? rupiah(total) + ' · belum lengkap' : 'Belum lengkap');
+            $$('[data-total]').forEach(function (el) {
+                // Bilah HP sempit: cukup "Belum lengkap" supaya tidak terpotong
+                el.textContent = (!lengkap && el.closest('.sg-bilah')) ? 'Belum lengkap' : teksTotal;
+                el.classList.toggle('sg-belum-harga', !lengkap);
+            });
+            $$('[data-total-ket]').forEach(function (el) {
+                el.textContent = lengkap ? 'Dihitung dari item' : tanpaHarga + ' item belum diberi harga';
+            });
+
             var dpInput = $('[data-dp]', formOrder);
+            if (!dpInput) return;
             var dp = keAngka(dpInput.value);
             var lunas = $('[data-tanggal-lunas]', formOrder).value !== '';
             var sisa = lunas ? 0 : Math.max(total - dp, 0);
-            $$('[data-total]').forEach(function (el) { el.textContent = rupiah(total); });
             $$('[data-sisa]').forEach(function (el) { el.textContent = rupiah(sisa); });
             $$('[data-dp-tampil]').forEach(function (el) { el.textContent = rupiah(dp); });
 

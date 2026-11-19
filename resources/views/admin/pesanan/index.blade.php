@@ -1,6 +1,8 @@
 @extends('admin.layouts.pesanan')
 
 @section('title', 'Pesanan')
+{{-- Banner "pesanan lewat deadline" dirender layout (butuh \$notifDeadline) --}}
+@section('banner_lewat', '1')
 
 @php
     $infoTab = [
@@ -25,12 +27,12 @@
     $labelUrut = ['terbaru' => 'SPP terbaru'];
     $kosong = [
         'semua'            => ['fa-box-open', 'Belum ada SPP', 'SPP baru yang ditambahkan admin akan muncul di sini.'],
-        'hitung_harga'     => ['fa-calculator', 'Tidak ada yang perlu dihitung', 'Pesanan baru tanpa harga muncul di sini untuk dihitung produksi.'],
-        'menunggu_dp'      => ['fa-hourglass-half', 'Tidak ada yang menunggu DP', 'Pesanan yang harganya sudah dihitung menunggu DP customer di sini.'],
+        'hitung_harga'     => ['fa-calculator', 'Tidak ada pesanan yang menunggu dihitung harganya', 'Pesanan baru yang belum berharga muncul di sini untuk dihitung produksi.'],
+        'menunggu_dp'      => ['fa-hourglass-half', 'Tidak ada pesanan yang menunggu DP', 'Pesanan yang harganya sudah dihitung menunggu DP customer di sini.'],
         'proses'           => ['fa-print', 'Tidak ada yang sedang dikerjakan', 'SPP masuk ke sini setelah DP dicatat admin.'],
         'selesai_produksi' => ['fa-circle-check', 'Belum ada pesanan selesai', 'SPP yang selesai diproduksi menunggu dikirim di sini.'],
         'pengiriman'       => ['fa-truck', 'Tidak ada SPP dalam pengiriman', 'SPP yang sedang diantar atau dikirim muncul di sini.'],
-        'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'SPP yang sudah selesai atau dibatalkan tersimpan di sini.'],
+        'history'          => ['fa-clock-rotate-left', 'Riwayat masih kosong', 'SPP yang selesai, tidak jadi, atau dibatalkan tersimpan di sini.'],
     ];
     $angka = fn ($n) => number_format((int) $n, 0, ',', '.');
     $mencari = $q !== '';
