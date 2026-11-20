@@ -1,140 +1,89 @@
-@extends('admin.layouts.app')
+@extends('admin.layouts.pesanan')
 
 @section('title', 'Atribut Produk')
-@section('page_title', 'Atribut: ' . $produk->nama_produk)
-
-@section('content')
+@section('kembali', route('admin.produk.index'))
+@section('tanpa_bottomnav', '1')
 
 @php
     // Tiga daftar centang dalam satu form, disimpan sekaligus dengan satu tombol
     $kelompok = [
         ['jenis' => 'bahan', 'judul' => 'Bahan Produk', 'label' => 'bahan', 'semua' => $semuaBahan,
          'dipilih' => $produk->bahan->pluck('id')->all(), 'nama' => 'nama_bahan',
-         'master' => route('admin.bahan.index'), 'labelMaster' => 'Master Bahan'],
+         'master' => route('admin.bahan.index'), 'labelMaster' => 'Master Bahan', 'ringkas' => 'bahan'],
         ['jenis' => 'cetak', 'judul' => 'Jenis Cetak Produk', 'label' => 'jenis cetak', 'semua' => $semuaCetak,
          'dipilih' => $produk->cetak->pluck('id')->all(), 'nama' => 'nama_cetak',
-         'master' => route('admin.cetak.index'), 'labelMaster' => 'Master Cetak'],
+         'master' => route('admin.cetak.index'), 'labelMaster' => 'Master Cetak', 'ringkas' => 'cetak'],
         ['jenis' => 'finishing', 'judul' => 'Finishing Produk', 'label' => 'finishing', 'semua' => $semuaFinishing,
          'dipilih' => $produk->finishing->pluck('id')->all(), 'nama' => 'nama_finishing',
-         'master' => route('admin.finishing.index'), 'labelMaster' => 'Master Finishing'],
+         'master' => route('admin.finishing.index'), 'labelMaster' => 'Master Finishing', 'ringkas' => 'finishing'],
     ];
+    $ringkasAwal = collect($kelompok)->map(fn ($k) => count($k['dipilih']) . ' ' . $k['ringkas'])->implode(' · ');
 @endphp
 
-<div class="mb-3">
-    <a href="{{ route('admin.produk.index') }}" class="btn btn-secondary btn-sm">
-        <i class="fas fa-arrow-left"></i> Kembali ke Daftar Produk
-    </a>
+@section('content')
+<div class="sg-kepala">
+    <div>
+        <a href="{{ route('admin.produk.index') }}" class="sg-remah d-none d-lg-inline-flex" data-batal-form><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Produk</a>
+        <h1>Atribut produk</h1>
+        <p class="sg-kepala-sub" style="overflow-wrap:anywhere">{{ $produk->nama_produk }}</p>
+    </div>
 </div>
 
-<form action="{{ route('admin.produk.atribut.simpan', $produk) }}" method="POST">
+<form action="{{ route('admin.produk.atribut.simpan', $produk) }}" method="POST" data-kirim data-jaga-perubahan>
     @csrf @method('PUT')
 
-    <div class="row">
+    <div class="sg-atribut-grid">
         @foreach ($kelompok as $k)
-            <div class="col-lg-4 col-md-6">
-                <div class="card" data-pilihan="{{ $k['jenis'] }}">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h3 class="card-title">{{ $k['judul'] }}</h3>
-                        <span class="badge badge-primary ml-auto" data-counter>
-                            {{ count($k['dipilih']) }} dipilih
-                        </span>
-                    </div>
-
-                    <div class="card-body">
-                        @if ($k['semua']->isEmpty())
-                            <p class="text-muted text-center mb-0">
-                                Belum ada data {{ $k['label'] }}.
-                                <a href="{{ $k['master'] }}">Tambah di {{ $k['labelMaster'] }}</a>
-                            </p>
-                        @else
-                            <div class="d-flex mb-3">
-                                <input type="search" class="form-control form-control-sm mr-2"
-                                    placeholder="Cari {{ $k['label'] }}..." data-cari>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" data-pilih-semua>
-                                    Pilih semua
-                                </button>
-                            </div>
-
-                            <div class="row">
-                                @foreach ($k['semua'] as $item)
-                                    <div class="col-sm-6" data-item="{{ strtolower($item->{$k['nama']}) }}">
-                                        <div class="custom-control custom-checkbox mb-2">
-                                            <input type="checkbox" class="custom-control-input"
-                                                id="{{ $k['jenis'] . $item->id }}" name="{{ $k['jenis'] }}[]" value="{{ $item->id }}"
-                                                {{ in_array($item->id, $k['dipilih']) ? 'checked' : '' }}>
-                                            <label class="custom-control-label font-weight-normal" for="{{ $k['jenis'] . $item->id }}">
-                                                {{ $item->{$k['nama']} }}
-                                            </label>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                    </div>
-
-                    <div class="card-footer">
-                        <a href="{{ $k['master'] }}" class="small">
-                            <i class="fas fa-cog"></i> Kelola {{ $k['labelMaster'] }}
-                        </a>
-                    </div>
+            <section class="sg-kartu" id="f-{{ $k['jenis'] }}" data-pilihan="{{ $k['jenis'] }}" data-label="{{ $k['label'] }}" data-label-ringkas="{{ $k['ringkas'] }}" aria-labelledby="judul-{{ $k['jenis'] }}">
+                <div class="sg-atribut-kepala">
+                    <h2 class="sg-kartu-judul" id="judul-{{ $k['jenis'] }}">{{ $k['judul'] }}</h2>
+                    <span class="sg-chip-kecil" data-counter aria-live="polite">{{ count($k['dipilih']) }} dipilih</span>
                 </div>
-            </div>
+
+                @if ($k['semua']->isEmpty())
+                    <div class="sg-kosong sg-kosong-ringkas">
+                        <p>Belum ada data {{ $k['label'] }}.</p>
+                        <a href="{{ $k['master'] }}" class="sg-btn sg-btn-sekunder" data-batal-form>Tambah di {{ $k['labelMaster'] }}</a>
+                    </div>
+                @else
+                    <div class="sg-atribut-alat">
+                        <div class="sg-cari">
+                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                            <label class="visually-hidden" for="cari-{{ $k['jenis'] }}">Cari {{ $k['label'] }}</label>
+                            <input type="search" id="cari-{{ $k['jenis'] }}" class="form-control" placeholder="Cari {{ $k['label'] }}…" autocomplete="off" data-cari>
+                            <button type="button" class="sg-cari-hapus" data-cari-hapus hidden aria-label="Hapus pencarian {{ $k['label'] }}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                        </div>
+                        <button type="button" class="sg-btn sg-btn-sekunder" data-pilih-semua>Pilih semua</button>
+                    </div>
+
+                    <ul class="sg-pilih-daftar">
+                        @foreach ($k['semua'] as $item)
+                            <li data-item="{{ mb_strtolower($item->{$k['nama']}) }}">
+                                <label class="sg-pilih-baris" for="{{ $k['jenis'] . $item->id }}">
+                                    <input type="checkbox" class="form-check-input" id="{{ $k['jenis'] . $item->id }}" name="{{ $k['jenis'] }}[]" value="{{ $item->id }}"
+                                           @checked(in_array($item->id, $k['dipilih']))>
+                                    <span>{{ $item->{$k['nama']} }}</span>
+                                </label>
+                            </li>
+                        @endforeach
+                        <li class="sg-pilih-kosong" data-cari-kosong hidden></li>
+                    </ul>
+                @endif
+
+                <div class="sg-atribut-kaki">
+                    <a href="{{ $k['master'] }}" class="sg-btn sg-btn-teks" data-batal-form><i class="fa-solid fa-gear" aria-hidden="true"></i> Kelola {{ $k['labelMaster'] }}</a>
+                </div>
+            </section>
         @endforeach
     </div>
 
-    <div class="card">
-        <div class="card-body d-flex justify-content-between align-items-center flex-wrap">
-            <span class="text-muted small mb-2 mb-md-0">
-                Bahan, jenis cetak, dan finishing disimpan sekaligus.
-            </span>
-            <button type="submit" class="btn btn-success">
-                <i class="fas fa-save"></i> Simpan Semua
-            </button>
-        </div>
+    <div class="sg-aksi-lekat d-none d-lg-flex">
+        <p><strong class="d-block fw-semibold text-body sg-angka" data-ringkas-atribut>{{ $ringkasAwal }}</strong> Bahan, jenis cetak, dan finishing disimpan sekaligus.</p>
+        <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan Semua</button>
+    </div>
+    <div class="sg-bilah d-lg-none">
+        <p class="sg-bilah-ringkas m-0"><span class="sg-angka" data-ringkas-atribut aria-live="polite">{{ $ringkasAwal }}</span></p>
+        <button type="submit" class="sg-btn sg-btn-utama" data-teks-kirim="Menyimpan…"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan Semua</button>
     </div>
 </form>
-
 @endsection
-
-@push('scripts')
-<script>
-    document.querySelectorAll('[data-pilihan]').forEach(kartu => {
-        const counter    = kartu.querySelector('[data-counter]');
-        const items      = kartu.querySelectorAll('[data-item]');
-        const checkbox   = kartu.querySelectorAll('input[type="checkbox"]');
-        const cari       = kartu.querySelector('[data-cari]');
-        const pilihSemua = kartu.querySelector('[data-pilih-semua]');
-
-        // ── Hitung jumlah yang dicentang ──
-        function updateCounter() {
-            const jumlah = kartu.querySelectorAll('input[type="checkbox"]:checked').length;
-            counter.textContent = jumlah + ' dipilih';
-        }
-        checkbox.forEach(cb => cb.addEventListener('change', updateCounter));
-
-        // ── Pencarian ──
-        cari?.addEventListener('input', function () {
-            const kata = this.value.toLowerCase().trim();
-            items.forEach(el => {
-                el.style.display = el.dataset.item.includes(kata) ? '' : 'none';
-            });
-        });
-
-        // Enter di kotak cari tidak mengirim form
-        cari?.addEventListener('keydown', e => {
-            if (e.key === 'Enter') e.preventDefault();
-        });
-
-        // ── Pilih / batal pilih semua (yang sedang tampil) ──
-        pilihSemua?.addEventListener('click', function () {
-            const tampil = Array.from(items)
-                .filter(el => el.style.display !== 'none')
-                .map(el => el.querySelector('input'));
-            const semuaTercentang = tampil.every(cb => cb.checked);
-            tampil.forEach(cb => cb.checked = !semuaTercentang);
-            this.textContent = semuaTercentang ? 'Pilih semua' : 'Batal pilih';
-            updateCounter();
-        });
-    });
-</script>
-@endpush
