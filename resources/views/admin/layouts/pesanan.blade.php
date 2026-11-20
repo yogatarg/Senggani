@@ -19,6 +19,21 @@
     $diPengguna = request()->routeIs('admin.pengguna.*');
     $diCustomer = request()->routeIs('admin.customer.*');
     $diPassword = request()->routeIs('admin.password.*');
+    $diProduk    = request()->routeIs('admin.produk.*');
+    $diKategori  = request()->routeIs('admin.kategori-produk.*');
+    $diBanner    = request()->routeIs('admin.banner.*');
+    $diBahan     = request()->routeIs('admin.bahan.*');
+    $diFinishing = request()->routeIs('admin.finishing.*');
+    $diCetak     = request()->routeIs('admin.cetak.*');
+    $diKatalog   = $diProduk || $diKategori || $diBanner || $diBahan || $diFinishing || $diCetak;
+    $menuKatalog = [
+        ['admin.produk.index', 'fa-cube', 'Produk', $diProduk],
+        ['admin.kategori-produk.index', 'fa-tags', 'Kategori', $diKategori],
+        ['admin.banner.index', 'fa-images', 'Banner', $diBanner],
+        ['admin.bahan.index', 'fa-scroll', 'Master Bahan', $diBahan],
+        ['admin.finishing.index', 'fa-wand-magic-sparkles', 'Master Finishing', $diFinishing],
+        ['admin.cetak.index', 'fa-fill-drip', 'Master Cetak', $diCetak],
+    ];
     $adaBottomNav = ! $__env->hasSection('tanpa_bottomnav');
 
     // Notifikasi deadline (view composer). Chip: "Lewat 2 hari" / "Hari ini" / "H-2"
@@ -31,8 +46,11 @@
     };
 
     // id field untuk link di ringkasan error: item.0.jumlah → f-item-0-jumlah
+    // Galat array file/centang mengarah ke field induknya: galeri.0 → f-galeri, bahan.0 → f-bahan.
+    // gambar.0 (unggah galeri di Edit Produk) → f-galeri-tambah, karena f-gambar dipakai gambar utama di halaman yang sama.
     $idField = function (string $kunci) {
-        $kunci = preg_replace('/^(mockup|referensi)\..*$/', '$1', $kunci);
+        $kunci = preg_replace('/^(mockup|referensi|galeri|bahan|cetak|finishing)\..*$/', '$1', $kunci);
+        $kunci = preg_replace('/^gambar\.\d+$/', 'galeri-tambah', $kunci);
         $kunci = preg_replace('/^(item\.\d+\.finishing)\..*$/', '$1', $kunci);
 
         return 'f-' . str_replace('.', '-', $kunci);
@@ -87,7 +105,8 @@
             @include('admin.layouts._lonceng')
         </div>
         <hr class="sg-pemisah">
-        <nav aria-label="Menu kerja">
+        <nav aria-labelledby="menu-pesanan">
+            <h2 class="sg-menu-kelompok" id="menu-pesanan">Pesanan</h2>
             <ul class="sg-menu">
                 <li><a class="sg-menu-item" href="{{ route('admin.pesanan.index') }}" @if ($diPesanan) aria-current="page" @endif><i class="fa-solid fa-box-open" aria-hidden="true"></i> Pesanan</a></li>
                 @can('create', \App\Models\Pesanan::class)
@@ -96,18 +115,28 @@
                 @can('kelola-customer')
                     <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
                 @endcan
+            </ul>
+        </nav>
+        @can('kelola-katalog')
+            <hr class="sg-pemisah">
+            <nav aria-labelledby="menu-katalog">
+                <h2 class="sg-menu-kelompok" id="menu-katalog">Katalog Situs</h2>
+                <ul class="sg-menu">
+                    @foreach ($menuKatalog as [$rute, $ikon, $label, $aktif])
+                        <li><a class="sg-menu-item" href="{{ route($rute) }}" @if ($aktif) aria-current="page" @endif><i class="fa-solid {{ $ikon }}" aria-hidden="true"></i> {{ $label }}</a></li>
+                    @endforeach
+                </ul>
+            </nav>
+        @endcan
+        <hr class="sg-pemisah">
+        <nav aria-label="Akun">
+            <ul class="sg-menu">
                 @can('kelola-pengguna')
                     <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
                 @endcan
+                <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
             </ul>
         </nav>
-        <hr class="sg-pemisah">
-        <ul class="sg-menu">
-            @can('kelola-pengguna')
-                <li><a class="sg-menu-item" href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-store" aria-hidden="true"></i> <span>Katalog <small>admin lama</small></span> <i class="fa-solid fa-arrow-up-right-from-square sg-menu-luar" aria-hidden="true"></i></a></li>
-            @endcan
-            <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
-        </ul>
         <hr class="sg-pemisah">
         <form action="{{ route('admin.logout') }}" method="POST">
             @csrf
@@ -188,7 +217,7 @@
                 <span class="sg-bn-ikon"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></span> Tambah
             </a>
         @endcan
-        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword || $diCustomer) aria-current="page" @endif>
+        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword || $diCustomer || $diKatalog) aria-current="page" @endif>
             <span class="sg-bn-ikon"><i class="fa-solid fa-circle-user" aria-hidden="true"></i></span> Akun
         </button>
     </nav>
@@ -208,22 +237,39 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
     </div>
     <div class="offcanvas-body pt-2">
-        <ul class="sg-menu">
-            @can('kelola-customer')
-                <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
-            @endcan
-            @can('kelola-pengguna')
-                <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
-                <li><a class="sg-menu-item" href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-store" aria-hidden="true"></i> <span>Katalog <small>admin lama</small></span> <i class="fa-solid fa-arrow-up-right-from-square sg-menu-luar" aria-hidden="true"></i></a></li>
-            @endcan
-            <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
-            <li>
-                <form action="{{ route('admin.logout') }}" method="POST">
-                    @csrf
-                    <button type="submit" class="sg-menu-item sg-menu-keluar"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Keluar</button>
-                </form>
-            </li>
-        </ul>
+        @can('kelola-customer')
+            <nav aria-labelledby="sheet-menu-pesanan">
+                <h2 class="sg-menu-kelompok" id="sheet-menu-pesanan">Pesanan</h2>
+                <ul class="sg-menu">
+                    <li><a class="sg-menu-item" href="{{ route('admin.customer.index') }}" @if ($diCustomer) aria-current="page" @endif><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customer</a></li>
+                </ul>
+            </nav>
+        @endcan
+        @can('kelola-katalog')
+            <nav aria-labelledby="sheet-menu-katalog">
+                <h2 class="sg-menu-kelompok" id="sheet-menu-katalog">Katalog Situs</h2>
+                <ul class="sg-menu">
+                    @foreach ($menuKatalog as [$rute, $ikon, $label, $aktif])
+                        <li><a class="sg-menu-item" href="{{ route($rute) }}" @if ($aktif) aria-current="page" @endif><i class="fa-solid {{ $ikon }}" aria-hidden="true"></i> {{ $label }}</a></li>
+                    @endforeach
+                </ul>
+            </nav>
+        @endcan
+        <hr class="sg-pemisah">
+        <nav aria-label="Akun">
+            <ul class="sg-menu">
+                @can('kelola-pengguna')
+                    <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
+                @endcan
+                <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
+                <li>
+                    <form action="{{ route('admin.logout') }}" method="POST">
+                        @csrf
+                        <button type="submit" class="sg-menu-item sg-menu-keluar"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Keluar</button>
+                    </form>
+                </li>
+            </ul>
+        </nav>
     </div>
 </div>
 
