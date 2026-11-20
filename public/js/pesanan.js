@@ -140,6 +140,8 @@
             var ya = $('[data-konfirmasi-ya]', elKonfirmasi);
             var isi = $('[data-konfirmasi-isi]', elKonfirmasi);
             var hasil = false;
+            // Elemen pemicu: fokus dikembalikan ke sini bila dibatalkan (Batal/Esc/klik latar)
+            var asal = document.activeElement;
             $('[data-konfirmasi-judul]', elKonfirmasi).textContent = opsi.judul || 'Lanjutkan?';
             isi.textContent = opsi.isi || '';
             isi.hidden = !opsi.isi;
@@ -152,6 +154,9 @@
                 ya.removeEventListener('click', saatYa);
                 elKonfirmasi.removeEventListener('shown.bs.modal', saatTampil);
                 elKonfirmasi.removeEventListener('hidden.bs.modal', saatTutup);
+                if (!hasil && asal && asal !== document.body && asal.isConnected && typeof asal.focus === 'function') {
+                    asal.focus();
+                }
                 selesai(hasil);
             };
             ya.addEventListener('click', saatYa);
@@ -1530,7 +1535,43 @@
             hitung.hidden = boleh.length === 0;
             hitung.textContent = boleh.length + ' foto dipilih';
         };
-        input.addEventListener('change', function () { terima(input.files || []); });
+        // Wajib minimal satu foto: tampilkan pesan ramah di bawah dropzone, bukan bubble browser
+        var galatWajib = $('[data-galeri-galat]', w);
+        var pesanWajib = input.getAttribute('data-pesan-wajib');
+        var bersihkanWajib = function () {
+            if (!galatWajib || galatWajib.hidden) return;
+            galatWajib.hidden = true;
+            input.removeAttribute('aria-invalid');
+        };
+        if (pesanWajib && galatWajib) {
+            input.addEventListener('invalid', function (e) {
+                e.preventDefault();
+                isiTolak(galatWajib, '', pesanWajib);
+                input.setAttribute('aria-invalid', 'true');
+                input.focus();
+            });
+        }
+        input.addEventListener('change', function () { bersihkanWajib(); terima(input.files || []); });
+
+        // Pengingat "Pilih ulang foto galeri": catat jumlah file saat form dikirim;
+        // setelah gagal validasi, sembunyikan pengingat bila tadi memang tidak ada foto dipilih.
+        var kunciUlang = 'sg-galeri:' + location.pathname + ':' + input.id;
+        var ulang = $('[data-galeri-ulang]', w);
+        try {
+            var jumlahTadi = sessionStorage.getItem(kunciUlang);
+            sessionStorage.removeItem(kunciUlang);
+            if (ulang && jumlahTadi === '0') {
+                ulang.remove();
+                var ket = (input.getAttribute('aria-describedby') || '').split(' ').filter(function (x) { return x && x !== ulang.id; });
+                input.setAttribute('aria-describedby', ket.join(' '));
+            }
+        } catch (err) { /* sessionStorage tidak tersedia: pengingat tetap tampil */ }
+        if (input.form) {
+            input.form.addEventListener('submit', function () {
+                try { sessionStorage.setItem(kunciUlang, String(input.files ? input.files.length : 0)); } catch (err) { /* abaikan */ }
+            });
+        }
+
         pasangSeret($('[data-dropzone]', w), function (files) {
             var dt = new DataTransfer();
             Array.prototype.forEach.call(files, function (f) { dt.items.add(f); });

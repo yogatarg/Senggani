@@ -52,7 +52,7 @@
 
         <form action="{{ route('admin.produk.galeri.tambah', $produk) }}" method="POST" enctype="multipart/form-data" data-kirim>
             @csrf
-            @include('admin.produk._galeri-unggah', ['nama' => 'gambar', 'id' => 'f-galeri-tambah', 'kunciGalat' => 'gambar.*', 'teks' => 'Tambah foto galeri (bisa lebih dari satu)'])
+            @include('admin.produk._galeri-unggah', ['nama' => 'gambar', 'id' => 'f-galeri-tambah', 'kunciGalat' => 'gambar.*', 'teks' => 'Tambah foto galeri (bisa lebih dari satu)', 'wajib' => true, 'ingatkanUlang' => $errors->has('gambar.*')])
             <div class="sg-kartu-aksi">
                 <button type="submit" class="sg-btn sg-btn-sekunder" data-teks-kirim="Mengunggah…"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> Unggah foto</button>
             </div>

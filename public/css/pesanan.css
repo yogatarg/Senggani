@@ -332,6 +332,8 @@ button.sg-avatar { background: transparent; }
     width: 40px; height: 40px; border: 0; background: transparent; color: var(--sg-text-muted);
     border-radius: var(--sg-r-sm); display: inline-flex; align-items: center; justify-content: center;
 }
+/* Area sentuh 48×48 tanpa mengubah ukuran tampilan */
+.sg-cari-hapus::after { content: ""; position: absolute; inset: -4px; }
 .sg-urut { display: flex; align-items: center; gap: 8px; }
 .sg-urut label { font-size: 14px; font-weight: 500; color: var(--sg-text-2); white-space: nowrap; }
 @media (min-width: 768px) { .sg-alat { grid-template-columns: minmax(0,1fr) auto; align-items: center; } .sg-urut select { min-width: 220px; } }

@@ -23,7 +23,7 @@
 
     <section class="sg-kartu" aria-labelledby="judul-galeri">
         <h2 class="sg-kartu-judul" id="judul-galeri"><span class="sg-no" aria-hidden="true">2</span> Galeri produk</h2>
-        @include('admin.produk._galeri-unggah', ['nama' => 'galeri', 'id' => 'f-galeri', 'kunciGalat' => 'galeri.*', 'teks' => 'Pilih foto galeri (bisa lebih dari satu)'])
+        @include('admin.produk._galeri-unggah', ['nama' => 'galeri', 'id' => 'f-galeri', 'kunciGalat' => 'galeri.*', 'teks' => 'Pilih foto galeri (bisa lebih dari satu)', 'ingatkanUlang' => $errors->any()])
     </section>
 
     <div class="sg-form-aksi sg-rata-kanan d-none d-lg-flex">
