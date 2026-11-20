@@ -47,9 +47,9 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             'galeri'        => 'nullable|array',
-            'galeri.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'galeri.*'      => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
         ], $this->pesanProduk(), $this->atributProduk());
 
         $data = [
@@ -113,7 +113,7 @@ class ProdukController extends Controller
             'kategori_id'   => 'required|exists:kategori_produk,id',
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
         ], $this->pesanProduk(), $this->atributProduk());
 
         $produk->nama_produk   = $request->nama_produk;
@@ -175,7 +175,7 @@ class ProdukController extends Controller
 
         $request->validate([
             'gambar'   => 'array',
-            'gambar.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar.*' => 'bail|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
         ], [
             ...$this->pesanUmum(),
             'gambar.array'   => 'Foto galeri tidak valid.',
@@ -302,6 +302,7 @@ class ProdukController extends Controller
             ...$this->pesanUmum(),
             'kategori_id.required' => 'Kategori wajib dipilih.',
             'kategori_id.exists'   => 'Kategori yang dipilih tidak ditemukan.',
+            'minimal_pesan.min'    => 'Minimal pesan paling sedikit 1.',
             'gambar.max'           => 'Ukuran gambar produk maksimal 2 MB.',
             'galeri.*.max'         => 'Ukuran foto galeri maksimal 2 MB.',
             // Pesan umum "uploaded" menyebut 5 MB (batas form pesanan); katalog memakai 2 MB

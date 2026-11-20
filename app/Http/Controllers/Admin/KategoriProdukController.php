@@ -36,7 +36,7 @@ class KategoriProdukController extends Controller
         $request->validate([
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
         ], $this->pesanKategori(), $this->atributKategori());
 
         $data = [
@@ -76,7 +76,7 @@ class KategoriProdukController extends Controller
         $request->validate([
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
         ], $this->pesanKategori(), $this->atributKategori());
 
         $kategoriProduk->nama_kategori = $request->nama_kategori;

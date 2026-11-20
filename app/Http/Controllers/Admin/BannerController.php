@@ -36,8 +36,8 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'tautan'        => 'nullable|url',
-            'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-            'gambar_mobile' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|required|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar_mobile' => 'bail|required|image|mimes:jpg,jpeg,png,webp|max:3072|' . self::ATURAN_DIMENSI,
         ], $this->pesanBanner(), $this->atributBanner());
 
         $gambar       = null;
@@ -81,9 +81,10 @@ class BannerController extends Controller
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
             'tautan'        => 'nullable|url',
-            'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
+            'gambar'        => 'bail|nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             // Wajib hanya bila banner belum punya gambar HP
             'gambar_mobile' => [
+                'bail',
                 $banner->gambar_mobile ? 'nullable' : 'required',
                 'image',
                 'mimes:jpg,jpeg,png,webp',
@@ -135,12 +136,12 @@ class BannerController extends Controller
         return [
             ...$this->pesanUmum(),
             'gambar.required'        => 'Gambar desktop wajib diunggah.',
-            'gambar.image'           => 'Gambar desktop harus berupa file gambar.',
-            'gambar.mimes'           => 'Gambar desktop harus berformat JPG, JPEG, PNG, atau WEBP.',
+            'gambar.image'           => 'Gambar desktop harus berupa gambar.',
+            'gambar.mimes'           => 'Gambar desktop harus berformat JPG, PNG, atau WebP.',
             'gambar.max'             => 'Ukuran gambar desktop maksimal 2 MB.',
             'gambar_mobile.required' => 'Gambar HP wajib diunggah.',
-            'gambar_mobile.image'    => 'Gambar HP harus berupa file gambar.',
-            'gambar_mobile.mimes'    => 'Gambar HP harus berformat JPG, JPEG, PNG, atau WEBP.',
+            'gambar_mobile.image'    => 'Gambar HP harus berupa gambar.',
+            'gambar_mobile.mimes'    => 'Gambar HP harus berformat JPG, PNG, atau WebP.',
             'gambar_mobile.max'      => 'Ukuran gambar HP maksimal 3 MB.',
             'gambar.uploaded'        => 'Gambar desktop gagal diunggah. Pastikan ukurannya tidak lebih dari 2 MB.',
             'gambar_mobile.uploaded' => 'Gambar HP gagal diunggah. Pastikan ukurannya tidak lebih dari 3 MB.',

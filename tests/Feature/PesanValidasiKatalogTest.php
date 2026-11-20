@@ -10,6 +10,7 @@ use App\Models\Finishing;
 use App\Models\KategoriProduk;
 use App\Models\Produk;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 /**
@@ -34,7 +35,7 @@ class PesanValidasiKatalogTest extends TestCase
             ->assertSessionHasErrors([
                 'nama_produk'   => 'Nama produk wajib diisi.',
                 'kategori_id'   => 'Kategori wajib dipilih.',
-                'minimal_pesan' => 'Minimal pesan minimal 1.',
+                'minimal_pesan' => 'Minimal pesan paling sedikit 1.',
             ]);
 
         $kategori = KategoriProduk::create(['nama_kategori' => 'Brosur', 'slug' => 'brosur']);
@@ -78,6 +79,56 @@ class PesanValidasiKatalogTest extends TestCase
                 'judul'         => 'Judul wajib diisi.',
                 'gambar_mobile' => 'Gambar HP wajib diunggah.',
             ]);
+    }
+
+    // File bukan gambar cukup menghasilkan satu pesan per field (bail), tanpa pesan dimensi yang menyesatkan
+    public function test_file_bukan_gambar_hanya_satu_pesan_galat_per_field(): void
+    {
+        $kategori = KategoriProduk::create(['nama_kategori' => 'Brosur', 'slug' => 'brosur']);
+
+        $this->post(route('admin.produk.store'), [
+            'nama_produk'   => 'Brosur A5',
+            'kategori_id'   => $kategori->id,
+            'minimal_pesan' => 1,
+            'gambar'        => UploadedFile::fake()->create('catatan.txt', 1, 'text/plain'),
+            'galeri'        => [UploadedFile::fake()->create('lain.txt', 1, 'text/plain')],
+        ])->assertSessionHasErrors([
+            'gambar'   => 'Gambar produk harus berupa gambar.',
+            'galeri.0' => 'Foto galeri harus berupa gambar.',
+        ]);
+
+        $errors = session('errors')->getBag('default');
+        $this->assertSame(['Gambar produk harus berupa gambar.'], $errors->get('gambar'));
+        $this->assertSame(['Foto galeri harus berupa gambar.'], $errors->get('galeri.0'));
+        $this->assertSame(0, Produk::count());
+
+        $this->post(route('admin.kategori-produk.store'), [
+            'nama_kategori' => 'Kotak',
+            'gambar'        => UploadedFile::fake()->create('k.txt', 1, 'text/plain'),
+        ]);
+        $this->assertSame(['Gambar kategori harus berupa gambar.'], session('errors')->getBag('default')->get('gambar'));
+
+        $this->post(route('admin.banner.store'), [
+            'judul'         => 'Promo',
+            'gambar'        => UploadedFile::fake()->create('d.txt', 1, 'text/plain'),
+            'gambar_mobile' => UploadedFile::fake()->create('m.txt', 1, 'text/plain'),
+        ]);
+        $errors = session('errors')->getBag('default');
+        $this->assertSame(['Gambar desktop harus berupa gambar.'], $errors->get('gambar'));
+        $this->assertSame(['Gambar HP harus berupa gambar.'], $errors->get('gambar_mobile'));
+    }
+
+    public function test_banner_pesan_format_seragam_dengan_produk(): void
+    {
+        // Gambar asli tetapi format di luar daftar (GIF) lolos "image", gagal di "mimes"
+        $this->post(route('admin.banner.store'), [
+            'judul'         => 'Promo',
+            'gambar'        => UploadedFile::fake()->image('d.gif', 100, 100),
+            'gambar_mobile' => UploadedFile::fake()->image('m.gif', 100, 100),
+        ])->assertSessionHasErrors([
+            'gambar'        => 'Gambar desktop harus berformat JPG, PNG, atau WebP.',
+            'gambar_mobile' => 'Gambar HP harus berformat JPG, PNG, atau WebP.',
+        ]);
     }
 
     public function test_bahan_pesan_wajib_isi_berbahasa_indonesia(): void
