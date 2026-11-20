@@ -53,7 +53,7 @@ class PesananTest extends TestCase
             'item'           => [
                 [
                     'jenis_packaging' => 'Paperbag', 'panjang' => '25', 'lebar' => '10', 'tinggi' => '30',
-                    'jenis_bahan' => 'Kraft', 'gramasi' => '150 gsm', 'jenis_cetak' => 'Sablon', 'warna_cetak' => '1 warna',
+                    'jenis_bahan' => 'Kraft 150 gsm', 'jenis_cetak' => 'Sablon 1 warna',
                     'finishing' => ['Laminasi doff', 'Hot print'], 'finishing_lainnya' => 'Emboss',
                     'aksesori' => 'Tali kur', 'jumlah' => '500', 'harga_satuan' => 'Rp 2.500',
                     'subtotal' => '1', // harus diabaikan server
@@ -126,6 +126,16 @@ class PesananTest extends TestCase
             ->assertViewHas('masterPackaging', ['Paperbag Kraft'])
             ->assertViewHas('masterBahan', ['Art Carton'])
             ->assertSee('Paperbag Kraft');
+    }
+
+    public function test_form_tambah_tanpa_isian_gramasi_dan_warna_cetak(): void
+    {
+        $this->sebagai($this->admin)->get(route('admin.pesanan.create'))
+            ->assertOk()
+            ->assertSee('[jenis_bahan]', false)
+            ->assertSee('[jenis_cetak]', false)
+            ->assertDontSee('[gramasi]', false)
+            ->assertDontSee('[warna_cetak]', false);
     }
 
     public function test_validasi_order_bahasa_indonesia(): void

@@ -17,14 +17,16 @@
             return in_array($nilai, $master, true) ? [$nilai, null] : [$lainnya, $nilai];
         };
         [$pk, $pkL] = $pilih($d->jenis_packaging, $masterPackaging);
-        [$bh, $bhL] = $pilih($d->jenis_bahan, $masterBahan);
-        [$ct, $ctL] = $pilih($d->jenis_cetak, $masterCetak);
+        // Data lama: gramasi/warna cetak (kolom tidak diisi lagi) digabung ke bahan/jenis cetak agar tidak hilang saat disimpan ulang.
+        $gabung = fn ($a, $b) => trim(trim((string) $a) . ' ' . trim((string) $b));
+        [$bh, $bhL] = $pilih($gabung($d->jenis_bahan, $d->gramasi), $masterBahan);
+        [$ct, $ctL] = $pilih($gabung($d->jenis_cetak, $d->warna_cetak), $masterCetak);
         $fin = $d->daftar_finishing;
         return [
             'jenis_packaging' => $pk, 'jenis_packaging_lainnya' => $pkL,
             'panjang' => $d->panjang, 'lebar' => $d->lebar, 'tinggi' => $d->tinggi,
-            'jenis_bahan' => $bh, 'jenis_bahan_lainnya' => $bhL, 'gramasi' => $d->gramasi,
-            'jenis_cetak' => $ct, 'jenis_cetak_lainnya' => $ctL, 'warna_cetak' => $d->warna_cetak,
+            'jenis_bahan' => $bh, 'jenis_bahan_lainnya' => $bhL,
+            'jenis_cetak' => $ct, 'jenis_cetak_lainnya' => $ctL,
             'finishing' => array_values(array_intersect($fin, $masterFinishing)),
             'finishing_lainnya' => implode(', ', array_diff($fin, $masterFinishing)),
             'aksesori' => $d->aksesori, 'jumlah' => $d->jumlah,

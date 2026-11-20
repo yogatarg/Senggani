@@ -49,7 +49,7 @@ class SppCustomerTest extends TestCase
             'link_desain'    => 'https://drive.google.com/drive/folders/abc',
             'item'           => [[
                 'jenis_packaging' => 'Paperbag', 'panjang' => '33', 'lebar' => '29', 'tinggi' => '15',
-                'jenis_bahan' => 'kertas kraft putih', 'gramasi' => '150gr', 'finishing' => ['tanpa laminasi'],
+                'jenis_bahan' => 'kertas kraft putih 150gr', 'finishing' => ['tanpa laminasi'],
                 'jenis_cetak' => 'cetak 2 sisi sama', 'aksesori' => 'tali lilit',
                 'jumlah' => '500', 'harga_satuan' => '4.300',
             ]],
@@ -439,7 +439,7 @@ class SppCustomerTest extends TestCase
         $p = $this->buat([
             'jenis_deadline' => 'siap', 'nama_brand' => '',
             'item' => [1 => [
-                'jenis_packaging' => 'Box', 'jenis_bahan' => 'Duplex', 'gramasi' => '', 'jumlah' => '1.000', 'harga_satuan' => '2500',
+                'jenis_packaging' => 'Box', 'jenis_bahan' => 'Duplex', 'jumlah' => '1.000', 'harga_satuan' => '2500',
                 'panjang' => '12.5', 'lebar' => '10',
             ]],
         ]);
@@ -470,7 +470,7 @@ class SppCustomerTest extends TestCase
         $data = $this->data(['nama_brand' => '', 'link_desain' => '', 'deadline' => '2027-01-05']);
         $data['item'] = [[
             'jenis_packaging' => 'Paperbag', 'jenis_bahan' => 'kertas kraft putih', 'panjang' => '', 'lebar' => '', 'tinggi' => '',
-            'gramasi' => '', 'jenis_cetak' => '', 'aksesori' => '', 'jumlah' => '500', 'harga_satuan' => '',
+            'jenis_cetak' => '', 'aksesori' => '', 'jumlah' => '500', 'harga_satuan' => '',
         ]];
         $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $data)->assertSessionHasNoErrors();
         $p = Pesanan::latest('id')->firstOrFail();
@@ -486,6 +486,33 @@ class SppCustomerTest extends TestCase
 
         $this->assertSame($harapan, $p->teks_spp);
         $this->assertStringNotContainsString("\n\n\n", $p->teks_spp);
+    }
+
+    public function test_teks_spp_rapi_untuk_item_baru_dan_data_lama_bergramasi(): void
+    {
+        $p = $this->buatSpp(177);
+        $d = $p->detailPesanan()->firstOrFail();
+        $this->assertNull($d->gramasi);
+        $this->assertNull($d->warna_cetak);
+        $this->assertStringContainsString("Bahan: kertas kraft putih 150gr + tanpa laminasi + cetak 2 sisi sama + tali lilit
+", $p->teks_spp);
+
+        // Data lama yang masih berisi gramasi/warna cetak tetap tampil apa adanya, tanpa spasi ganda.
+        $d->forceFill(['jenis_bahan' => 'Ivory', 'gramasi' => '250 gsm', 'jenis_cetak' => 'Offset', 'warna_cetak' => '4/0'])->save();
+        $teks = $p->fresh()->teks_spp;
+        $this->assertStringContainsString("Bahan: Ivory 250 gsm + tanpa laminasi + Offset 4/0 + tali lilit
+", $teks);
+        $this->assertStringNotContainsString('  ', $teks);
+        $this->assertStringNotContainsString("
+
+
+", $teks);
+
+        // Form edit menggabungkan nilai lama ke isian Lainnya agar tidak hilang saat disimpan ulang.
+        $this->sebagai($this->admin)->get(route('admin.pesanan.edit', $p))
+            ->assertOk()
+            ->assertSee('value="Ivory 250 gsm"', false)
+            ->assertSee('value="Offset 4/0"', false);
     }
 
     public function test_teks_spp_tersedia_di_halaman_detail_untuk_admin_dan_produksi(): void

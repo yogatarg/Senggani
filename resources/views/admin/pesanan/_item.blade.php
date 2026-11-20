@@ -67,57 +67,41 @@
         {!! $galat($k('panjang')) !!}{!! $galat($k('lebar')) !!}{!! $galat($k('tinggi')) !!}
     </fieldset>
 
-    {{-- Bahan & gramasi --}}
-    <div class="sg-dua">
-        <div class="sg-field">
-            <label class="sg-label" for="{{ $fidI('jenis_bahan') }}">Bahan <span class="sg-wajib" aria-hidden="true">*</span></label>
-            <select id="{{ $fidI('jenis_bahan') }}" name="{{ $n }}[jenis_bahan]" class="form-select @error($k('jenis_bahan')) is-invalid @enderror" data-pilih-lainnya required {!! $aria($k('jenis_bahan')) !!}>
-                <option value="">Pilih bahan</option>
-                @foreach ($masterBahan as $m)
-                    <option value="{{ $m }}" @selected($v('jenis_bahan') === $m)>{{ $m }}</option>
-                @endforeach
-                <option value="{{ $lainnya }}" @selected($v('jenis_bahan') === $lainnya)>Lainnya…</option>
-            </select>
-            {!! $galat($k('jenis_bahan')) !!}
-            <div class="mt-2" data-isian-lainnya @if ($v('jenis_bahan') !== $lainnya) hidden @endif>
-                <label class="visually-hidden" for="{{ $fidI('jenis_bahan_lainnya') }}">Tulis bahan</label>
-                <input type="text" id="{{ $fidI('jenis_bahan_lainnya') }}" name="{{ $n }}[jenis_bahan_lainnya]" value="{{ $v('jenis_bahan_lainnya') }}" maxlength="150"
-                       class="form-control @error($k('jenis_bahan_lainnya')) is-invalid @enderror" placeholder="Tulis bahan" {!! $aria($k('jenis_bahan_lainnya')) !!}>
-                {!! $galat($k('jenis_bahan_lainnya')) !!}
-            </div>
-        </div>
-        <div class="sg-field">
-            <label class="sg-label" for="{{ $fidI('gramasi') }}">Gramasi</label>
-            <input type="text" id="{{ $fidI('gramasi') }}" name="{{ $n }}[gramasi]" value="{{ $v('gramasi') }}" maxlength="50" placeholder="mis. 250 gsm"
-                   class="form-control @error($k('gramasi')) is-invalid @enderror" {!! $aria($k('gramasi')) !!}>
-            {!! $galat($k('gramasi')) !!}
+    {{-- Bahan: satu baris penuh, karena nama bahan sudah memuat gramasi (ditulis di Master Bahan) --}}
+    <div class="sg-field">
+        <label class="sg-label" for="{{ $fidI('jenis_bahan') }}">Bahan <span class="sg-wajib" aria-hidden="true">*</span></label>
+        <select id="{{ $fidI('jenis_bahan') }}" name="{{ $n }}[jenis_bahan]" class="form-select @error($k('jenis_bahan')) is-invalid @enderror" data-pilih-lainnya required {!! $aria($k('jenis_bahan')) !!}>
+            <option value="">Pilih bahan</option>
+            @foreach ($masterBahan as $m)
+                <option value="{{ $m }}" @selected($v('jenis_bahan') === $m)>{{ $m }}</option>
+            @endforeach
+            <option value="{{ $lainnya }}" @selected($v('jenis_bahan') === $lainnya)>Lainnya…</option>
+        </select>
+        {!! $galat($k('jenis_bahan')) !!}
+        <div class="mt-2" data-isian-lainnya @if ($v('jenis_bahan') !== $lainnya) hidden @endif>
+            <label class="visually-hidden" for="{{ $fidI('jenis_bahan_lainnya') }}">Tulis bahan</label>
+            <input type="text" id="{{ $fidI('jenis_bahan_lainnya') }}" name="{{ $n }}[jenis_bahan_lainnya]" value="{{ $v('jenis_bahan_lainnya') }}" maxlength="150"
+                   class="form-control @error($k('jenis_bahan_lainnya')) is-invalid @enderror" placeholder="Tulis bahan" {!! $aria($k('jenis_bahan_lainnya')) !!}>
+            {!! $galat($k('jenis_bahan_lainnya')) !!}
         </div>
     </div>
 
-    {{-- Cetak --}}
-    <div class="sg-dua">
-        <div class="sg-field">
-            <label class="sg-label" for="{{ $fidI('jenis_cetak') }}">Jenis cetak</label>
-            <select id="{{ $fidI('jenis_cetak') }}" name="{{ $n }}[jenis_cetak]" class="form-select @error($k('jenis_cetak')) is-invalid @enderror" data-pilih-lainnya {!! $aria($k('jenis_cetak')) !!}>
-                <option value="">Tanpa cetak</option>
-                @foreach ($masterCetak as $m)
-                    <option value="{{ $m }}" @selected($v('jenis_cetak') === $m)>{{ $m }}</option>
-                @endforeach
-                <option value="{{ $lainnya }}" @selected($v('jenis_cetak') === $lainnya)>Lainnya…</option>
-            </select>
-            {!! $galat($k('jenis_cetak')) !!}
-            <div class="mt-2" data-isian-lainnya @if ($v('jenis_cetak') !== $lainnya) hidden @endif>
-                <label class="visually-hidden" for="{{ $fidI('jenis_cetak_lainnya') }}">Tulis jenis cetak</label>
-                <input type="text" id="{{ $fidI('jenis_cetak_lainnya') }}" name="{{ $n }}[jenis_cetak_lainnya]" value="{{ $v('jenis_cetak_lainnya') }}" maxlength="150"
-                       class="form-control @error($k('jenis_cetak_lainnya')) is-invalid @enderror" placeholder="Tulis jenis cetak" {!! $aria($k('jenis_cetak_lainnya')) !!}>
-                {!! $galat($k('jenis_cetak_lainnya')) !!}
-            </div>
-        </div>
-        <div class="sg-field">
-            <label class="sg-label" for="{{ $fidI('warna_cetak') }}">Warna cetak</label>
-            <input type="text" id="{{ $fidI('warna_cetak') }}" name="{{ $n }}[warna_cetak]" value="{{ $v('warna_cetak') }}" maxlength="100" placeholder="mis. 1 warna, 4/0"
-                   class="form-control @error($k('warna_cetak')) is-invalid @enderror" {!! $aria($k('warna_cetak')) !!}>
-            {!! $galat($k('warna_cetak')) !!}
+    {{-- Cetak: cukup jenis cetak dari Master Cetak (atau Lainnya) --}}
+    <div class="sg-field">
+        <label class="sg-label" for="{{ $fidI('jenis_cetak') }}">Jenis cetak</label>
+        <select id="{{ $fidI('jenis_cetak') }}" name="{{ $n }}[jenis_cetak]" class="form-select @error($k('jenis_cetak')) is-invalid @enderror" data-pilih-lainnya {!! $aria($k('jenis_cetak')) !!}>
+            <option value="">Tanpa cetak</option>
+            @foreach ($masterCetak as $m)
+                <option value="{{ $m }}" @selected($v('jenis_cetak') === $m)>{{ $m }}</option>
+            @endforeach
+            <option value="{{ $lainnya }}" @selected($v('jenis_cetak') === $lainnya)>Lainnya…</option>
+        </select>
+        {!! $galat($k('jenis_cetak')) !!}
+        <div class="mt-2" data-isian-lainnya @if ($v('jenis_cetak') !== $lainnya) hidden @endif>
+            <label class="visually-hidden" for="{{ $fidI('jenis_cetak_lainnya') }}">Tulis jenis cetak</label>
+            <input type="text" id="{{ $fidI('jenis_cetak_lainnya') }}" name="{{ $n }}[jenis_cetak_lainnya]" value="{{ $v('jenis_cetak_lainnya') }}" maxlength="150"
+                   class="form-control @error($k('jenis_cetak_lainnya')) is-invalid @enderror" placeholder="Tulis jenis cetak" {!! $aria($k('jenis_cetak_lainnya')) !!}>
+            {!! $galat($k('jenis_cetak_lainnya')) !!}
         </div>
     </div>
 
