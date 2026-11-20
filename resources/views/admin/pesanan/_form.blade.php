@@ -29,7 +29,7 @@
             'jenis_cetak' => $ct, 'jenis_cetak_lainnya' => $ctL,
             'finishing' => array_values(array_intersect($fin, $masterFinishing)),
             'finishing_lainnya' => implode(', ', array_diff($fin, $masterFinishing)),
-            'aksesori' => $d->aksesori, 'jumlah' => $d->jumlah,
+            'aksesori' => $d->aksesori, 'catatan' => $d->catatan, 'jumlah' => $d->jumlah,
             'harga_satuan' => $d->harga_satuan === null ? null : (int) $d->harga_satuan,
         ];
     };

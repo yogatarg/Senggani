@@ -168,6 +168,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.finishing.*'             => ['string', 'max:150'],
             'item.*.finishing_lainnya'       => ['nullable', 'string', 'max:255'],
             'item.*.aksesori'                => ['nullable', 'string', 'max:255'],
+            'item.*.catatan'                 => ['nullable', 'string', 'max:500'],
             'item.*.jumlah'                  => ['required', 'integer', 'min:1', 'max:10000000'],
             'item.*.harga_satuan'            => [$this->hargaWajib() ? 'required' : 'nullable', 'integer', 'min:1', 'max:1000000000'],
 
@@ -305,6 +306,7 @@ class SimpanPesananRequest extends FormRequest
             'item.*.finishing.*'             => 'Finishing item ke-:position',
             'item.*.finishing_lainnya'       => 'Finishing lainnya item ke-:position',
             'item.*.aksesori'                => 'Tali/aksesori item ke-:position',
+            'item.*.catatan'                 => 'Catatan item ke-:position',
             'item.*.jumlah'                  => 'Jumlah item ke-:position',
             'item.*.harga_satuan'            => 'Harga satuan item ke-:position',
             'mockup'      => 'Gambar mockup',

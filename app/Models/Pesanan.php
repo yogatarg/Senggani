@@ -380,7 +380,7 @@ class Pesanan extends Model
         });
     }
 
-    /** Baris Produk/Ukuran/Jumlah/Bahan satu item (tanpa harga). */
+    /** Baris Produk/Ukuran/Jumlah/Bahan(/Catatan) satu item (tanpa harga). */
     private function barisItem(DetailPesanan $d, bool $bernomor, int $no = 1): array
     {
         $baris = [($bernomor ? "{$no}. " : '') . 'Produk: ' . $d->jenis_packaging];
@@ -400,6 +400,12 @@ class Pesanan extends Model
         ], fn ($b) => $b !== '');
         if ($bahan) {
             $baris[] = 'Bahan: ' . implode(' + ', $bahan);
+        }
+
+        // Baris baru di catatan diganti spasi agar format WA tetap satu baris
+        $catatan = trim((string) preg_replace('/\s*\R\s*/u', ' ', (string) $d->catatan));
+        if ($catatan !== '') {
+            $baris[] = 'Catatan: ' . $catatan;
         }
 
         return $baris;

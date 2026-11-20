@@ -135,6 +135,13 @@
         {!! $galat($k('aksesori')) !!}
     </div>
 
+    <div class="sg-field">
+        <label class="sg-label" for="{{ $fidI('catatan') }}">Catatan item <span class="fw-normal sg-muted">(opsional)</span></label>
+        <textarea id="{{ $fidI('catatan') }}" name="{{ $n }}[catatan]" rows="2" maxlength="500" placeholder="mis. logo di satu sisi, warna tali hitam"
+                  class="form-control @error($k('catatan')) is-invalid @enderror" {!! $aria($k('catatan')) !!}>{{ $v('catatan') }}</textarea>
+        {!! $galat($k('catatan')) !!}
+    </div>
+
     <div class="sg-dua">
         <div class="sg-field">
             <label class="sg-label" for="{{ $fidI('jumlah') }}">Jumlah <span class="sg-wajib" aria-hidden="true">*</span></label>

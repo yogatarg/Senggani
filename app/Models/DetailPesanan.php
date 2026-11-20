@@ -19,7 +19,7 @@ class DetailPesanan extends Model
     protected $fillable = [
         'pesanan_id', 'urutan', 'jenis_packaging', 'panjang', 'lebar', 'tinggi',
         'jenis_bahan', 'gramasi', 'jenis_cetak', 'warna_cetak', 'finishing',
-        'aksesori', 'jumlah', 'harga_satuan', 'subtotal',
+        'aksesori', 'catatan', 'jumlah', 'harga_satuan', 'subtotal',
     ];
 
     protected function casts(): array

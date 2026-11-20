@@ -192,6 +192,66 @@ class PesananTest extends TestCase
         $this->sebagai($this->admin)->get(route('admin.pesanan.edit', $pesanan))->assertOk()->assertSee('Box');
     }
 
+    // ── Catatan per item ───────────────────────────────
+
+    public function test_catatan_item_disimpan_tampil_dan_terbawa_saat_edit(): void
+    {
+        $pesanan = $this->buatOrder(['item' => [0 => ['catatan' => "  Logo di satu sisi\nwarna tali hitam  "]]]);
+
+        $item = $pesanan->detailPesanan;
+        $this->assertSame("Logo di satu sisi\nwarna tali hitam", $item[0]->catatan);
+        $this->assertNull($item[1]->catatan); // tidak diisi
+
+        // Form edit membawa nilai catatan; form tambah punya textarea (juga di template item baru)
+        $this->sebagai($this->admin)->get(route('admin.pesanan.edit', $pesanan))
+            ->assertOk()
+            ->assertSee('id="f-item-0-catatan"', false)
+            ->assertSee('id="f-item-__I__-catatan"', false)
+            ->assertSee("Logo di satu sisi\nwarna tali hitam</textarea>", false);
+
+        // Detail: catatan tampil dengan baris baru terjaga (pre-line)
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $pesanan))
+            ->assertOk()
+            ->assertSee('<dd class="sg-teks-catatan">Logo di satu sisi', false);
+
+        // Teks SPP: baris Catatan setelah Bahan, baris baru jadi spasi; item tanpa catatan tidak menambah baris
+        $pesanan = $this->masukProduksi($pesanan, 21);
+        $teks = $pesanan->teks_spp;
+        $this->assertStringContainsString(
+            "Bahan: Kraft 150 gsm + Laminasi doff + Hot print + Emboss + Sablon 1 warna + Tali kur\nCatatan: Logo di satu sisi warna tali hitam",
+            $teks
+        );
+        $this->assertSame(1, substr_count($teks, 'Catatan:'));
+
+        // Edit: item dibuat ulang, catatan ikut tersimpan; string kosong menjadi null
+        $data = $this->dataEdit($pesanan, ['dp' => '500000']);
+        $data['item'][0]['catatan'] = 'Sablon emas';
+        $data['item'][1]['catatan'] = '   ';
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan), $data)->assertSessionHasNoErrors();
+
+        $item = $pesanan->fresh()->detailPesanan;
+        $this->assertSame('Sablon emas', $item[0]->catatan);
+        $this->assertNull($item[1]->catatan);
+    }
+
+    public function test_catatan_kosong_tidak_menambah_baris_spp(): void
+    {
+        $pesanan = $this->masukProduksi($this->buatOrder(), 22);
+
+        $this->assertStringNotContainsString('Catatan:', $pesanan->teks_spp);
+    }
+
+    public function test_catatan_item_maksimal_500_karakter(): void
+    {
+        $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->dataOrder([
+            'item' => [1 => ['catatan' => str_repeat('a', 501)]],
+        ]))->assertSessionHasErrors(['item.1.catatan']);
+        $this->assertDatabaseCount('pesanan', 0);
+
+        $this->buatOrder(['item' => [1 => ['catatan' => str_repeat('a', 500)]]]);
+        $this->assertDatabaseCount('pesanan', 1);
+    }
+
     // ── Pembayaran ─────────────────────────────────────
 
     public function test_status_bayar_dan_sisa_dihitung(): void

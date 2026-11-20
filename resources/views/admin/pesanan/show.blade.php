@@ -184,6 +184,7 @@
                         @if ($d->jenis_cetak || $d->warna_cetak)<dt>Cetak</dt><dd>{{ trim($d->jenis_cetak . ' ' . $d->warna_cetak) }}</dd>@endif
                         @if ($d->daftar_finishing)<dt>Finishing</dt><dd>{{ implode(', ', $d->daftar_finishing) }}</dd>@endif
                         @if ($d->aksesori)<dt>Tali/aksesori</dt><dd>{{ $d->aksesori }}</dd>@endif
+                        @if (filled($d->catatan))<dt>Catatan</dt><dd class="sg-teks-catatan">{{ $d->catatan }}</dd>@endif
                         <dt>Harga</dt>
                         @if ($d->harga_satuan === null)
                             <dd class="sg-belum-harga">Belum dihitung</dd>

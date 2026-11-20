@@ -252,6 +252,7 @@ class PesananService
                 'jenis_cetak'     => $baris['jenis_cetak'] ?? null,
                 'finishing'       => $baris['finishing'] ?? null,
                 'aksesori'        => $baris['aksesori'] ?? null,
+                'catatan'         => ($c = trim((string) ($baris['catatan'] ?? ''))) === '' ? null : $c,
                 'jumlah'          => $jumlah,
                 'harga_satuan'    => $harga,
                 'subtotal'        => $subtotal,
