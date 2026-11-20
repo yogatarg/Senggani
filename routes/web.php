@@ -89,8 +89,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth.admin', 'peran:admin']
     Route::put('/customer/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('customer.update');
     Route::delete('/customer/{customer}', [CustomerController::class, 'destroy'])->whereNumber('customer')->name('customer.destroy');
 
-    Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
+    // Dashboard lama dialihkan ke daftar produk; nama rute dipertahankan agar link/bookmark lama tetap jalan
+    Route::get('/dashboard', fn () => redirect()->route('admin.produk.index'))
         ->name('dashboard');
+
+    // ── Katalog situs (khusus admin; menu memakai Gate 'kelola-katalog' dengan aturan yang sama) ──
 
     Route::resource('banner', BannerController::class)->except(['show']);
     Route::patch('banner/{banner}/aktif', [BannerController::class, 'toggleAktif'])

@@ -54,7 +54,7 @@ class AdminAuthTest extends TestCase
             ->assertRedirect(route('admin.pesanan.index'))
             ->assertSessionHas('admin_id', $admin->id);
 
-        $this->get('/admin/dashboard')->assertOk();
+        $this->get('/admin/dashboard')->assertRedirect(route('admin.produk.index'));
     }
 
     public function test_limit_per_email_dari_ip_berbeda(): void
@@ -79,13 +79,13 @@ class AdminAuthTest extends TestCase
         $admin = Admin::factory()->create();
 
         $this->withSession(['admin_logged_in' => true, 'admin_id' => $admin->id])
-            ->get('/admin/dashboard')
+            ->get('/admin/pesanan')
             ->assertOk();
 
         $admin->delete();
 
         $this->withSession(['admin_logged_in' => true, 'admin_id' => $admin->id])
-            ->get('/admin/dashboard')
+            ->get('/admin/pesanan')
             ->assertRedirect(route('admin.login'));
 
         $this->assertNull(session('admin_logged_in'));

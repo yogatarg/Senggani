@@ -33,7 +33,7 @@ class GalatPanelAdmin
         'bahan'           => 'admin.bahan.index',
         'finishing'       => 'admin.finishing.index',
         'cetak'           => 'admin.cetak.index',
-        'dashboard'       => 'admin.dashboard',
+        'dashboard'       => 'admin.produk.index',
     ];
 
     public const PESAN_KHUSUS_ADMIN = 'Halaman ini khusus admin.';

@@ -94,11 +94,60 @@ class PesananAksesTest extends TestCase
     public function test_perubahan_peran_langsung_berlaku_di_session(): void
     {
         $pengguna = Admin::factory()->create();
-        $this->sebagai($pengguna)->get('/admin/dashboard')->assertOk();
+        $this->sebagai($pengguna)->get('/admin/produk')->assertOk();
 
         $pengguna->update(['peran' => 'produksi']);
 
-        $this->sebagai($pengguna)->get('/admin/dashboard')->assertRedirect(route('admin.pesanan.index'));
+        $this->sebagai($pengguna)->get('/admin/produk')->assertRedirect(route('admin.pesanan.index'));
+    }
+
+    // ── Katalog: dashboard lama & gate menu ────────────
+
+    public function test_dashboard_lama_dialihkan_ke_daftar_produk_untuk_admin(): void
+    {
+        $admin = Admin::factory()->create();
+
+        $this->assertSame(url('/admin/dashboard'), route('admin.dashboard'));
+        $this->sebagai($admin)->get('/admin/dashboard')
+            ->assertStatus(302)
+            ->assertRedirect(route('admin.produk.index'));
+        $this->sebagai($admin)->get('/admin/dashboard')->assertSessionMissing('error');
+    }
+
+    public function test_produksi_membuka_dashboard_lama_tetap_ke_daftar_pesanan(): void
+    {
+        $produksi = Admin::factory()->produksi()->create();
+
+        $this->sebagai($produksi)->get('/admin/dashboard')
+            ->assertRedirect(route('admin.pesanan.index'))
+            ->assertSessionHas('error', 'Anda tidak punya akses ke halaman tersebut.');
+    }
+
+    public function test_gate_kelola_katalog_hanya_untuk_admin(): void
+    {
+        $admin    = Admin::factory()->create();
+        $produksi = Admin::factory()->produksi()->create();
+
+        $this->assertTrue(\Illuminate\Support\Facades\Gate::forUser($admin)->allows('kelola-katalog'));
+        $this->assertFalse(\Illuminate\Support\Facades\Gate::forUser($produksi)->allows('kelola-katalog'));
+        $this->assertFalse(\Illuminate\Support\Facades\Gate::forUser(null)->allows('kelola-katalog'));
+    }
+
+    public function test_produksi_ditolak_aksi_katalog_lain(): void
+    {
+        $produksi = Admin::factory()->produksi()->create();
+        $pesan    = 'Anda tidak punya akses ke halaman tersebut.';
+
+        // Rute GET katalog yang tidak tercakup tes lain: diarahkan ramah ke daftar Pesanan
+        $this->sebagai($produksi)->get('/admin/kategori-produk/create')
+            ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', $pesan);
+
+        // JSON ke rute katalog: 403
+        foreach (['/admin/banner', '/admin/produk', '/admin/finishing', '/admin/cetak'] as $url) {
+            $this->sebagai($produksi)->postJson($url, [])->assertForbidden()->assertExactJson(['pesan' => $pesan]);
+        }
+        $this->sebagai($produksi)->deleteJson('/admin/galeri/1')->assertForbidden();
+        $this->sebagai($produksi)->deleteJson('/admin/ukuran/1')->assertForbidden();
     }
 
     // ── Hak akses produksi ─────────────────────────────
