@@ -102,7 +102,7 @@ class UnggahGambarAmanTest extends TestCase
             'judul'         => 'Banner',
             'gambar'        => UploadedFile::fake()->image('d.jpg', 1920, 800),
             'gambar_mobile' => $this->filePng('m.png', 1000, 9000),
-        ])->assertSessionHasErrors(['gambar_mobile' => 'Gambar mobile terlalu besar. Lebar dan tinggi maksimal 8000 piksel.']);
+        ])->assertSessionHasErrors(['gambar_mobile' => 'Gambar HP terlalu besar. Lebar dan tinggi maksimal 8000 piksel.']);
 
         $this->post(route('admin.kategori-produk.store'), [
             'nama_kategori' => 'Kategori',

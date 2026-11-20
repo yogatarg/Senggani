@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\KategoriProduk;
 use App\Services\OlahGambar;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Throwable;
 
 class KategoriProdukController extends Controller
 {
-    use UnggahGambar;
+    use PesanIndonesia, UnggahGambar;
 
     public function __construct(private OlahGambar $olahGambar)
     {
@@ -36,7 +37,7 @@ class KategoriProdukController extends Controller
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-        ], $this->pesanDimensi(['gambar' => 'Gambar kategori']));
+        ], $this->pesanKategori(), $this->atributKategori());
 
         $data = [
             'nama_kategori' => $request->nama_kategori,
@@ -76,7 +77,7 @@ class KategoriProdukController extends Controller
             'nama_kategori' => 'required|string|max:255',
             'deskripsi'     => 'nullable|string',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-        ], $this->pesanDimensi(['gambar' => 'Gambar kategori']));
+        ], $this->pesanKategori(), $this->atributKategori());
 
         $kategoriProduk->nama_kategori = $request->nama_kategori;
         $kategoriProduk->slug          = KategoriProduk::slugUnik($request->nama_kategori, $kategoriProduk->id);
@@ -129,5 +130,24 @@ class KategoriProdukController extends Controller
 
         return redirect()->route('admin.kategori-produk.index')
                          ->with('success', 'Kategori berhasil dihapus.');
+    }
+
+    private function pesanKategori(): array
+    {
+        return [
+            ...$this->pesanUmum(),
+            'gambar.max' => 'Ukuran gambar kategori maksimal 2 MB.',
+            'uploaded'   => ':attribute gagal diunggah. Pastikan ukurannya tidak lebih dari 2 MB.',
+            ...$this->pesanDimensi(['gambar' => 'Gambar kategori']),
+        ];
+    }
+
+    private function atributKategori(): array
+    {
+        return [
+            'nama_kategori' => 'Nama kategori',
+            'deskripsi'     => 'Deskripsi',
+            'gambar'        => 'Gambar kategori',
+        ];
     }
 }

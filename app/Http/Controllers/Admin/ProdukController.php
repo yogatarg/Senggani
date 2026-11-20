@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Bahan;
 use App\Models\Cetak;
 use App\Models\Finishing;
@@ -18,7 +19,7 @@ use Throwable;
 
 class ProdukController extends Controller
 {
-    use UnggahGambar;
+    use PesanIndonesia, UnggahGambar;
 
     public function __construct(private OlahGambar $olahGambar)
     {
@@ -49,7 +50,7 @@ class ProdukController extends Controller
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             'galeri'        => 'nullable|array',
             'galeri.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-        ], $this->pesanDimensi(['gambar' => 'Gambar produk', 'galeri.*' => 'Foto galeri']));
+        ], $this->pesanProduk(), $this->atributProduk());
 
         $data = [
             'nama_produk'   => $request->nama_produk,
@@ -113,7 +114,7 @@ class ProdukController extends Controller
             'deskripsi'     => 'nullable|string',
             'minimal_pesan' => 'required|integer|min:1',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-        ], $this->pesanDimensi(['gambar' => 'Gambar produk']));
+        ], $this->pesanProduk(), $this->atributProduk());
 
         $produk->nama_produk   = $request->nama_produk;
         $produk->slug          = Produk::slugUnik($request->nama_produk, $produk->id);
@@ -175,7 +176,13 @@ class ProdukController extends Controller
         $request->validate([
             'gambar'   => 'array',
             'gambar.*' => 'image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-        ], $this->pesanDimensi(['gambar.*' => 'Foto galeri']));
+        ], [
+            ...$this->pesanUmum(),
+            'gambar.array'   => 'Foto galeri tidak valid.',
+            'gambar.*.max'   => 'Ukuran foto galeri maksimal 2 MB.',
+            'uploaded'       => ':attribute gagal diunggah. Pastikan ukurannya tidak lebih dari 2 MB.',
+            ...$this->pesanDimensi(['gambar.*' => 'Foto galeri']),
+        ], ['gambar.*' => 'Foto galeri']);
 
         $fileBaru = [];
 
@@ -220,6 +227,12 @@ class ProdukController extends Controller
             'lebar'       => 'nullable|numeric|min:0|max:999999',
             'tinggi'      => 'nullable|numeric|min:0|max:999999',
             'keterangan'  => 'nullable|string|max:255',
+        ], $this->pesanUmum(), [
+            'nama_ukuran' => 'Nama ukuran',
+            'panjang'     => 'Panjang',
+            'lebar'       => 'Lebar',
+            'tinggi'      => 'Tinggi',
+            'keterangan'  => 'Keterangan',
         ]);
 
         UkuranProduk::create([
@@ -261,6 +274,15 @@ class ProdukController extends Controller
             'cetak.*'     => 'exists:cetak,id',
             'finishing'   => 'nullable|array',
             'finishing.*' => 'exists:finishing,id',
+        ], [
+            ...$this->pesanUmum(),
+            'bahan.*.exists'     => 'Bahan yang dipilih tidak ditemukan.',
+            'cetak.*.exists'     => 'Jenis cetak yang dipilih tidak ditemukan.',
+            'finishing.*.exists' => 'Finishing yang dipilih tidak ditemukan.',
+        ], [
+            'bahan'     => 'Bahan',
+            'cetak'     => 'Jenis cetak',
+            'finishing' => 'Finishing',
         ]);
 
         // sync(): yang dicentang ditambahkan, yang tidak dicentang dilepas
@@ -271,5 +293,33 @@ class ProdukController extends Controller
         });
 
         return back()->with('success', 'Bahan, jenis cetak, dan finishing produk berhasil disimpan.');
+    }
+
+    // Pesan validasi form produk (tambah & ubah)
+    private function pesanProduk(): array
+    {
+        return [
+            ...$this->pesanUmum(),
+            'kategori_id.required' => 'Kategori wajib dipilih.',
+            'kategori_id.exists'   => 'Kategori yang dipilih tidak ditemukan.',
+            'gambar.max'           => 'Ukuran gambar produk maksimal 2 MB.',
+            'galeri.*.max'         => 'Ukuran foto galeri maksimal 2 MB.',
+            // Pesan umum "uploaded" menyebut 5 MB (batas form pesanan); katalog memakai 2 MB
+            'uploaded'             => ':attribute gagal diunggah. Pastikan ukurannya tidak lebih dari 2 MB.',
+            ...$this->pesanDimensi(['gambar' => 'Gambar produk', 'galeri.*' => 'Foto galeri']),
+        ];
+    }
+
+    private function atributProduk(): array
+    {
+        return [
+            'nama_produk'   => 'Nama produk',
+            'kategori_id'   => 'Kategori',
+            'deskripsi'     => 'Deskripsi',
+            'minimal_pesan' => 'Minimal pesan',
+            'gambar'        => 'Gambar produk',
+            'galeri'        => 'Foto galeri',
+            'galeri.*'      => 'Foto galeri',
+        ];
     }
 }

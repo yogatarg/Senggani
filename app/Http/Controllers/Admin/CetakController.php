@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Cetak;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class CetakController extends Controller
 {
+    use PesanIndonesia;
+
     public function index()
     {
         $cetak = Cetak::withCount('produk')->orderBy('nama_cetak')->get();
@@ -21,7 +24,11 @@ class CetakController extends Controller
             'nama_cetak' => 'required|string|max:255|unique:cetak,nama_cetak',
             'deskripsi'  => 'nullable|string',
         ], [
+            ...$this->pesanUmum(),
             'nama_cetak.unique' => 'Jenis cetak ini sudah ada di daftar.',
+        ], [
+            'nama_cetak' => 'Nama jenis cetak',
+            'deskripsi'  => 'Deskripsi',
         ]);
 
         Cetak::create($request->only('nama_cetak', 'deskripsi'));
@@ -41,7 +48,11 @@ class CetakController extends Controller
             'nama_cetak' => ['required', 'string', 'max:255', Rule::unique('cetak', 'nama_cetak')->ignore($cetak->id)],
             'deskripsi'  => 'nullable|string',
         ], [
+            ...$this->pesanUmum(),
             'nama_cetak.unique' => 'Jenis cetak ini sudah ada di daftar.',
+        ], [
+            'nama_cetak' => 'Nama jenis cetak',
+            'deskripsi'  => 'Deskripsi',
         ]);
 
         $cetak->update($request->only('nama_cetak', 'deskripsi'));

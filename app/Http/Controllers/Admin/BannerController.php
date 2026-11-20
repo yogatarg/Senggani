@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Banner;
 use App\Services\OlahGambar;
 use Illuminate\Http\Request;
@@ -12,7 +13,7 @@ use Throwable;
 
 class BannerController extends Controller
 {
-    use UnggahGambar;
+    use PesanIndonesia, UnggahGambar;
 
     public function __construct(private OlahGambar $olahGambar)
     {
@@ -34,10 +35,10 @@ class BannerController extends Controller
         $request->validate([
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
+            'tautan'        => 'nullable|url',
             'gambar'        => 'required|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
             'gambar_mobile' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072|' . self::ATURAN_DIMENSI,
-            'tautan'        => 'nullable|url',
-        ], $this->pesanGambar());
+        ], $this->pesanBanner(), $this->atributBanner());
 
         $gambar       = null;
         $gambarMobile = null;
@@ -79,8 +80,9 @@ class BannerController extends Controller
         $request->validate([
             'judul'         => 'required|string|max:255',
             'deskripsi'     => 'nullable|string|max:1000',
+            'tautan'        => 'nullable|url',
             'gambar'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048|' . self::ATURAN_DIMENSI,
-            // Wajib hanya bila banner belum punya gambar mobile
+            // Wajib hanya bila banner belum punya gambar HP
             'gambar_mobile' => [
                 $banner->gambar_mobile ? 'nullable' : 'required',
                 'image',
@@ -88,8 +90,7 @@ class BannerController extends Controller
                 'max:3072',
                 self::ATURAN_DIMENSI,
             ],
-            'tautan'        => 'nullable|url',
-        ], $this->pesanGambar());
+        ], $this->pesanBanner(), $this->atributBanner());
 
         // File lama baru dihapus setelah data baru tersimpan;
         // file baru dibuang lagi bila penyimpanan gagal
@@ -127,19 +128,35 @@ class BannerController extends Controller
             ->with('success', 'Banner berhasil diperbarui.');
     }
 
-    // Pesan validasi gambar desktop & mobile (wajib sejak banner memakai 2 foto)
-    private function pesanGambar(): array
+    // Urutan aturan di store/update mengikuti urutan form (judul, deskripsi, tautan, gambar desktop, gambar HP)
+    // supaya ringkasan galat tampil berurutan sama.
+    private function pesanBanner(): array
     {
         return [
+            ...$this->pesanUmum(),
             'gambar.required'        => 'Gambar desktop wajib diunggah.',
             'gambar.image'           => 'Gambar desktop harus berupa file gambar.',
             'gambar.mimes'           => 'Gambar desktop harus berformat JPG, JPEG, PNG, atau WEBP.',
             'gambar.max'             => 'Ukuran gambar desktop maksimal 2 MB.',
-            'gambar_mobile.required' => 'Gambar mobile wajib diunggah.',
-            'gambar_mobile.image'    => 'Gambar mobile harus berupa file gambar.',
-            'gambar_mobile.mimes'    => 'Gambar mobile harus berformat JPG, JPEG, PNG, atau WEBP.',
-            'gambar_mobile.max'      => 'Ukuran gambar mobile maksimal 3 MB.',
-        ] + $this->pesanDimensi(['gambar' => 'Gambar desktop', 'gambar_mobile' => 'Gambar mobile']);
+            'gambar_mobile.required' => 'Gambar HP wajib diunggah.',
+            'gambar_mobile.image'    => 'Gambar HP harus berupa file gambar.',
+            'gambar_mobile.mimes'    => 'Gambar HP harus berformat JPG, JPEG, PNG, atau WEBP.',
+            'gambar_mobile.max'      => 'Ukuran gambar HP maksimal 3 MB.',
+            'gambar.uploaded'        => 'Gambar desktop gagal diunggah. Pastikan ukurannya tidak lebih dari 2 MB.',
+            'gambar_mobile.uploaded' => 'Gambar HP gagal diunggah. Pastikan ukurannya tidak lebih dari 3 MB.',
+            ...$this->pesanDimensi(['gambar' => 'Gambar desktop', 'gambar_mobile' => 'Gambar HP']),
+        ];
+    }
+
+    private function atributBanner(): array
+    {
+        return [
+            'judul'         => 'Judul',
+            'deskripsi'     => 'Deskripsi',
+            'tautan'        => 'Tautan',
+            'gambar'        => 'Gambar desktop',
+            'gambar_mobile' => 'Gambar HP',
+        ];
     }
 
     // Aktif / nonaktifkan banner langsung dari daftar

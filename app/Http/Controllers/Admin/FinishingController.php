@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Finishing;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class FinishingController extends Controller
 {
+    use PesanIndonesia;
+
     public function index()
     {
         $finishing = Finishing::withCount('produk')->orderBy('nama_finishing')->get();
@@ -21,7 +24,11 @@ class FinishingController extends Controller
             'nama_finishing' => 'required|string|max:255|unique:finishing,nama_finishing',
             'deskripsi'      => 'nullable|string',
         ], [
+            ...$this->pesanUmum(),
             'nama_finishing.unique' => 'Finishing ini sudah ada di daftar.',
+        ], [
+            'nama_finishing' => 'Nama finishing',
+            'deskripsi'      => 'Deskripsi',
         ]);
 
         Finishing::create($request->only('nama_finishing', 'deskripsi'));
@@ -41,7 +48,11 @@ class FinishingController extends Controller
             'nama_finishing' => ['required', 'string', 'max:255', Rule::unique('finishing', 'nama_finishing')->ignore($finishing->id)],
             'deskripsi'      => 'nullable|string',
         ], [
+            ...$this->pesanUmum(),
             'nama_finishing.unique' => 'Finishing ini sudah ada di daftar.',
+        ], [
+            'nama_finishing' => 'Nama finishing',
+            'deskripsi'      => 'Deskripsi',
         ]);
 
         $finishing->update($request->only('nama_finishing', 'deskripsi'));

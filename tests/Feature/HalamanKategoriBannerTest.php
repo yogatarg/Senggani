@@ -57,7 +57,7 @@ class HalamanKategoriBannerTest extends TestCase
         $this->post(route('admin.banner.store'), [
             'judul'  => 'Banner Uji',
             'gambar' => UploadedFile::fake()->image('desktop.jpg'),
-        ])->assertSessionHasErrors(['gambar_mobile' => 'Gambar mobile wajib diunggah.']);
+        ])->assertSessionHasErrors(['gambar_mobile' => 'Gambar HP wajib diunggah.']);
 
         $this->assertSame(0, Banner::count());
         $this->assertCount(0, Storage::disk('public')->allFiles());
@@ -110,7 +110,7 @@ class HalamanKategoriBannerTest extends TestCase
         $banner = Banner::create(['judul' => 'Lama', 'gambar' => $gambar, 'aktif' => true]);
 
         $this->put(route('admin.banner.update', $banner), ['judul' => 'Baru'])
-            ->assertSessionHasErrors(['gambar_mobile' => 'Gambar mobile wajib diunggah.']);
+            ->assertSessionHasErrors(['gambar_mobile' => 'Gambar HP wajib diunggah.']);
 
         $this->assertSame('Lama', $banner->refresh()->judul);
     }
