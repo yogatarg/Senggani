@@ -50,7 +50,7 @@
     $riwayatTidakJadi = $tidakJadi ? $riwayat->first(fn ($r) => $r->status_ke === StatusProduksi::TidakJadi) : null;
 
     // Teks total: harga bisa belum lengkap sebelum produksi
-    // Total tagihan = subtotal produk + ongkir − diskon
+    // Total tagihan = subtotal produk + ongkir
     $teksTotal = $sudahProduksi || $pesanan->harga_lengkap
         ? $rp($pesanan->total_tagihan)
         : ((float) $pesanan->total > 0 ? $rp($pesanan->total_tagihan) . ' (belum lengkap)' : 'Belum dihitung');
@@ -62,14 +62,10 @@
 
     $gid = fn (string $kunci) => 'g-' . str_replace('.', '-', $kunci);
 
-    // Ongkir & diskon: baris rincian hanya bila salah satunya > 0 (rancangan invoice 5.4)
+    // Ongkir: baris rincian hanya bila > 0 (rancangan invoice 5.4)
     $ongkir = (float) $pesanan->ongkir;
-    $diskon = (float) $pesanan->diskon;
-    $adaBiaya = $ongkir > 0 || $diskon > 0;
-    $teksTermasuk = $adaBiaya ? 'termasuk ' . collect([
-        $ongkir > 0 ? 'ongkir ' . $rp($ongkir) : null,
-        $diskon > 0 ? 'diskon ' . $rp($diskon) : null,
-    ])->filter()->implode(' · ') : null;
+    $adaBiaya = $ongkir > 0;
+    $teksTermasuk = $adaBiaya ? 'termasuk ongkir ' . $rp($ongkir) : null;
     // "Metode · tanggal" di bawah nominal DP/pelunasan (metode kosong untuk data lama)
     $ketBayar = fn ($metode, $tanggal) => collect([$metode?->label(), $tanggal?->translatedFormat('j M Y')])->filter()->implode(' · ');
 
@@ -196,7 +192,7 @@
                         </div>
                         <strong data-harga-total aria-live="polite">{{ (float) $pesanan->total > 0 ? $rp($pesanan->total) : 'Belum dihitung' }}</strong>
                     </div>
-                    <p class="sg-bantu mt-1"><i class="fa-solid fa-circle-info me-1" aria-hidden="true"></i>Ongkir &amp; diskon diatur admin di form SPP.</p>
+                    <p class="sg-bantu mt-1"><i class="fa-solid fa-circle-info me-1" aria-hidden="true"></i>Ongkir diatur admin di form SPP.</p>
 
                     <div class="sg-field mt-3">
                         <label class="sg-label" for="f-catatan_harga">Catatan perhitungan <span class="fw-normal sg-muted">(opsional)</span></label>
@@ -475,8 +471,7 @@
                     @unless ($hargaBelumLengkap && (float) $pesanan->total <= 0)
                     <div><dt>Subtotal produk</dt><dd @if ($hargaBelumLengkap) class="sg-belum-harga" @endif>{{ $rp($pesanan->total) }}</dd></div>
                     @endunless
-                    @if ($ongkir > 0)<div><dt>Ongkir</dt><dd>{{ $rp($ongkir) }}</dd></div>@endif
-                    @if ($diskon > 0)<div><dt>Diskon</dt><dd>− {{ $rp($diskon) }}</dd></div>@endif
+                    <div><dt>Ongkir</dt><dd>{{ $rp($ongkir) }}</dd></div>
                 @endif
                 <div class="{{ $sudahProduksi ? '' : 'sg-sisa' }} {{ $adaBiaya ? 'sg-baris-total' : '' }}"><dt>{{ $adaBiaya ? 'Total tagihan' : 'Total' }}</dt><dd @if ($hargaBelumLengkap) class="sg-belum-harga" @endif>{{ $teksTotal }}</dd></div>
                 @if ($sudahProduksi)

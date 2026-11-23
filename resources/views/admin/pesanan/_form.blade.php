@@ -71,7 +71,7 @@
     $kunciKonfirmasi = 'konfirmasi_ganti_nomor';
     $tampilKonfirmasi = $errors->has($kunciKonfirmasi) || old($kunciKonfirmasi);
     $maksFile = \App\Models\PesananFile::MAKS_PER_ORDER;
-    // Kunci setelah lunas (sama seperti SimpanPesananRequest): jumlah, harga, ongkir, diskon, DP readonly
+    // Kunci setelah lunas (sama seperti SimpanPesananRequest): jumlah, harga, ongkir, DP readonly
     // selama tanggal lunas tetap terisi. pesanan.js membuka kunci begitu tanggal lunas dikosongkan.
     $lunasTersimpan = $pesanan->exists && (bool) $pesanan->tanggal_lunas;
     $kunciLunas = $lunasTersimpan && (! $pakaiBayar || filled(old('tanggal_lunas', $tgl($pesanan->tanggal_lunas))));
@@ -209,7 +209,7 @@
             @if ($lunasTersimpan)
                 <p class="sg-alert sg-alert-info" id="ket-kunci-lunas" data-ket-kunci-lunas @unless ($kunciLunas) hidden @endunless>
                     <i class="fa-solid fa-lock" aria-hidden="true"></i>
-                    <span>Harga, jumlah, ongkir, diskon, dan DP dikunci karena SPP sudah lunas. Kosongkan tanggal lunas untuk mengoreksi.</span>
+                    <span>Harga, jumlah, ongkir, dan DP dikunci karena SPP sudah lunas. Kosongkan tanggal lunas untuk mengoreksi.</span>
                 </p>
             @endif
             <div id="f-item">{!! $galat('item') !!}</div>
@@ -344,7 +344,7 @@
 
             <div class="sg-otomatis"><span>Subtotal produk <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
 
-            {{-- Ongkir & diskon (rancangan invoice 5.3): total tagihan & sisa dihitung langsung di pesanan.js --}}
+            {{-- Ongkir (rancangan invoice 5.3): total tagihan & sisa dihitung langsung di pesanan.js --}}
             @php
                 $biayaTampil = function (string $f) use ($pesanan) {
                     $v = old($f, (float) $pesanan->{$f} > 0 ? (int) $pesanan->{$f} : '');
@@ -360,18 +360,6 @@
                                class="form-control sg-angka @error('ongkir') is-invalid @enderror" data-rupiah data-ongkir @if ($kunciLunas) readonly @endif {!! $aria('ongkir') !!}>
                     </div>
                     {!! $galat('ongkir') !!}
-                </div>
-                <div class="sg-field">
-                    <label class="sg-label" for="f-diskon">Diskon <span class="fw-normal sg-muted">(opsional)</span></label>
-                    <div class="sg-imbuh sg-imbuh-depan">
-                        <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                        <input type="text" inputmode="numeric" id="f-diskon" name="diskon" value="{{ $biayaTampil('diskon') }}" autocomplete="off" placeholder="0"
-                               class="form-control sg-angka @error('diskon') is-invalid @enderror" data-diskon @if ($kunciLunas) readonly @endif
-                               aria-describedby="bantu-diskon galat-diskon-langsung {{ $errors->has('diskon') ? $gid('diskon') : '' }}" @error('diskon') aria-invalid="true" data-galat-server @enderror data-rupiah>
-                    </div>
-                    {!! $galat('diskon') !!}
-                    <p class="sg-galat" id="galat-diskon-langsung" data-galat-diskon hidden><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i><span></span></p>
-                    <p class="sg-bantu" id="bantu-diskon">Potongan dalam rupiah.</p>
                 </div>
             </div>
 
@@ -448,7 +436,6 @@
                 <div><dt>Item</dt><dd data-jumlah-item>1</dd></div>
                 <div><dt>Subtotal</dt><dd data-total>Rp 0</dd></div>
                 <div data-baris-ongkir hidden><dt>Ongkir</dt><dd data-ongkir-tampil>Rp 0</dd></div>
-                <div data-baris-diskon hidden><dt>Diskon</dt><dd data-diskon-tampil>− Rp 0</dd></div>
                 <div class="sg-baris-total {{ $pakaiBayar ? '' : 'sg-sisa' }}"><dt>Total</dt><dd data-total-tagihan>Rp 0</dd></div>
                 @if ($pakaiBayar)
                     <div><dt>DP</dt><dd data-dp-tampil>Rp 0</dd></div>

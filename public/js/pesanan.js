@@ -995,12 +995,10 @@
                 el.textContent = lengkap ? 'Dihitung dari item' : tanpaHarga + ' item belum diberi harga';
             });
 
-            // Total tagihan = subtotal produk + ongkir − diskon (rancangan invoice 5.3)
+            // Total tagihan = subtotal produk + ongkir (rancangan invoice 5.3)
             var inputOngkir = $('[data-ongkir]', formOrder);
-            var inputDiskon = $('[data-diskon]', formOrder);
             var ongkir = inputOngkir ? keAngka(inputOngkir.value) : 0;
-            var diskon = inputDiskon ? keAngka(inputDiskon.value) : 0;
-            var tagihan = Math.max(total + ongkir - diskon, 0);
+            var tagihan = total + ongkir;
             var teksTagihan = lengkap ? rupiah(tagihan) : (total > 0 ? rupiah(tagihan) + ' (belum lengkap)' : 'Belum lengkap');
             $$('[data-total-tagihan]').forEach(function (el) {
                 // Bilah HP sempit: cukup "Belum lengkap" supaya tidak terpotong
@@ -1008,21 +1006,7 @@
                 el.classList.toggle('sg-belum-harga', !lengkap);
             });
             $$('[data-baris-ongkir]').forEach(function (el) { el.hidden = ongkir <= 0; });
-            $$('[data-baris-diskon]').forEach(function (el) { el.hidden = diskon <= 0; });
             $$('[data-ongkir-tampil]').forEach(function (el) { el.textContent = rupiah(ongkir); });
-            $$('[data-diskon-tampil]').forEach(function (el) { el.textContent = '− ' + rupiah(diskon); });
-
-            // Diskon ≤ subtotal produk. Sama seperti server: dicek hanya bila semua harga terisi.
-            var galatDiskon = $('[data-galat-diskon]', formOrder);
-            if (inputDiskon && galatDiskon) {
-                var diskonLebih = lengkap && diskon > total;
-                galatDiskon.hidden = !diskonLebih;
-                $('span', galatDiskon).textContent = diskonLebih ? 'Diskon tidak boleh melebihi subtotal produk (' + rupiah(total) + ').' : '';
-                var galatServer = inputDiskon.hasAttribute('data-galat-server');
-                inputDiskon.classList.toggle('is-invalid', diskonLebih || galatServer);
-                if (diskonLebih || galatServer) inputDiskon.setAttribute('aria-invalid', 'true');
-                else inputDiskon.removeAttribute('aria-invalid');
-            }
 
             var dpInput = $('[data-dp]', formOrder);
             if (!dpInput) return;
@@ -1090,7 +1074,7 @@
         };
         aturWajibMetode();
 
-        // Kunci setelah lunas: selama tanggal lunas (tersimpan) tetap terisi, jumlah, harga, ongkir, diskon, dan DP
+        // Kunci setelah lunas: selama tanggal lunas (tersimpan) tetap terisi, jumlah, harga, ongkir, dan DP
         // readonly (bukan disabled, supaya nilainya tetap terkirim dan cocok dengan pemeriksaan server);
         // tombol tambah/hapus item disembunyikan lewat CSS [data-terkunci-lunas]. Teks item tetap bisa diubah.
         var aturKunciLunas = function () {
@@ -1100,7 +1084,7 @@
             formOrder.toggleAttribute('data-terkunci-lunas', kunci);
             var ket = $('[data-ket-kunci-lunas]', formOrder);
             if (ket) ket.hidden = !kunci;
-            $$('[data-jumlah], [data-harga], [data-ongkir], [data-diskon], [data-dp]', formOrder).forEach(function (el) {
+            $$('[data-jumlah], [data-harga], [data-ongkir], [data-dp]', formOrder).forEach(function (el) {
                 el.readOnly = kunci;
                 var ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== 'ket-kunci-lunas'; });
                 if (kunci && ket) ids.unshift('ket-kunci-lunas');
@@ -1110,25 +1094,13 @@
         aturKunciLunas();
 
         formOrder.addEventListener('input', function (e) {
-            if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir], [data-diskon]')) hitungTotal();
+            if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir]')) hitungTotal();
             if (e.target.matches('[data-tanggal-lunas]')) { aturMetodeLunas(); aturKunciLunas(); }
             if (e.target.matches('[data-dp], [data-tanggal-lunas]')) aturWajibMetode();
         });
         formOrder.addEventListener('change', function (e) {
             if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); aturKunciLunas(); aturWajibMetode(); }
         });
-        // Diskon melebihi subtotal: tahan kirim dan arahkan ke field (server tetap penentu)
-        if (form) {
-            form.addEventListener('submit', function (e) {
-                var galat = $('[data-galat-diskon]', formOrder);
-                if (!galat || galat.hidden) return;
-                e.preventDefault();
-                var d = $('[data-diskon]', formOrder);
-                d.scrollIntoView({ block: 'center', behavior: gerakHalus() });
-                d.focus({ preventScroll: true });
-            });
-        }
-
         // Deadline tidak boleh sebelum tanggal order
         var tglOrder = $('[data-tanggal-order]', formOrder);
         var deadline = $('[data-deadline]', formOrder);
