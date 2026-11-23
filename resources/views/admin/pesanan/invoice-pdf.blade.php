@@ -3,7 +3,9 @@
     Layout final admin (23 Nov 2026): kop merah tua + kapsul kontak, INVOICE di kanan, tabel item,
     sela bergaris + watermark stempel, blok bawah (pembayaran transfer + rincian + ttd) menempel di bawah
     halaman terakhir. Aturan DomPDF: tata letak dengan <table>, CSS 2.1, gambar data URI, font Poppins.
-    $sela = null pada render pertama (pengukuran); render kedua berisi tinggi sela (lihat InvoicePdf::buat).
+    $sela = null pada pass ukur (gambar diganti PNG 1×1, jadi semua <img> wajib berukuran tetap lewat CSS/style);
+    render penuh berisi tinggi sela (lihat InvoicePdf::buat). Teks panjang tanpa spasi dipotong (overflow-wrap)
+    dan tabel item memakai table-layout: fixed supaya kolom angka selalu terlihat.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -43,7 +45,7 @@
     /* Kepada, tanggal, status */
     .kepada td { vertical-align: top; }
     .label-kepada { font-size: 7pt; letter-spacing: 1pt; font-weight: bold; color: #44403C; }
-    .kepada-nama { font-size: 10pt; font-weight: bold; margin-top: 2mm; }
+    .kepada-nama { font-size: 10pt; font-weight: bold; margin-top: 2mm; overflow-wrap: anywhere; }
     .kepada-hp { font-size: 9.2pt; margin-top: 1.2mm; }
     .kepada-hp .lbl { width: 11.5mm; }
     .tgl-label { font-size: 9.4pt; color: #57534E; }
@@ -55,11 +57,12 @@
     .badge-lunas { background: #E8F7EE; border-color: #A9DFBF; color: #1E8449; }
 
     /* Tabel item */
-    .item { margin-top: 9.5mm; }
+    .item { margin-top: 9.5mm; table-layout: fixed; width: 100%; }
     .item thead { display: table-header-group; }
     .item tr { page-break-inside: avoid; }
     .item th { background: #F5F5F3; height: 5.6mm; padding: 3.4mm 3mm 0 3mm; font-size: 6.8pt; letter-spacing: 1pt; font-weight: bold; color: #44403C; text-align: left; vertical-align: top; }
     .item td { padding: 4.4mm 3mm 4.4mm 3mm; border-bottom: 0.75pt solid #D6D6D6; font-size: 9.2pt; }
+    .item .detail { overflow-wrap: anywhere; }
     .item .angka { text-align: right; white-space: nowrap; }
     .item .no { padding-left: 2.3mm; }
     .item .akhir { padding-right: 1.2mm; }
@@ -69,12 +72,13 @@
 
     /* Sela: garis tipis + watermark stempel */
     .sela { position: relative; page-break-inside: avoid; }
+    .sela-baru { page-break-before: always; }
     .sela-garis { position: absolute; left: 0; width: 182mm; height: 0; border-top: 0.75pt solid #D6D6D6; }
     .sela-watermark { position: absolute; }
 
     /* Blok bawah (tidak terbelah) */
     .blok-bawah { page-break-inside: avoid; padding-top: 4mm; }
-    .keterangan { font-size: 8pt; line-height: 1.3; color: #57534E; margin-bottom: 2.5mm; }
+    .keterangan { font-size: 8pt; line-height: 1.3; color: #57534E; margin-bottom: 2.5mm; overflow-wrap: anywhere; }
     .kotak-bayar { width: 89.3mm; background: #E8E9E8; border-radius: 4.5mm; padding: 5mm 4.5mm 4.5mm 4.5mm; }
     .judul-bayar { font-size: 10.5pt; letter-spacing: 0.6pt; font-weight: bold; color: #44403C; text-align: center; }
     .rekening { margin-top: 3mm; }
@@ -88,20 +92,22 @@
     .qris-bingkai { width: 27.8mm; height: 27.8mm; background: #FFFFFF; padding: 1.6mm; }
     .qris-teks { padding-left: 5.4mm; vertical-align: top; }
     .qris-teks .logo-qris { height: 8.6mm; margin-top: 1.8mm; }
-    .qris-an { font-size: 11pt; font-weight: bold; margin-top: 3mm; }
+    .qris-an { font-size: 11pt; font-weight: bold; margin-top: 3mm; overflow-wrap: anywhere; }
     .qris-mohon { font-size: 8.4pt; line-height: 1.45; color: #44403C; margin-top: 1mm; }
 
     .rincian td { font-size: 11pt; height: 6.2mm; vertical-align: middle; }
     .rincian .nilai { text-align: right; white-space: nowrap; padding-left: 2mm; }
-    .rincian .info { font-size: 8pt; color: #57534E; }
+    /* Baris DP/Pelunasan: metode · tanggal di baris kecil bawah label, nominal sejajar baris label */
+    .rincian .berinfo td { vertical-align: top; height: auto; padding-top: 0.9mm; padding-bottom: 0.7mm; }
+    .rincian .info { font-size: 7.5pt; line-height: 1.2; font-weight: normal; color: #57534E; }
     .rincian .tebal td { font-weight: bold; }
     .rincian .garis td { border-bottom: 0.75pt solid #44403C; }
     .kelebihan { font-size: 8pt; color: #B54708; text-align: right; margin-top: 1mm; }
     .ttd-area { position: relative; height: 22mm; margin-top: 2mm; }
     .ttd-kosong { height: 16mm; }
     .hormat { font-size: 9.2pt; text-align: center; margin-top: 1mm; }
-    .ttd-nama { font-size: 9.6pt; font-weight: bold; text-align: center; }
-    .ttd-jabatan { font-size: 8.5pt; color: #57534E; text-align: center; }
+    .ttd-nama { font-size: 9.6pt; font-weight: bold; text-align: center; overflow-wrap: anywhere; }
+    .ttd-jabatan { font-size: 8.5pt; color: #57534E; text-align: center; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -162,18 +168,20 @@
 <table class="item">
     <thead>
         <tr>
-            <th class="no" style="width: 6.9mm;">NO</th>
-            <th style="width: 71mm;">DETAIL PRODUK</th>
-            <th style="width: 22mm; text-align: right;">JUMLAH</th>
-            <th style="width: 29.2mm; text-align: right;">HARGA 1 PCS</th>
-            <th class="akhir" style="width: 24.7mm; text-align: right;">SUBTOTAL</th>
+            {{-- table-layout: fixed di DomPDF hanya memakai lebar persen (lebar mm dianggap 0). Persen dari 182 mm,
+                 termasuk padding: NO 12,2 mm, detail 77,7 mm, jumlah 28 mm, harga 35,2 mm, subtotal 28,9 mm. --}}
+            <th class="no" style="width: 6.7%;">NO</th>
+            <th style="width: 42.7%;">DETAIL PRODUK</th>
+            <th style="width: 15.4%; text-align: right;">JUMLAH</th>
+            <th style="width: 19.3%; text-align: right;">HARGA 1 PCS</th>
+            <th class="akhir" style="width: 15.9%; text-align: right;">SUBTOTAL</th>
         </tr>
     </thead>
     <tbody>
         @foreach ($item as $baris)
-            <tr>
+            <tr @if ($loop->last) id="baris-akhir" @endif>
                 <td class="no">{{ $baris['no'] }}</td>
-                <td>
+                <td class="detail">
                     <div class="item-judul">{{ $baris['judul'] }}</div>
                     @if ($baris['spek'] !== '')
                         <div class="item-detail">{{ $baris['spek'] }}</div>
@@ -190,9 +198,9 @@
     </tbody>
 </table>
 
-{{-- ── Sela: garis tipis + watermark (hanya di render kedua) ── --}}
+{{-- ── Sela: garis tipis + watermark (hanya di render penuh; halaman_baru = mulai di halaman berikutnya) ── --}}
 @if ($sela)
-    <div class="sela" style="height: {{ $sela['tinggi'] }}mm;">
+    <div class="sela {{ $sela['halaman_baru'] ? 'sela-baru' : '' }}" style="height: {{ $sela['tinggi'] }}mm;">
         @if ($sela['watermark'])
             <img class="sela-watermark" src="{{ $sela['watermark']['uri'] }}" alt=""
                  style="left: {{ $sela['watermark']['kiri'] }}mm; top: {{ $sela['watermark']['atas'] }}mm; width: {{ $sela['watermark']['lebar'] }}mm; height: {{ $sela['watermark']['tinggi'] }}mm;">
@@ -246,7 +254,9 @@
                                         @if ($qrisKeterangan !== '')
                                             <div class="qris-an">{{ $qrisKeterangan }}</div>
                                         @endif
-                                        <div class="qris-mohon">Mohon kirimkan bukti transfer setelah pembayaran. Terima kasih</div>
+                                        @if ($mohonBukti)
+                                            <div class="qris-mohon">Mohon kirimkan bukti transfer setelah pembayaran. Terima kasih</div>
+                                        @endif
                                     </td>
                                 </tr>
                             </table>
@@ -257,8 +267,8 @@
             <td style="padding-left: 2mm;">
                 <table class="rincian">
                     @foreach ($ringkasan['baris'] as $r)
-                        <tr class="{{ $r['tebal'] ? 'tebal' : '' }} {{ $r['garis'] ? 'garis' : '' }}">
-                            <td>{{ $r['label'] }}@if (! empty($r['info'])) <span class="info">{{ $r['info'] }}</span>@endif</td>
+                        <tr class="{{ $r['tebal'] ? 'tebal' : '' }} {{ $r['garis'] ? 'garis' : '' }} {{ ! empty($r['info']) ? 'berinfo' : '' }}">
+                            <td>{{ $r['label'] }}@if (! empty($r['info']))<div class="info">{{ $r['info'] }}</div>@endif</td>
                             <td class="nilai">{{ $r['nilai'] }}</td>
                         </tr>
                     @endforeach

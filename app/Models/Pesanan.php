@@ -194,18 +194,13 @@ class Pesanan extends Model
     }
 
     /**
-     * Status bayar di invoice (dua saja): lunas (pelunasan dicatat / tanggal_lunas terisi, atau DP
-     * sudah menutup total tagihan > 0), selain itu belum_lunas (belum bayar maupun sesudah DP).
+     * Status bayar di invoice (dua saja): lunas hanya bila tanggal_lunas terisi (sama dengan status admin),
+     * selain itu belum_lunas. DP yang menutup seluruh tagihan sudah otomatis dicatat lunas saat Catat DP /
+     * Edit (PesananService::lunasOtomatis), jadi tidak perlu diturunkan dari DP ≥ total di sini.
      */
     protected function statusBayarInvoice(): Attribute
     {
-        return Attribute::get(function () {
-            $total = $this->total_tagihan;
-
-            return $this->tanggal_lunas || ($total > 0 && (float) $this->dp >= $total)
-                ? 'lunas'
-                : 'belum_lunas';
-        });
+        return Attribute::get(fn () => $this->tanggal_lunas ? 'lunas' : 'belum_lunas');
     }
 
     /** "INV-176" bila sudah bernomor SPP, "INV-PNW-23" sebelum DP, "INV-CONTOH" untuk data contoh. */
@@ -462,7 +457,12 @@ class Pesanan extends Model
                 $biaya[] = '💳 DP: ' . self::rupiahSpp($this->dp) . ($info ? ' (' . implode(', ', $info) . ')' : '');
             }
             if ($this->tanggal_lunas) {
-                $biaya[] = '✅ Lunas: ' . implode(', ', array_filter([$this->metode_lunas?->label(), $this->tanggalSpp($this->tanggal_lunas)]));
+                // "✅ Lunas: Rp1.625.000 (QRIS, 23 Nov)"; lunas dari DP saja (pelunasan Rp0) tanpa nominal
+                $info = array_filter([$this->metode_lunas?->label(), $this->tanggalSpp($this->tanggal_lunas)]);
+                $info = $info ? ' (' . implode(', ', $info) . ')' : '';
+                $biaya[] = $this->nilai_pelunasan > 0
+                    ? '✅ Lunas: ' . self::rupiahSpp($this->nilai_pelunasan) . $info
+                    : '✅ Lunas: DP menutup seluruh tagihan' . $info;
             }
             $blok[] = $biaya;
 

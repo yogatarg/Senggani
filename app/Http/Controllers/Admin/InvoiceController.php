@@ -28,7 +28,7 @@ class InvoiceController extends Controller
         $izin->authorize();
 
         try {
-            $pdf = $invoice->buat($pesanan);
+            $isi = $invoice->isi($pesanan); // dari cache bila data pesanan & pengaturan tidak berubah
         } catch (Throwable $e) {
             report($e);
 
@@ -36,10 +36,6 @@ class InvoiceController extends Controller
                 ->with('error', 'Invoice gagal dibuat. Coba lagi, atau hubungi pengelola bila berulang.');
         }
 
-        $respons = $pdf->download(InvoicePdf::namaFile($pesanan));
-        $respons->headers->set('Cache-Control', 'private, no-store');
-        $respons->headers->set('X-Content-Type-Options', 'nosniff');
-
-        return $respons;
+        return InvoicePdf::respons($isi, InvoicePdf::namaFile($pesanan), 'attachment');
     }
 }

@@ -127,6 +127,8 @@ class PesananService
                 $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
                 $totalLama  = (float) $pesanan->total;
                 $ongkirLama = (float) $pesanan->ongkir;
+                $dpLama     = (float) $pesanan->dp;
+                $tagihanLama = $pesanan->total_tagihan;
 
                 // customer_id kosong: tetap customer lama, kecuali admin menekan "Lepas" (lepas_customer=1)
                 // sehingga customer ditentukan ulang dari isian seperti saat tambah SPP.
@@ -154,6 +156,12 @@ class PesananService
                         . self::rupiah($ongkirLama) . ' → ' . self::rupiah((float) $pesanan->ongkir));
                 }
                 $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
+
+                // DP atau total tagihan berubah dan DP kini menutup seluruh tagihan → lunas otomatis.
+                // Tanggal lunas yang sengaja dikosongkan tanpa mengubah DP/total tidak diisi ulang.
+                if ((float) $pesanan->dp !== $dpLama || $pesanan->total_tagihan !== $tagihanLama) {
+                    $this->lunasOtomatis($pesanan, $oleh);
+                }
 
                 if ($pesanan->status_produksi === StatusProduksi::HitungHarga && self::hargaItemLengkap($item)) {
                     $this->pindahStatusDalamTransaksi($pesanan, StatusProduksi::HitungHarga, StatusProduksi::MenungguDp,
@@ -407,6 +415,10 @@ class PesananService
                     . self::rupiah($totalLama) . ' → ' . self::rupiah($total) . $tambahan);
             }
 
+            if ($berubah && $this->lunasOtomatis($segar, $oleh)) {
+                return 'Harga disimpan. DP sudah menutup seluruh tagihan, SPP otomatis tercatat lunas.';
+            }
+
             return 'Harga disimpan.';
         });
 
@@ -448,6 +460,8 @@ class PesananService
                     if ($nomorLama && $nomorLama !== $nomor) {
                         $this->catat($p, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomor} oleh {$oleh->nama}");
                     }
+                    // Kolom DP diubah lewat query; muat ulang dulu sebelum memeriksa DP ≥ total tagihan
+                    $this->lunasOtomatis($p->refresh(), $oleh);
                 },
             );
         } catch (Throwable $e) {
@@ -686,6 +700,31 @@ class PesananService
             $this->catat($pesanan, $oleh, null, null, 'Pelunasan via ' . $metode->label() . ' dicatat, tanggal '
                 . $tanggal->translatedFormat('d/m/Y'));
         });
+    }
+
+    /**
+     * DP sudah menutup seluruh tagihan (> 0) tetapi belum tercatat lunas → catat lunas otomatis:
+     * tanggal lunas = tanggal DP (hari ini bila kosong), metode lunas = metode DP, plus riwayat
+     * "Lunas otomatis: DP menutup seluruh tagihan". Dipanggil di dalam transaksi Catat DP / Edit / Isi Harga.
+     *
+     * @return bool true bila SPP baru saja dicatat lunas
+     */
+    private function lunasOtomatis(Pesanan $pesanan, Admin $oleh): bool
+    {
+        $total = $pesanan->total_tagihan;
+
+        if ($pesanan->tanggal_lunas || $total <= 0 || (float) $pesanan->dp < $total) {
+            return false;
+        }
+
+        $pesanan->forceFill([
+            'tanggal_lunas' => ($pesanan->tanggal_dp ?? today())->toDateString(),
+            'metode_lunas'  => $pesanan->metode_dp,
+        ])->save();
+
+        $this->catat($pesanan, $oleh, null, null, 'Lunas otomatis: DP menutup seluruh tagihan');
+
+        return true;
     }
 
     private function catat(Pesanan $pesanan, Admin $oleh, ?StatusProduksi $dari, ?StatusProduksi $ke, ?string $catatan): PesananRiwayat

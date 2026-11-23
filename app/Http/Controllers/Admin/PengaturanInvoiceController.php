@@ -114,7 +114,7 @@ class PengaturanInvoiceController extends Controller
         $pesanan = $invoice->pesananContoh();
 
         try {
-            $pdf = $invoice->buat($pesanan);
+            $isi = $invoice->isi($pesanan);
         } catch (Throwable $e) {
             report($e);
 
@@ -122,10 +122,7 @@ class PengaturanInvoiceController extends Controller
                 ->with('error', 'Contoh invoice gagal dibuat. Coba lagi, atau hubungi pengelola bila berulang.');
         }
 
-        $respons = $pdf->stream(InvoicePdf::namaFile($pesanan));
-        $respons->headers->set('Cache-Control', 'private, no-store');
-
-        return $respons;
+        return InvoicePdf::respons($isi, InvoicePdf::namaFile($pesanan), 'inline');
     }
 
     /** Kegagalan GD diubah menjadi galat validasi pada $field (bukan halaman 500). */

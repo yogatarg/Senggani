@@ -397,7 +397,7 @@ class InvoiceTest extends TestCase
         $q = Pesanan::factory()->create(['total' => 400000, 'dp' => 425000]);
         $this->assertSame(0.0, $q->sisa);
         $this->assertSame(25000.0, $q->kelebihan_bayar);
-        $this->assertSame('lunas', $q->status_bayar_invoice);
+        $this->assertSame('belum_lunas', $q->status_bayar_invoice, 'LUNAS hanya dari tanggal_lunas, bukan DP ≥ total.');
 
         // Belum bayar
         $r = Pesanan::factory()->status('menunggu_dp')->create(['total' => 500000]);
@@ -441,7 +441,7 @@ class InvoiceTest extends TestCase
             'Subtotal produk = Rp2.350.000',
             'Biaya ongkir = Rp25.000',
             'Total tagihan = Rp2.375.000',
-            'DP dibayar (Transfer BCA, 23 Nov) = Rp1.000.000',
+            'DP dibayar Transfer BCA · 23 Nov = Rp1.000.000',
             'Sisa pelunasan = Rp1.375.000',
         ], $baris($p));
 
@@ -449,25 +449,32 @@ class InvoiceTest extends TestCase
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
         $p = $p->fresh();
         $this->assertSame('LUNAS', $data($p)['labelStatus']);
+        // LUNAS: tanpa keterangan bawah ("DP minimal 50%…") dan tanpa ajakan kirim bukti transfer
+        $this->assertSame('', $data($p)['keterangan']);
+        $this->assertFalse($data($p)['mohonBukti']);
+        $this->assertTrue($data($this->buat(['nama_customer' => 'Ismun']))['mohonBukti']);
         $this->assertSame([
             'Subtotal produk = Rp2.350.000',
             'Biaya ongkir = Rp25.000',
             'Total tagihan = Rp2.375.000',
-            'DP dibayar (Transfer BCA, 23 Nov) = Rp1.000.000',
-            'Pelunasan (QRIS, 23 Nov) = Rp1.375.000',
+            'DP dibayar Transfer BCA · 23 Nov = Rp1.000.000',
+            'Pelunasan QRIS · 23 Nov = Rp1.375.000',
             'Sisa pelunasan = Rp0',
         ], $baris($p));
     }
 
     public function test_format_rekening_dan_kontak_invoice(): void
     {
-        $this->assertSame('3008 0101 7388 537', InvoicePdf::nomorRekening('300801017388537'));
-        $this->assertSame('8023 0111 64', InvoicePdf::nomorRekening('8023011164'));
+        // Nomor rekening tampil persis seperti diketik admin (tidak dikelompokkan otomatis)
+        $this->assertSame('300801017388537', InvoicePdf::nomorRekening('300801017388537'));
+        $this->assertSame('8023011164', InvoicePdf::nomorRekening(' 8023011164 '));
+        $this->assertSame('3008 0101 7388 537', InvoicePdf::nomorRekening('3008 0101 7388 537'));
         $this->assertSame('0838-2920-8316', InvoicePdf::waLokal('6283829208316'));
         $this->assertSame('@sengganipaperbag', config('usaha.instagram'));
 
         $v = (fn () => $this->dataView(Pesanan::factory()->create(['total' => 100000])))->call(app(InvoicePdf::class));
         $this->assertSame('a.n. SENGGANI', $v['qrisKeterangan']);
+        $this->assertSame('8023011164', $v['rekening'][0]['nomor']);
         $this->assertSame('3008 0101 7388 537', $v['rekening'][1]['nomor']);
         $this->assertNull($v['logoKop'], 'Logo kop disembunyikan bila stempel belum diunggah.');
     }
@@ -484,7 +491,7 @@ class InvoiceTest extends TestCase
         $this->assertSame('a.n. SENGGANI', $set['qris_keterangan']);
         $this->assertSame([
             ['bank' => 'BCA', 'nomor' => '8023011164', 'atas_nama' => 'Herni Pri Nugrahani'],
-            ['bank' => 'BRI', 'nomor' => '300801017388537', 'atas_nama' => 'Herni Pri Nugrahani'],
+            ['bank' => 'BRI', 'nomor' => '3008 0101 7388 537', 'atas_nama' => 'Herni Pri Nugrahani'],
         ], $set['rekening']);
         $this->assertNull($set['file_qris']);
     }
@@ -497,9 +504,9 @@ class InvoiceTest extends TestCase
             'penandatangan_nama'    => ' Herni Pri Nugrahani ',
             'penandatangan_jabatan' => 'Pemilik',
             'rekening'              => [
-                ['bank' => 'BCA', 'nomor' => '802 301-1164', 'atas_nama' => 'Herni Pri Nugrahani'],
+                ['bank' => 'BCA', 'nomor' => ' 8023011164 ', 'atas_nama' => 'Herni Pri Nugrahani'],
                 ['bank' => '', 'nomor' => '', 'atas_nama' => ''],
-                ['bank' => 'Mandiri', 'nomor' => '1234.5678.90', 'atas_nama' => 'Senggani'],
+                ['bank' => 'BRI', 'nomor' => '3008 0101 7388 537', 'atas_nama' => 'Senggani'],
             ],
             'qris_keterangan'  => 'a.n. SENGGANI',
             'keterangan_bawah' => "DP minimal 40%.\r\nPengiriman setelah lunas.",
@@ -514,8 +521,16 @@ class InvoiceTest extends TestCase
         $this->assertSame("DP minimal 40%.\nPengiriman setelah lunas.", $set['keterangan_bawah']);
         $this->assertSame([
             ['bank' => 'BCA', 'nomor' => '8023011164', 'atas_nama' => 'Herni Pri Nugrahani'],
-            ['bank' => 'Mandiri', 'nomor' => '1234567890', 'atas_nama' => 'Senggani'],
+            ['bank' => 'BRI', 'nomor' => '3008 0101 7388 537', 'atas_nama' => 'Senggani'],
         ], $set['rekening']);
+
+        // Hanya angka dan spasi: titik/tanda hubung ditolak (tidak lagi dibuang diam-diam)
+        foreach (['802 301-1164', '1234.5678.90', '12 34', str_repeat('1 ', 21)] as $salah) {
+            $this->sebagai($this->admin)->put(route('admin.pengaturan.invoice.update'), [
+                'persen_dp' => '50',
+                'rekening'  => [['bank' => 'BCA', 'nomor' => $salah, 'atas_nama' => 'X']],
+            ])->assertSessionHasErrors('rekening.0.nomor');
+        }
 
         // Validasi
         $this->sebagai($this->admin)->put(route('admin.pengaturan.invoice.update'), [
@@ -661,7 +676,7 @@ class InvoiceTest extends TestCase
         $this->assertStringNotContainsString('Lunas', $teks);
 
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
-        $this->assertStringContainsString("💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)\n✅ Lunas: QRIS, 23 Nov\n\n", $p->fresh()->teks_spp);
+        $this->assertStringContainsString("💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)\n✅ Lunas: Rp1.375.000 (QRIS, 23 Nov)\n\n", $p->fresh()->teks_spp);
 
         // Tanpa ongkir: blok hanya berisi DP
         $q = $this->buat(['nama_customer' => 'Ismun']);
@@ -670,9 +685,9 @@ class InvoiceTest extends TestCase
         $this->assertStringContainsString("\n\n💳 DP: Rp1.000.000 (Cash, 23 Nov)\n\n", $teks);
         $this->assertStringNotContainsString('💰 Total', $teks);
 
-        // Data lama: metode & tanggal DP kosong → tanpa kurung; lunas tanpa metode → tanggal saja
+        // Data lama: metode & tanggal DP kosong → tanpa kurung; lunas tanpa metode → nominal + tanggal saja
         $q->refresh()->update(['metode_dp' => null, 'tanggal_dp' => null, 'tanggal_lunas' => '2026-11-22', 'metode_lunas' => null]);
-        $this->assertStringContainsString("💳 DP: Rp1.000.000\n✅ Lunas: 22 Nov\n", $q->fresh()->teks_spp);
+        $this->assertStringContainsString("💳 DP: Rp1.000.000\n✅ Lunas: Rp1.350.000 (22 Nov)\n", $q->fresh()->teks_spp);
 
         // DP 0 & belum lunas: tidak ada baris DP/Lunas
         $q->update(['dp' => 0, 'tanggal_lunas' => null]);
@@ -739,6 +754,146 @@ class InvoiceTest extends TestCase
         $p->refresh();
         $this->assertSame(1200000.0, (float) $p->dp);
         $this->assertNull($p->tanggal_lunas);
+    }
+
+    // ── Temuan QA akhir: lunas otomatis, cache PDF, token panjang, posisi blok bawah ──
+
+    public function test_lunas_otomatis_saat_catat_dp_menutup_tagihan(): void
+    {
+        $p = $this->buat(['ongkir' => '25.000']); // total tagihan 2.375.000
+        $this->catatDp($p, ['dp' => '2.375.000', 'metode_dp' => 'qris', 'tanggal_dp' => '2026-11-22'])->assertSessionHasNoErrors();
+
+        $p->refresh();
+        $this->assertSame('2026-11-22', $p->tanggal_lunas->toDateString(), 'Tanggal lunas = tanggal DP.');
+        $this->assertSame(MetodeBayar::Qris, $p->metode_lunas, 'Metode lunas = metode DP.');
+        $this->assertSame('lunas', $p->status_pembayaran);
+        $this->assertSame('lunas', $p->status_bayar_invoice);
+        $this->assertSame(0.0, $p->sisa);
+        $this->assertSame(1, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
+        $this->assertStringContainsString('✅ Lunas: DP menutup seluruh tagihan (QRIS, 22 Nov)', $p->teks_spp);
+
+        // DP sebagian: tidak lunas otomatis
+        $q = $this->buat(['nama_customer' => 'Ismun']);
+        $this->catatDp($q, ['nomor_spp' => '177'])->assertSessionHasNoErrors();
+        $this->assertNull($q->fresh()->tanggal_lunas);
+        $this->assertSame('belum_lunas', $q->fresh()->status_bayar_invoice);
+    }
+
+    public function test_lunas_otomatis_saat_dp_diubah_lewat_edit_atau_harga_turun(): void
+    {
+        $p    = $this->buatProduksi(); // tagihan 2.375.000, DP 1.000.000 (Transfer BCA, 23 Nov)
+        $data = $this->data(['nomor_spp' => '176', 'ongkir' => '25.000']);
+        $url  = route('admin.pesanan.update', $p);
+
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '2.375.000', 'metode_dp' => 'transfer_bri'])->assertSessionHasNoErrors();
+        $p->refresh();
+        $this->assertSame('2026-11-23', $p->tanggal_lunas->toDateString());
+        $this->assertSame(MetodeBayar::TransferBri, $p->metode_lunas);
+        $this->assertSame('lunas', $p->status_bayar_invoice);
+        $this->assertSame(1, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
+
+        // Tanggal lunas sengaja dikosongkan tanpa mengubah DP/total: tidak diisi ulang
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '2.375.000', 'tanggal_lunas' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($p->fresh()->tanggal_lunas);
+        $this->assertSame('belum_lunas', $p->fresh()->status_bayar_invoice);
+
+        // Isi Harga menurunkan total tagihan sampai sama dengan DP → lunas otomatis
+        $q = $this->buat(['nama_customer' => 'Ismun', 'ongkir' => '25.000']);
+        $this->catatDp($q, ['nomor_spp' => '177'])->assertSessionHasNoErrors();
+        $ids = $q->detailPesanan()->pluck('id')->all();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $q), ['harga' => [$ids[0] => '1.500', $ids[1] => '2.250']])
+            ->assertSessionHasNoErrors();
+        $q->refresh();
+        $this->assertSame(1000000.0, $q->total_tagihan);
+        $this->assertSame('lunas', $q->status_bayar_invoice);
+        $this->assertSame(MetodeBayar::TransferBca, $q->metode_lunas);
+    }
+
+    public function test_cache_pdf_dipakai_ulang_dan_dibuang_saat_data_berubah(): void
+    {
+        $p       = $this->buatProduksi();
+        $invoice = app(InvoicePdf::class);
+        $disk    = Storage::disk(PengaturanInvoice::DISK);
+        $folder  = InvoicePdf::folderCache($p);
+
+        $pertama = $invoice->isi($p->fresh());
+        $this->assertStringStartsWith('%PDF', $pertama);
+        $this->assertCount(1, $disk->files($folder));
+        $path = $disk->files($folder)[0];
+
+        // Tanpa perubahan: isi cache dikirim apa adanya (tidak dirender ulang)
+        $disk->put($path, '%PDF-dari-cache');
+        $this->assertSame('%PDF-dari-cache', $invoice->isi($p->fresh()));
+        $res = $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $p))->assertOk();
+        $this->assertSame('%PDF-dari-cache', $res->getContent());
+        $this->assertStringContainsString('no-store', $res->headers->get('Cache-Control'));
+
+        // Data pesanan berubah (catat lunas): kunci baru, cache lama dihapus
+        $kunciLama = $invoice->kunciCache($p->fresh());
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
+        $this->assertNotSame($kunciLama, $invoice->kunciCache($p->fresh()));
+        $baru = $invoice->isi($p->fresh());
+        $this->assertNotSame('%PDF-dari-cache', $baru);
+        $this->assertSame([$folder . '/' . $invoice->kunciCache($p->fresh()) . '.pdf'], $disk->files($folder));
+
+        // Item berubah, pengaturan teks berubah, gambar baru: masing-masing kunci baru
+        $kunci = $invoice->kunciCache($p->fresh());
+        $p->detailPesanan()->first()->update(['catatan' => 'Logo emas']);
+        $this->assertNotSame($kunci, $kunci = $invoice->kunciCache($p->fresh()));
+        Pengaturan::simpan('invoice.keterangan_bawah', 'Terima kasih.');
+        $this->assertNotSame($kunci, $kunci = $invoice->kunciCache($p->fresh()));
+        app(PengaturanInvoice::class)->simpanGambar('stempel', UploadedFile::fake()->image('stempel.png', 533, 123));
+        $this->assertNotSame($kunci, $kunci = $invoice->kunciCache($p->fresh()));
+        $this->sebagai($this->admin)->post(route('admin.pesanan.catatan', $p), ['catatan' => 'Pembayaran sudah dicek'])->assertSessionHasNoErrors();
+        $this->assertNotSame($kunci, $invoice->kunciCache($p->fresh()), 'Riwayat baru ikut mengubah kunci.');
+
+        // Data contoh (belum tersimpan) tidak di-cache
+        $this->assertNull($invoice->kunciCache(new Pesanan(['nama_customer' => 'Contoh'])));
+    }
+
+    public function test_token_panjang_tidak_melebarkan_tabel_dan_blok_bawah_di_batas(): void
+    {
+        app(PengaturanInvoice::class)->simpanGambar('stempel', UploadedFile::fake()->image('stempel.png', 533, 123));
+
+        $item = fn (int $n, array $u = []) => array_map(fn ($i) => [
+            'jenis_packaging' => 'Paperbag', 'jenis_bahan' => 'Kraft', 'jumlah' => '500', 'harga_satuan' => '1.000', ...$u,
+        ], range(1, $n));
+
+        $panjang = [
+            'jenis_bahan' => 'DuplexTripleCoatedPremiumGlossyLaminasiDoffSpotUV',
+            'aksesori'    => 'TaliKurSatinMerahMarunPanjang40cmDobelSimpulMati',
+            'catatan'     => 'https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-desain-final-revisi',
+        ];
+
+        $invoice = app(InvoicePdf::class);
+        $kasus = [
+            'link panjang' => [$item(1, $panjang), 1],
+            '1 item'       => [$item(1), 1],
+            '6 item'       => [$item(6), null],
+            '12 item'      => [$item(12), null],
+        ];
+
+        foreach ($kasus as $nama => [$baris, $halaman]) {
+            $data = $this->data();
+            $data['item'] = $baris;
+            $data['nama_customer'] = 'NamaCustomerSangatPanjangTanpaSpasiSamaSekaliUntukUji';
+            $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $data)->assertSessionHasNoErrors();
+            $p = Pesanan::latest('id')->first();
+
+            $pdf = $invoice->buat($p);
+            $ukur = $invoice->ukuranTerakhir;
+
+            // Tabel tidak melebar: tepi kanan baris tetap di dalam margin kanan (210 − 14 mm)
+            $this->assertLessThanOrEqual(196.5, $ukur['kanan_tabel'], "Tepi kanan tabel ({$nama}).");
+
+            // Blok bawah selalu berakhir di ±252 mm pada halaman terakhir
+            $this->assertEqualsWithDelta(InvoicePdf::BATAS_BAWAH_BLOK, $ukur['bawah'], 1.5, "Tepi bawah blok bawah ({$nama}).");
+            $jumlahHalaman = $pdf->getDomPDF()->getCanvas()->get_page_count();
+            $this->assertSame($jumlahHalaman, $ukur['halaman'], "Blok bawah di halaman terakhir ({$nama}).");
+            if ($halaman) {
+                $this->assertSame($halaman, $jumlahHalaman, "Jumlah halaman ({$nama}).");
+            }
+        }
     }
 
     public function test_url_invoice_ditolak_dialihkan_ke_detail_spp(): void

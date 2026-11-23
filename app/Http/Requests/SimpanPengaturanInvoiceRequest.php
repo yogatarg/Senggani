@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Gate;
  * Field:
  * - penandatangan_nama (opsional, maks 100), penandatangan_jabatan (opsional, maks 100; kosong = tidak tampil).
  * - rekening[i][bank|nomor|atas_nama]: maks 4 baris; baris yang semua isiannya kosong dibuang.
- *   Nomor: spasi/titik/tanda hubung dibuang, lalu wajib 5–30 digit. Boleh kosong semua.
+ *   Nomor disimpan persis seperti diketik (hanya ujungnya dirapikan) dan tampil apa adanya di invoice;
+ *   hanya angka dan spasi, 5–30 digit, maks 40 karakter. Boleh kosong semua.
  * - qris_keterangan (opsional, maks 200), keterangan_bawah (opsional, maks 500).
  * - persen_dp: 0–100 (0 = baris "DP minimal" tidak tampil di invoice).
  * - ttd, stempel, qris (opsional): file gambar baru (lihat AturanGambarInvoice); diproses setelah teks disimpan.
@@ -40,7 +41,7 @@ class SimpanPengaturanInvoiceRequest extends FormRequest
                 }
                 $r = [
                     'bank'      => trim((string) ($r['bank'] ?? '')),
-                    'nomor'     => preg_replace('/[\s.\-]+/', '', (string) ($r['nomor'] ?? '')),
+                    'nomor'     => trim((string) ($r['nomor'] ?? '')),
                     'atas_nama' => trim((string) ($r['atas_nama'] ?? '')),
                 ];
                 if ($r['bank'] !== '' || $r['nomor'] !== '' || $r['atas_nama'] !== '') {
@@ -62,7 +63,8 @@ class SimpanPengaturanInvoiceRequest extends FormRequest
             'penandatangan_jabatan' => ['nullable', 'string', 'max:100'],
             'rekening'              => ['nullable', 'array', 'max:' . PengaturanInvoice::MAKS_REKENING],
             'rekening.*.bank'       => ['required', 'string', 'max:30'],
-            'rekening.*.nomor'      => ['required', 'string', 'regex:/^\d{5,30}$/'],
+            // Hanya angka & spasi, dengan 5–30 digit (spasi bebas, mis. "3008 0101 7388 537")
+            'rekening.*.nomor'      => ['required', 'string', 'max:40', 'regex:/^(?=(?:\D*\d){5,30}\D*$)[\d ]+$/'],
             'rekening.*.atas_nama'  => ['required', 'string', 'max:100'],
             'qris_keterangan'       => ['nullable', 'string', 'max:200'],
             'keterangan_bawah'      => ['nullable', 'string', 'max:500'],
@@ -80,7 +82,8 @@ class SimpanPengaturanInvoiceRequest extends FormRequest
             'rekening.max'            => 'Rekening maksimal ' . PengaturanInvoice::MAKS_REKENING . '.',
             'rekening.*.bank.required' => 'Nama bank rekening ke-:position wajib diisi.',
             'rekening.*.nomor.required' => 'Nomor rekening ke-:position wajib diisi.',
-            'rekening.*.nomor.regex'  => 'Nomor rekening ke-:position hanya boleh angka (5–30 digit).',
+            'rekening.*.nomor.regex'  => 'Nomor rekening ke-:position hanya boleh angka dan spasi (5–30 digit).',
+            'rekening.*.nomor.max'    => 'Nomor rekening ke-:position maksimal 40 karakter.',
             'rekening.*.atas_nama.required' => 'Atas nama rekening ke-:position wajib diisi.',
             'persen_dp.integer'       => 'Persen DP harus angka bulat 0–100.',
             'persen_dp.min'           => 'Persen DP minimal 0.',

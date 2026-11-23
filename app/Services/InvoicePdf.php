@@ -3,26 +3,33 @@
 namespace App\Services;
 
 use App\Enums\StatusProduksi;
-use App\Models\Customer;
 use App\Models\DetailPesanan;
 use App\Models\Pesanan;
+use App\Models\PesananRiwayat;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as DokumenPdf;
 use GdImage;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 /**
  * Invoice PDF SPP (DomPDF, A4), mengikuti layout final admin (Downloads/layout terbaru.jpeg, 23 Nov 2026).
  * Total tagihan = subtotal produk + ongkir (diskon tidak dipakai). Status bayar hanya dua: BELUM LUNAS / LUNAS.
  * Gambar (logo bank, ikon, ttd, stempel, QRIS) disisipkan sebagai data URI, jadi chroot/remote tidak dibuka.
+ * Gambar unggahan diperkecil dulu ke ±300 dpi ukuran cetaknya: PNG beralfa ukuran penuh membuat DomPDF
+ * lambat (tanda tangan 1794×1704 px saja ±1,8 detik per render).
  *
- * Blok bawah (pembayaran + rincian + ttd) selalu menempel di bawah halaman terakhir. Caranya dua kali
- * render: render pertama mengukur posisi blok bawah, render kedua menyisipkan "sela" (garis tipis +
- * watermark stempel) setinggi sisa ruang di antara tabel dan blok bawah. Bila tabel terlalu panjang,
- * blok bawah (tidak terbelah) pindah ke halaman berikutnya dan sela mengisi halaman itu.
+ * Blok bawah (pembayaran + rincian + ttd) selalu berakhir di BATAS_BAWAH_BLOK pada halaman terakhir:
+ * 1. Pass ukur: render ringan tanpa gambar (semua <img> berukuran tetap lewat CSS, jadi tata letaknya
+ *    sama persis) untuk membaca posisi blok bawah dan halaman akhir tabel (±0,1 detik).
+ * 2. Render penuh: "sela" (garis tipis + watermark stempel) disisipkan setinggi sisa ruang. Bila blok
+ *    bawah tidak bisa berakhir di batas pada halaman tabel, sela dimulai di halaman baru (page-break).
+ *
+ * Hasil PDF disimpan di disk privat (FOLDER_CACHE/<id pesanan>/<hash>.pdf), lihat isi() dan kunciCache().
  */
 class InvoicePdf
 {
@@ -33,18 +40,127 @@ class InvoicePdf
     // Folder aset tetap invoice (logo bank, logo QRIS, ikon kop)
     public const FOLDER_ASET = 'invoice/aset';
 
+    // Cache PDF hasil render (disk privat PengaturanInvoice::DISK)
+    public const FOLDER_CACHE = 'invoice/cache';
+
     // Tepi bawah blok bawah (mm dari atas kertas A4), sama dengan acuan (±250 mm)
     public const BATAS_BAWAH_BLOK = 252;
+
+    // Tepi atas area isi (margin atas @page di view)
+    public const MARGIN_ATAS = 13;
+
+    // Sela lebih pendek dari ini: cukup satu garis tanpa watermark
+    public const SELA_MIN_WATERMARK = 40;
+
+    // Jarak garis sela (mm) kira-kira setinggi satu baris tabel item
+    public const JARAK_GARIS = 18;
+
+    // Resolusi gambar unggahan di PDF
+    public const DPI = 300;
 
     private const MM = 72 / 25.4;
 
     public const OPASITAS_WATERMARK = 0.06;
 
+    // PNG 1×1 transparan: pengganti gambar saat pass ukur
+    private const GAMBAR_KOSONG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+    /** Hasil ukur render penuh terakhir (mm dari tepi kertas): bawah blok bawah, halamannya, kanan tabel, sela. Untuk uji. */
+    public array $ukuranTerakhir = [];
+
     public function __construct(private PengaturanInvoice $pengaturan)
     {
     }
 
-    /** Bangun PDF (sudah dirender, termasuk footer nomor halaman). */
+    /**
+     * Isi PDF siap kirim. Pesanan tersimpan memakai cache di disk privat; cache lain milik pesanan yang
+     * sama dihapus saat menyimpan yang baru. Data contoh (belum tersimpan) selalu dirender.
+     */
+    public function isi(Pesanan $pesanan): string
+    {
+        $pesanan->loadMissing('detailPesanan');
+
+        $kunci = $this->kunciCache($pesanan);
+        $disk  = Storage::disk(PengaturanInvoice::DISK);
+        $path  = $kunci ? self::folderCache($pesanan) . '/' . $kunci . '.pdf' : null;
+
+        if ($path && $disk->exists($path)) {
+            $isi = (string) $disk->get($path);
+            if (str_starts_with($isi, '%PDF')) {
+                return $isi;
+            }
+        }
+
+        $isi = $this->buat($pesanan)->output();
+
+        if ($path) {
+            foreach ($disk->files(self::folderCache($pesanan)) as $lama) {
+                if ($lama !== $path) {
+                    $disk->delete($lama);
+                }
+            }
+            $disk->put($path, $isi);
+        }
+
+        return $isi;
+    }
+
+    /** Respons PDF (attachment = unduh, inline = tampil di browser); tidak disimpan cache browser/proxy. */
+    public static function respons(string $isi, string $namaFile, string $jenis = 'attachment'): Response
+    {
+        return new Response($isi, 200, [
+            'Content-Type'           => 'application/pdf',
+            'Content-Disposition'    => HeaderUtils::makeDisposition($jenis, $namaFile, Str::ascii($namaFile)),
+            'Content-Length'         => (string) strlen($isi),
+            'Cache-Control'          => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public static function folderCache(Pesanan $pesanan): string
+    {
+        return self::FOLDER_CACHE . '/' . $pesanan->id;
+    }
+
+    /**
+     * Kunci cache: sha256 dari semua sumber isi PDF, yaitu kolom pesanan (termasuk updated_at), kolom
+     * tiap item, riwayat (jumlah, id & created_at terakhir), pengaturan invoice + path/ukuran/waktu file
+     * gambar, config usaha, aset tetap, serta isi kelas ini dan view-nya (perubahan kode = cache baru).
+     * Nilai kolom ikut di-hash (bukan hanya updated_at) supaya dua perubahan dalam detik yang sama tetap
+     * terdeteksi. Null untuk pesanan yang belum tersimpan.
+     */
+    public function kunciCache(Pesanan $pesanan): ?string
+    {
+        if (! $pesanan->exists || ! $pesanan->id) {
+            return null;
+        }
+
+        $pesanan->loadMissing('detailPesanan');
+
+        $set  = $this->pengaturan->semua();
+        $disk = Storage::disk(PengaturanInvoice::DISK);
+        $file = [];
+        foreach (array_keys(PengaturanInvoice::JENIS_GAMBAR) as $jenis) {
+            $path = $set['file_' . $jenis] ?? null;
+            $file[$jenis] = $path && $disk->exists($path) ? [$path, $disk->size($path), $disk->lastModified($path)] : null;
+        }
+
+        $riwayat = PesananRiwayat::query()->where('pesanan_id', $pesanan->id)
+            ->selectRaw('count(*) as jumlah, max(id) as akhir, max(created_at) as dibuat')->first(); // riwayat tidak pernah diubah
+
+        return hash('sha256', serialize([
+            'kode'    => [md5_file(__FILE__), md5_file(view()->getFinder()->find(self::VIEW))],
+            'pesanan' => $pesanan->getAttributes(),
+            'item'    => $pesanan->detailPesanan->map(fn (DetailPesanan $d) => $d->getAttributes())->all(),
+            'riwayat' => $riwayat?->only(['jumlah', 'akhir', 'dibuat']),
+            'setelan' => [$set, $file],
+            'usaha'   => config('usaha'),
+            'aset'    => array_map(fn ($f) => [basename($f), filesize($f), filemtime($f)], glob(resource_path(self::FOLDER_ASET . '/*.png')) ?: []),
+            'bahasa'  => app()->getLocale(),
+        ]));
+    }
+
+    /** Bangun PDF (sudah dirender, termasuk footer nomor halaman). Tanpa cache; lihat isi(). */
     public function buat(Pesanan $pesanan): DokumenPdf
     {
         $pesanan->loadMissing('detailPesanan');
@@ -53,21 +169,47 @@ class InvoicePdf
 
         $data = $this->dataView($pesanan);
 
-        // Render 1: ukur sisa ruang di atas blok bawah; render 2: isi ruang itu dengan sela
-        $ukur = [];
-        $pdf  = $this->render($data, $pesanan, null, $ukur);
-        $sela = $this->hitungSela($ukur);
-        if ($sela !== null) {
-            $pdf = $this->render($data, $pesanan, $sela);
-        }
+        // Pass ukur (tanpa gambar, ringan), lalu satu render penuh dengan sela yang pas
+        $sela = $this->hitungSela($this->ukur($data, $pesanan));
+
+        $akhir = [];
+        $pdf   = $this->render($data, $pesanan, $sela, $akhir);
+        $this->ukuranTerakhir = [
+            'bawah'   => isset($akhir['bawah']) ? round($akhir['bawah'] / self::MM, 2) : null,
+            'halaman' => $akhir['halaman_blok'] ?? null,
+            'kanan_tabel' => isset($akhir['kanan_tabel']) ? round($akhir['kanan_tabel'] / self::MM, 2) : null,
+            'sela'    => $sela,
+        ];
 
         $this->tulisFooter($pdf, $pesanan);
 
         return $pdf;
     }
 
-    /** @param  array{bawah?: float}  $ukur  diisi tepi bawah blok bawah (pt dari atas halamannya) saat render */
-    private function render(array $data, Pesanan $pesanan, ?float $sela, array &$ukur = []): DokumenPdf
+    /** Pass ukur: semua gambar diganti PNG 1×1 (ukuran tampil tetap dari CSS/atribut style), tanpa sela. */
+    private function ukur(array $data, Pesanan $pesanan): array
+    {
+        $kosong = fn ($g) => is_array($g) && isset($g['uri']) ? ['uri' => self::GAMBAR_KOSONG] + $g : $g;
+
+        $data['logoKop']  = $kosong($data['logoKop']);
+        $data['qris']     = $kosong($data['qris']);
+        $data['logoQris'] = $kosong($data['logoQris']);
+        $data['ikon']     = array_map($kosong, $data['ikon']);
+        $data['penandatangan']['ttd']     = $kosong($data['penandatangan']['ttd']);
+        $data['penandatangan']['stempel'] = $kosong($data['penandatangan']['stempel']);
+        $data['rekening'] = array_map(fn ($r) => ['logo' => $kosong($r['logo'])] + $r, $data['rekening']);
+
+        $ukur = [];
+        $this->render($data, $pesanan, null, $ukur);
+
+        return $ukur;
+    }
+
+    /**
+     * @param  array  $ukur  diisi saat render: atas & bawah blok bawah (pt dari atas kertas), halaman_blok,
+     *                       halaman_tabel (halaman baris item terakhir, id "baris-akhir")
+     */
+    private function render(array $data, Pesanan $pesanan, ?array $sela, array &$ukur = []): DokumenPdf
     {
         $pdf = Pdf::setOption([
             'isFontSubsettingEnabled' => true,
@@ -88,12 +230,23 @@ class InvoicePdf
         $pdf->addInfo(['Title' => $judul, 'Author' => (string) config('usaha.nama'), 'Creator' => (string) config('usaha.nama')]);
 
         // Posisi frame hanya bisa dibaca selama render (pohon frame dibuang sesudahnya)
-        $pdf->getDomPDF()->setCallbacks([[
+        $dompdf = $pdf->getDomPDF();
+        $dompdf->setCallbacks([[
             'event' => 'end_frame',
-            'f'     => function ($frame) use (&$ukur) {
+            'f'     => function ($frame) use (&$ukur, $dompdf) {
                 $node = $frame->get_node();
-                if ($node instanceof \DOMElement && $node->getAttribute('id') === 'blok-bawah') {
-                    $ukur['bawah'] = (float) $frame->get_position('y') + (float) $frame->get_margin_height();
+                if (! $node instanceof \DOMElement) {
+                    return;
+                }
+                $id = $node->getAttribute('id');
+                if ($id === 'blok-bawah') {
+                    $ukur['atas']         = (float) $frame->get_position('y');
+                    $ukur['bawah']        = (float) $frame->get_position('y') + (float) $frame->get_margin_height();
+                    $ukur['halaman_blok'] = $dompdf->getCanvas()->get_page_number();
+                } elseif ($id === 'baris-akhir') {
+                    // Baris item terakhir (tidak terbelah) = halaman akhir tabel; tepi kanannya untuk uji lebar
+                    $ukur['halaman_tabel'] = $dompdf->getCanvas()->get_page_number();
+                    $ukur['kanan_tabel']   = (float) $frame->get_position('x') + (float) $frame->get_margin_width();
                 }
             },
         ]]);
@@ -104,61 +257,78 @@ class InvoicePdf
     }
 
     /**
-     * Tinggi sela (mm) agar tepi bawah blok bawah jatuh di BATAS_BAWAH_BLOK. Null bila blok tidak
-     * terukur atau ruang yang tersisa terlalu kecil (< 1 mm).
+     * Sela agar tepi bawah blok bawah jatuh di BATAS_BAWAH_BLOK. Bila di pass ukur blok bawah melewati
+     * batas atau sudah terdorong ke halaman setelah tabel, sela dimulai di halaman baru dengan tinggi
+     * batas − margin atas − tinggi blok. Null bila tidak terukur atau ruangnya < 1 mm.
+     *
+     * @return array{tinggi: float, halaman_baru: bool}|null
      */
-    private function hitungSela(array $ukur): ?float
+    private function hitungSela(array $ukur): ?array
     {
-        if (! isset($ukur['bawah'])) {
+        if (! isset($ukur['atas'], $ukur['bawah'])) {
             return null;
         }
 
-        $sisa = self::BATAS_BAWAH_BLOK - $ukur['bawah'] / self::MM - 0.5;
+        $bawah      = $ukur['bawah'] / self::MM;
+        $tinggiBlok = ($ukur['bawah'] - $ukur['atas']) / self::MM;
+        $pindah     = ($ukur['halaman_blok'] ?? 1) > ($ukur['halaman_tabel'] ?? 1) || $bawah > self::BATAS_BAWAH_BLOK + 0.5;
 
-        return $sisa >= 1 ? round($sisa, 2) : null;
+        $sisa = $pindah
+            ? self::BATAS_BAWAH_BLOK - self::MARGIN_ATAS - $tinggiBlok - 0.5
+            : self::BATAS_BAWAH_BLOK - $bawah - 0.5;
+
+        if ($sisa < 1) {
+            return null;
+        }
+
+        return ['tinggi' => round($sisa, 2), 'halaman_baru' => $pindah];
     }
 
     /**
-     * Isi sela: garis tipis tiap 18 mm (berhenti ±16 mm di atas blok bawah) dan watermark stempel
-     * (lebar maks 160 mm) di antara garis pertama dan kedua. Watermark hanya bila stempel ada dan ruang cukup.
+     * Isi sela. Sela ≥ SELA_MIN_WATERMARK: garis tipis berjarak rata (±JARAK_GARIS) dari bawah tabel sampai
+     * 6 mm di atas blok bawah (garis terakhir), watermark stempel (lebar maks 160 mm) di tengah area bergaris.
+     * Sela 10 mm s.d. < SELA_MIN_WATERMARK: satu garis di tengah tanpa watermark. Di bawah 10 mm: kosong.
      *
-     * @return array{tinggi: float, garis: list<float>, watermark: ?array{uri: string, lebar: float, tinggi: float, atas: float, kiri: float}}
+     * @param  array{tinggi: float, halaman_baru: bool}  $sela
+     * @return array{tinggi: float, halaman_baru: bool, garis: list<float>, watermark: ?array{uri: string, lebar: float, tinggi: float, atas: float, kiri: float}}
      */
-    private function dataSela(float $tinggi): array
+    private function dataSela(array $sela): array
     {
-        $garis = [];
-        for ($y = 18; $y <= $tinggi - 16; $y += 18) {
-            $garis[] = (float) $y;
-        }
-
+        $tinggi    = $sela['tinggi'];
+        $garis     = [];
         $watermark = null;
-        $stempel   = $this->watermark();
-        $ruang     = $garis ? end($garis) + 12 : $tinggi - 8;
-        if ($stempel && $ruang >= 20) {
-            $rasio  = $stempel['tinggi'] / max($stempel['lebar'], 1);
-            $lebar  = min(160, ($ruang - 4) / $rasio);
-            $tinggiW = $lebar * $rasio;
-            // Seperti acuan: watermark di tengah antara garis pertama dan kedua
-            $tengah = match (true) {
-                count($garis) >= 2 => ($garis[0] + $garis[1]) / 2,
-                count($garis) === 1 => $garis[0],
-                default => $ruang / 2,
-            };
-            $watermark = [
-                'uri'    => $stempel['uri'],
-                'lebar'  => round($lebar, 2),
-                'tinggi' => round($tinggiW, 2),
-                'atas'   => round(max($tengah - $tinggiW / 2, 2), 2),
-                'kiri'   => round((182 - $lebar) / 2, 2),
-            ];
+
+        if ($tinggi >= self::SELA_MIN_WATERMARK) {
+            $area   = $tinggi - 6;
+            $jumlah = max(2, (int) round($area / self::JARAK_GARIS));
+            for ($i = 1; $i <= $jumlah; $i++) {
+                $garis[] = round($area * $i / $jumlah, 2);
+            }
+
+            $stempel = $this->watermark();
+            if ($stempel) {
+                $rasio   = $stempel['tinggi'] / max($stempel['lebar'], 1);
+                $lebar   = min(160, ($area - 4) / $rasio);
+                $tinggiW = $lebar * $rasio;
+                $watermark = [
+                    'uri'    => $stempel['uri'],
+                    'lebar'  => round($lebar, 2),
+                    'tinggi' => round($tinggiW, 2),
+                    'atas'   => round(max(($area - $tinggiW) / 2, 2), 2),
+                    'kiri'   => round((182 - $lebar) / 2, 2),
+                ];
+            }
+        } elseif ($tinggi >= 10) {
+            $garis[] = round($tinggi / 2, 2);
         }
 
-        return ['tinggi' => $tinggi, 'garis' => $garis, 'watermark' => $watermark];
+        return ['tinggi' => $tinggi, 'halaman_baru' => $sela['halaman_baru'], 'garis' => $garis, 'watermark' => $watermark];
     }
 
     /**
      * Stempel versi pudar (±6%) untuk watermark, dibuat dengan GD (alfa tiap piksel dikali 6%), supaya
      * tidak bergantung pada dukungan CSS opacity DomPDF. Latar tetap transparan, garis sela tetap terlihat.
+     * Lebar dibatasi 945 px (160 mm pada 150 dpi; gambar pudar tidak butuh lebih).
      *
      * @return array{uri: string, lebar: int, tinggi: int}|null
      */
@@ -173,9 +343,7 @@ class InvoicePdf
         if (! $gambar instanceof GdImage) {
             return null;
         }
-        if (! imageistruecolor($gambar)) {
-            imagepalettetotruecolor($gambar);
-        }
+        $gambar = self::perkecil($gambar, 945, 945);
 
         $lebar  = imagesx($gambar);
         $tinggi = imagesy($gambar);
@@ -196,11 +364,93 @@ class InvoicePdf
             }
         }
 
-        ob_start();
-        imagepng($hasil, null, 9);
-        $biner = (string) ob_get_clean();
+        return self::png($hasil);
+    }
 
-        return PengaturanInvoice::dataUriDariIsi($biner);
+    /**
+     * Gambar unggahan untuk PDF: diperkecil agar muat maksLebar × maksTinggi (mm) pada DPI; transparansi
+     * dipertahankan. $ratakan = true: latar transparan diratakan ke putih dan disimpan tanpa kanal alfa
+     * (QRIS), karena PNG tanpa alfa jauh lebih cepat diproses DomPDF. lebar/tinggi tetap ukuran asli
+     * (hanya rasionya yang dipakai view).
+     *
+     * @return array{uri: string, lebar: int, tinggi: int}|null
+     */
+    private function gambarPdf(string $jenis, float $maksLebar, float $maksTinggi, bool $ratakan = false): ?array
+    {
+        $asli = $this->pengaturan->dataUri($jenis);
+        $path = $this->pengaturan->pathGambar($jenis);
+        if (! $asli || ! $path || ! function_exists('imagecreatefromstring')) {
+            return $asli;
+        }
+
+        $gambar = @imagecreatefromstring((string) Storage::disk(PengaturanInvoice::DISK)->get($path));
+        if (! $gambar instanceof GdImage) {
+            return $asli;
+        }
+
+        $jpg   = str_starts_with($asli['uri'], 'data:image/jpeg');
+        $px    = fn (float $mm) => (int) ceil($mm / 25.4 * self::DPI);
+        $kecil = self::perkecil($gambar, $px($maksLebar), $px($maksTinggi));
+
+        if ($kecil === $gambar && ($jpg || ! $ratakan)) {
+            return $asli; // sudah cukup kecil dan tidak perlu diratakan
+        }
+
+        if ($ratakan && ! $jpg) {
+            $putih = imagecreatetruecolor(imagesx($kecil), imagesy($kecil));
+            imagefill($putih, 0, 0, imagecolorallocate($putih, 255, 255, 255));
+            imagealphablending($putih, true);
+            imagecopy($putih, $kecil, 0, 0, 0, 0, imagesx($kecil), imagesy($kecil));
+            imagesavealpha($putih, false);
+            $kecil = $putih;
+        }
+
+        $hasil = $jpg ? self::jpg($kecil) : self::png($kecil);
+
+        return $hasil ? ['uri' => $hasil['uri'], 'lebar' => $asli['lebar'], 'tinggi' => $asli['tinggi']] : $asli;
+    }
+
+    /** Perkecil (tidak pernah memperbesar) agar muat maksLebar × maksTinggi piksel; alfa dipertahankan. */
+    private static function perkecil(GdImage $gambar, int $maksLebar, int $maksTinggi): GdImage
+    {
+        if (! imageistruecolor($gambar)) {
+            imagepalettetotruecolor($gambar);
+        }
+
+        $lebar  = imagesx($gambar);
+        $tinggi = imagesy($gambar);
+        $skala  = min(1, $maksLebar / max($lebar, 1), $maksTinggi / max($tinggi, 1));
+        if ($skala >= 1) {
+            return $gambar;
+        }
+
+        $lb    = max(1, (int) round($lebar * $skala));
+        $tb    = max(1, (int) round($tinggi * $skala));
+        $kecil = imagecreatetruecolor($lb, $tb);
+        imagealphablending($kecil, false);
+        imagesavealpha($kecil, true);
+        imagefill($kecil, 0, 0, imagecolorallocatealpha($kecil, 0, 0, 0, 127));
+        imagecopyresampled($kecil, $gambar, 0, 0, 0, 0, $lb, $tb, $lebar, $tinggi);
+
+        return $kecil;
+    }
+
+    /** @return array{uri: string, lebar: int, tinggi: int}|null */
+    private static function png(GdImage $gambar): ?array
+    {
+        ob_start();
+        imagepng($gambar, null, 6);
+
+        return PengaturanInvoice::dataUriDariIsi((string) ob_get_clean());
+    }
+
+    /** @return array{uri: string, lebar: int, tinggi: int}|null */
+    private static function jpg(GdImage $gambar): ?array
+    {
+        ob_start();
+        imagejpeg($gambar, null, 90);
+
+        return PengaturanInvoice::dataUriDariIsi((string) ob_get_clean());
     }
 
     /** "Invoice-INV-176-Putri-Maulidina.pdf" (nama customer maksimal 40 karakter, huruf/angka/tanda hubung). */
@@ -264,7 +514,9 @@ class InvoicePdf
     {
         $set     = $this->pengaturan->semua();
         $status  = $pesanan->status_bayar_invoice;
-        $stempel = $this->pengaturan->dataUri('stempel');
+        $lunas   = $status === 'lunas';
+        // Stempel dipakai di kop (29 × 9 mm) dan di area ttd (31 × 9 mm): satu versi untuk keduanya
+        $stempel = $this->gambarPdf('stempel', 31, 9);
 
         return [
             'pesanan'     => $pesanan,
@@ -289,14 +541,16 @@ class InvoicePdf
                 'nomor'     => self::nomorRekening((string) $r['nomor']),
                 'atas_nama' => trim((string) ($r['atas_nama'] ?? '')),
             ], $set['rekening']),
-            'qris'           => $this->pengaturan->dataUri('qris'),
+            'qris'           => $this->gambarPdf('qris', 27.8, 27.8, ratakan: true),
             'logoQris'       => self::aset('qris'),
             'qrisKeterangan' => $set['qris_keterangan'],
-            'keterangan'     => $set['keterangan_bawah'],
+            // Invoice LUNAS: tanpa keterangan bawah (mis. "DP minimal 50%…") dan tanpa ajakan kirim bukti transfer
+            'keterangan'     => $lunas ? '' : $set['keterangan_bawah'],
+            'mohonBukti'     => ! $lunas,
             'penandatangan'  => [
                 'nama'    => $set['penandatangan_nama'],
                 'jabatan' => $set['penandatangan_jabatan'],
-                'ttd'     => $this->ukurGambar($this->pengaturan->dataUri('ttd'), maksLebar: 30, maksTinggi: 22),
+                'ttd'     => $this->ukurGambar($this->gambarPdf('ttd', 30, 22), maksLebar: 30, maksTinggi: 22),
                 'stempel' => $this->ukurGambar($stempel, maksLebar: 31, maksTinggi: 9),
             ],
             'fontRegular' => str_replace(DIRECTORY_SEPARATOR, '/', resource_path('fonts/Poppins-Regular.ttf')),
@@ -329,12 +583,10 @@ class InvoicePdf
         return implode('-', str_split($angka, 4));
     }
 
-    /** 300801017388537 → "3008 0101 7388 537" (kelompok 4 digit dari kiri). */
+    /** Nomor rekening persis seperti diketik admin di Pengaturan (hanya dirapikan ujungnya; tidak dikelompokkan). */
     public static function nomorRekening(string $nomor): string
     {
-        $angka = preg_replace('/\s+/', '', trim($nomor)) ?? '';
-
-        return $angka === '' ? '' : implode(' ', str_split($angka, 4));
+        return trim($nomor);
     }
 
     /** Aset tetap invoice (resources/invoice/aset/<nama>.png) sebagai data URI; null bila belum ada. */
@@ -437,12 +689,15 @@ class InvoicePdf
         ];
     }
 
-    /** "(Transfer BCA, 21 Nov)" di belakang label DP/Pelunasan; null bila metode & tanggal kosong. */
+    /**
+     * "Transfer BCA · 21 Nov": baris kecil di bawah label DP/Pelunasan (supaya label tidak turun baris saat
+     * nominal panjang); null bila metode & tanggal kosong.
+     */
     private static function infoBayar(?string $metode, ?Carbon $tanggal): ?string
     {
         $info = array_filter([$metode, $tanggal?->locale('id')->translatedFormat('j M')]);
 
-        return $info ? '(' . implode(', ', $info) . ')' : null;
+        return $info ? implode(' · ', $info) : null;
     }
 
     /**

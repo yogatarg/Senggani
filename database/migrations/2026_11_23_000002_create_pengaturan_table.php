@@ -28,7 +28,7 @@ return new class extends Migration
             'invoice.penandatangan_jabatan' => '',
             'invoice.rekening'              => [
                 ['bank' => 'BCA', 'nomor' => '8023011164', 'atas_nama' => 'Herni Pri Nugrahani'],
-                ['bank' => 'BRI', 'nomor' => '300801017388537', 'atas_nama' => 'Herni Pri Nugrahani'],
+                ['bank' => 'BRI', 'nomor' => '3008 0101 7388 537', 'atas_nama' => 'Herni Pri Nugrahani'],
             ],
             'invoice.keterangan_bawah' => 'DP minimal 50%. Pengiriman barang setelah pelunasan.',
             'invoice.persen_dp'        => 50,
