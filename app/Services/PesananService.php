@@ -374,10 +374,14 @@ class PesananService
             $lengkap = $item->every(fn ($d) => $d->harga_satuan !== null);
 
             // Diskon dibandingkan dengan subtotal hanya bila semua harga sudah terisi
+            // Pesan menurut peran: Produksi tidak bisa membuka form SPP, jadi diarahkan ke Admin
             if ($lengkap && (float) $segar->diskon > $total) {
                 throw ValidationException::withMessages([
-                    'harga' => 'Subtotal produk baru (' . self::rupiah($total) . ') lebih kecil dari diskon ('
-                        . self::rupiah((float) $segar->diskon) . '). Ubah diskon di form SPP dulu.',
+                    'harga' => $oleh->isAdmin()
+                        ? 'Subtotal produk baru (' . self::rupiah($total) . ') lebih kecil dari diskon ('
+                            . self::rupiah((float) $segar->diskon) . '). Ubah diskon di form SPP dulu.'
+                        : 'Diskon ' . self::rupiah((float) $segar->diskon) . ' yang diisi Admin melebihi subtotal '
+                            . self::rupiah($total) . '. Minta Admin mengubah diskon di form SPP.',
                 ]);
             }
 

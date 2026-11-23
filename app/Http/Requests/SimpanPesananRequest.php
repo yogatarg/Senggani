@@ -11,6 +11,7 @@ use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Pesanan;
 use App\Models\PesananFile;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -45,8 +46,10 @@ use Illuminate\Validation\Validator;
  *   harga satuan item (dibandingkan per urutan; menambah/menghapus item juga ditolak). Isian teks item
  *   (bahan, finishing, catatan, dsb.) tetap boleh diubah.
  * - metode_dp, metode_lunas (opsional, App\Enums\MetodeBayar): hanya untuk SPP yang sudah masuk produksi;
- *   kosong diizinkan untuk data lama. metode_lunas otomatis null bila tanggal_lunas kosong.
- *   Field yang tidak dikirim = nilai lama.
+ *   metode_dp wajib bila DP diisi/diubah lewat Edit, metode_lunas wajib bila tanggal lunas diisi/diubah;
+ *   kosong hanya diizinkan untuk data lama yang nilainya tidak berubah. metode_lunas otomatis null bila
+ *   tanggal_lunas kosong. Field yang tidak dikirim = nilai lama.
+ * - DP ikut dikunci setelah lunas (sama seperti ongkir/diskon/harga).
  */
 class SimpanPesananRequest extends FormRequest
 {
@@ -54,6 +57,8 @@ class SimpanPesananRequest extends FormRequest
 
     // Batas total order agar muat di kolom decimal(15,2)
     public const MAKS_TOTAL = 9_999_999_999_999;
+
+    public const PESAN_DP_TERKUNCI = 'DP dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
 
     public const PESAN_ITEM_TERKUNCI = 'Jumlah dan harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
 
@@ -241,6 +246,10 @@ class SimpanPesananRequest extends FormRequest
                 $validator->errors()->add('item', self::PESAN_ITEM_TERKUNCI);
             }
 
+            if ($pesanan && $this->pakaiPembayaran()) {
+                $this->periksaDpLunas($validator, $pesanan, $tetapLunas);
+            }
+
             $total = Pesanan::hitungTotalTagihan($subtotal, $ongkir, $diskon);
 
             // DP yang dibandingkan: isian form (SPP produksi) atau DP yang sudah tercatat
@@ -261,6 +270,43 @@ class SimpanPesananRequest extends FormRequest
                 $validator->errors()->add('mockup', 'Gambar maksimal ' . PesananFile::MAKS_PER_ORDER . " per SPP. Masih bisa menambah {$sisa} gambar.");
             }
         }];
+    }
+
+    /**
+     * Edit SPP produksi: DP dikunci selama SPP tetap lunas; metode wajib bila DP atau tanggal lunas
+     * diisi/diubah. Metode kosong hanya lolos untuk data lama yang nilainya tidak berubah.
+     */
+    private function periksaDpLunas(Validator $validator, Pesanan $pesanan, bool $tetapLunas): void
+    {
+        $dp        = (int) $this->input('dp', 0);
+        $dpBerubah = $dp !== (int) $pesanan->dp;
+
+        if ($tetapLunas && $dpBerubah) {
+            $validator->errors()->add('dp', self::PESAN_DP_TERKUNCI);
+        }
+
+        if ($dpBerubah && $dp > 0 && blank($this->metodeBerlaku('metode_dp', $pesanan))) {
+            $validator->errors()->add('metode_dp', 'Pilih metode pembayaran DP karena nominal DP diisi atau diubah.');
+        }
+
+        if ($this->filled('tanggal_lunas')) {
+            $baru      = Carbon::parse($this->input('tanggal_lunas'))->toDateString();
+            $ubahLunas = $baru !== $pesanan->tanggal_lunas?->toDateString();
+
+            if ($ubahLunas && blank($this->metodeBerlaku('metode_lunas', $pesanan))) {
+                $validator->errors()->add('metode_lunas', 'Pilih metode pelunasan karena tanggal lunas diisi atau diubah.');
+            }
+        }
+    }
+
+    /** Metode yang akan tersimpan: isian form, atau nilai lama bila field tidak dikirim. */
+    private function metodeBerlaku(string $field, Pesanan $pesanan): ?string
+    {
+        if ($this->has($field)) {
+            return $this->input($field) ?: null;
+        }
+
+        return $pesanan->{$field}?->value;
     }
 
     /** Edit SPP bernomor: unik (termasuk SPP yang dihapus) dan konfirmasi ganti nomor. */

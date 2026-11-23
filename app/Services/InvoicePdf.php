@@ -141,9 +141,12 @@ class InvoicePdf
             'atasNamaSama' => $this->atasNamaSama($set['rekening']),
             'qris'        => $this->pengaturan->dataUri('qris'),
             'qrisKeterangan' => $set['qris_keterangan'],
-            'qrisPengingat'  => $status === 'belum_bayar'
-                ? 'Ketik nominal DP/tagihan sendiri saat membayar.'
-                : 'Ketik nominal sesuai sisa tagihan saat membayar.',
+            // Tidak ada yang perlu dibayar lagi (LUNAS atau sisa <= 0) → tanpa pengingat
+            'qrisPengingat'  => match (true) {
+                $status === 'lunas' || (float) $pesanan->sisa <= 0 => null,
+                $status === 'belum_bayar' => 'Ketik nominal DP/tagihan sendiri saat membayar.',
+                default => 'Ketik nominal sesuai sisa tagihan saat membayar.',
+            },
             'keterangan'  => $set['keterangan_bawah'],
             'penandatangan' => [
                 'nama'    => $set['penandatangan_nama'],

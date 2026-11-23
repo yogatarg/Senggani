@@ -427,6 +427,7 @@ class SppCustomerTest extends TestCase
             . "Bahan: kertas kraft putih 150gr + tanpa laminasi + cetak 2 sisi sama + tali lilit\n\n"
             . "📌Harga : Rp4.300 /pcs\n"
             . "📅 Deadline: 30 nov kirim\n\n"
+            . "💳 DP: Rp500.000 (Transfer BCA, 18 Nov)\n\n"
             . "File Desain: https://drive.google.com/drive/folders/abc\n"
             . 'Detail SPP: ' . route('admin.pesanan.show', $p);
 
@@ -459,6 +460,7 @@ class SppCustomerTest extends TestCase
             . "Bahan: Duplex\n"
             . "📌Harga : Rp2.500 /pcs\n\n"
             . "📅 Deadline: 30 nov siap\n\n"
+            . "💳 DP: Rp500.000 (Transfer BCA, 18 Nov)\n\n"
             . "File Desain: https://drive.google.com/drive/folders/abc\n"
             . 'Detail SPP: ' . route('admin.pesanan.show', $p);
 

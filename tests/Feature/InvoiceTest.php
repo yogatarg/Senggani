@@ -593,4 +593,146 @@ class InvoiceTest extends TestCase
 
         $this->assertInstanceOf(Pengaturan::class, Pengaturan::where('kunci', 'invoice.rekening')->first());
     }
+
+    // ── Perbaikan temuan QA invoice ────────────────────
+
+    public function test_teks_spp_memuat_baris_dp_dan_lunas(): void
+    {
+        $p = $this->buatProduksi();
+        $teks = $p->teks_spp;
+        $this->assertStringContainsString("💰 Total: Rp2.325.000\n💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)", $teks);
+        $this->assertStringNotContainsString('Lunas', $teks);
+
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
+        $this->assertStringContainsString("💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)\n✅ Lunas: QRIS, 23 Nov\n\n", $p->fresh()->teks_spp);
+
+        // Tanpa ongkir/diskon: blok hanya berisi DP
+        $q = $this->buat(['nama_customer' => 'Ismun']);
+        $this->catatDp($q, ['nomor_spp' => '177', 'metode_dp' => 'cash'])->assertSessionHasNoErrors();
+        $teks = $q->fresh()->teks_spp;
+        $this->assertStringContainsString("\n\n💳 DP: Rp1.000.000 (Cash, 23 Nov)\n\n", $teks);
+        $this->assertStringNotContainsString('💰 Total', $teks);
+
+        // Data lama: metode & tanggal DP kosong → tanpa kurung; lunas tanpa metode → tanggal saja
+        $q->refresh()->update(['metode_dp' => null, 'tanggal_dp' => null, 'tanggal_lunas' => '2026-11-22', 'metode_lunas' => null]);
+        $this->assertStringContainsString("💳 DP: Rp1.000.000\n✅ Lunas: 22 Nov\n", $q->fresh()->teks_spp);
+
+        // DP 0 & belum lunas: tidak ada baris DP/Lunas
+        $q->update(['dp' => 0, 'tanggal_lunas' => null]);
+        $teks = $q->fresh()->teks_spp;
+        $this->assertStringNotContainsString('💳', $teks);
+        $this->assertStringNotContainsString('✅', $teks);
+    }
+
+    public function test_metode_wajib_bila_dp_atau_lunas_diubah_lewat_edit(): void
+    {
+        $p    = $this->buatProduksi();
+        $data = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $url  = route('admin.pesanan.update', $p);
+
+        // Tanggal lunas diisi lewat Edit tanpa metode → ditolak
+        $this->sebagai($this->admin)->put($url, [...$data, 'tanggal_lunas' => '2026-11-23'])
+            ->assertSessionHasErrors(['metode_lunas' => 'Pilih metode pelunasan karena tanggal lunas diisi atau diubah.']);
+        $this->sebagai($this->admin)->put($url, [...$data, 'tanggal_lunas' => '2026-11-23', 'metode_lunas' => ''])
+            ->assertSessionHasErrors('metode_lunas');
+        $this->assertNull($p->fresh()->tanggal_lunas);
+
+        // DP diubah dengan metode dikosongkan → ditolak; dengan metode → boleh
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '1.200.000', 'metode_dp' => ''])
+            ->assertSessionHasErrors(['metode_dp' => 'Pilih metode pembayaran DP karena nominal DP diisi atau diubah.']);
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '1.200.000', 'metode_dp' => 'qris'])->assertSessionHasNoErrors();
+        $this->assertSame(MetodeBayar::Qris, $p->fresh()->metode_dp);
+
+        // Data lama (metode kosong): selama DP & tanggal lunas tidak berubah, tetap boleh disimpan
+        $p->update(['metode_dp' => null, 'tanggal_lunas' => '2026-11-22', 'metode_lunas' => null]);
+        $lama = [...$data, 'dp' => '1.200.000', 'tanggal_lunas' => '2026-11-22'];
+        $this->sebagai($this->admin)->put($url, [...$lama, 'metode_dp' => '', 'metode_lunas' => ''])->assertSessionHasNoErrors();
+        $this->sebagai($this->admin)->put($url, $lama)->assertSessionHasNoErrors();
+
+        // Data lama: tanggal lunas diubah → metode pelunasan wajib
+        $this->sebagai($this->admin)->put($url, [...$lama, 'tanggal_lunas' => '2026-11-23'])->assertSessionHasErrors('metode_lunas');
+        $this->sebagai($this->admin)->put($url, [...$lama, 'tanggal_lunas' => '2026-11-23', 'metode_lunas' => 'cash'])->assertSessionHasNoErrors();
+        $this->assertSame(MetodeBayar::Cash, $p->fresh()->metode_lunas);
+
+        // Data lama: DP diubah (setelah tanggal lunas dikosongkan) → metode DP wajib
+        $this->sebagai($this->admin)->put($url, [...$lama, 'tanggal_lunas' => '', 'dp' => '1.100.000'])->assertSessionHasErrors('metode_dp');
+        $this->sebagai($this->admin)->put($url, [...$lama, 'tanggal_lunas' => '', 'dp' => '1.100.000', 'metode_dp' => 'transfer_bri'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(1100000.0, (float) $p->fresh()->dp);
+    }
+
+    public function test_dp_dikunci_setelah_lunas(): void
+    {
+        $p = $this->buatProduksi();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
+
+        $data = $this->data(['nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $url  = route('admin.pesanan.update', $p);
+
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '1.200.000', 'metode_dp' => 'transfer_bca'])
+            ->assertSessionHasErrors(['dp' => 'DP dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.']);
+        $this->assertSame(1000000.0, (float) $p->fresh()->dp);
+
+        // DP sama: boleh
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '1.000.000'])->assertSessionHasNoErrors();
+
+        // Tanggal lunas dikosongkan: DP boleh dikoreksi
+        $this->sebagai($this->admin)->put($url, [...$data, 'tanggal_lunas' => '', 'dp' => '1.200.000', 'metode_dp' => 'transfer_bca'])
+            ->assertSessionHasNoErrors();
+        $p->refresh();
+        $this->assertSame(1200000.0, (float) $p->dp);
+        $this->assertNull($p->tanggal_lunas);
+    }
+
+    public function test_isi_harga_diskon_melebihi_subtotal_pesan_sesuai_peran(): void
+    {
+        $p = $this->buat(['diskon' => '3.000.000', 'item' => [['harga_satuan' => ''], ['harga_satuan' => '']]]);
+        $this->assertSame('hitung_harga', $p->status_produksi->value);
+        [$a, $b] = $p->detailPesanan()->pluck('id')->all();
+        $harga = ['harga' => [$a => '4.300', $b => '2.000']];
+
+        $this->sebagai($this->produksi)->post(route('admin.pesanan.harga', $p), $harga)
+            ->assertSessionHasErrors(['harga' => 'Diskon Rp 3.000.000 yang diisi Admin melebihi subtotal Rp 2.350.000. Minta Admin mengubah diskon di form SPP.']);
+        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), $harga)
+            ->assertSessionHasErrors(['harga' => 'Subtotal produk baru (Rp 2.350.000) lebih kecil dari diskon (Rp 3.000.000). Ubah diskon di form SPP dulu.']);
+        $this->assertNull($p->detailPesanan()->first()->harga_satuan);
+        $this->assertSame('hitung_harga', $p->fresh()->status_produksi->value);
+    }
+
+    public function test_pengingat_qris_hilang_bila_lunas_atau_tanpa_sisa(): void
+    {
+        $pengingat = fn (Pesanan $p) => (fn () => $this->dataView($p)['qrisPengingat'])->call(app(InvoicePdf::class));
+
+        $this->assertSame('Ketik nominal DP/tagihan sendiri saat membayar.', $pengingat($this->buat()));
+
+        $p = $this->buatProduksi();
+        $this->assertSame('Ketik nominal sesuai sisa tagihan saat membayar.', $pengingat($p));
+
+        // DP menutup seluruh tagihan (belum dicatat lunas): sisa 0 → tanpa pengingat
+        $p->update(['dp' => 2325000]);
+        $this->assertNull($pengingat($p->fresh()));
+
+        // LUNAS → tanpa pengingat
+        $p->update(['dp' => 1000000, 'tanggal_lunas' => '2026-11-23', 'metode_lunas' => 'qris']);
+        $this->assertNull($pengingat($p->fresh()));
+    }
+
+    public function test_url_invoice_ditolak_dialihkan_ke_detail_spp(): void
+    {
+        $hitung = $this->buat(['item' => [['harga_satuan' => ''], ['harga_satuan' => '']]]);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $hitung))
+            ->assertRedirect(route('admin.pesanan.show', $hitung))
+            ->assertSessionHas('error', 'Invoice tersedia setelah semua harga terisi.');
+
+        foreach (['tidak_jadi', 'dibatalkan'] as $status) {
+            $x = Pesanan::factory()->status($status)->create(['total' => 100000]);
+            $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $x))
+                ->assertRedirect(route('admin.pesanan.show', $x))
+                ->assertSessionHas('error', 'Invoice tidak tersedia untuk SPP berstatus ' . $x->status_produksi->label() . ' karena tidak ada tagihan.');
+        }
+
+        // Produksi tetap dialihkan ke daftar SPP
+        $this->sebagai($this->produksi)->get(route('admin.pesanan.invoice', $hitung))
+            ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Invoice hanya untuk admin.');
+    }
 }

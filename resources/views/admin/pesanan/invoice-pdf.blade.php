@@ -32,8 +32,7 @@
     .kop-logo-blok { width: 46mm; height: 11mm; padding-top: 5mm; background: #4C0404; text-align: center; }
     .kop-logo-blok img { display: inline; height: 6mm; }
     .kop-identitas { padding-left: 4mm; }
-    .nama-usaha { font-size: 13pt; line-height: 1.2; font-weight: bold; }
-    .tagline { font-size: 7.5pt; letter-spacing: 1pt; text-transform: uppercase; font-weight: bold; color: #7A0505; }
+    .nama-usaha { font-size: 13pt; line-height: 1.2; font-weight: bold; margin-bottom: 1mm; }
     .kop-judul { width: 50mm; text-align: right; }
     .judul { font-size: 24pt; line-height: 1.1; letter-spacing: 1pt; font-weight: bold; color: #7A0505; }
     .nomor { font-size: 11pt; font-weight: bold; }
@@ -71,8 +70,9 @@
     .dp-minimal { font-size: 8pt; color: #44403C; text-align: right; }
 
     .kotak-bayar { background: #F5F5F4; padding: 4mm; border-radius: 3pt; }
-    .rekening td { padding: 0 0 1pt 0; vertical-align: middle; }
-    .rekening .bank { width: 12mm; font-weight: bold; }
+    .rekening td { padding: 0 0 1pt 0; vertical-align: top; }
+    /* Muat "Mandiri", "BNI Syariah"; nama lebih panjang turun baris tanpa menabrak nomor */
+    .rekening .bank { width: 24mm; padding-right: 2mm; font-weight: bold; }
     .rekening .norek { font-size: 9.5pt; font-weight: bold; }
     .qris-gambar { width: 34mm; }
     .qris-bingkai { background: #FFFFFF; padding: 2mm; width: 34mm; }
@@ -98,7 +98,6 @@
         </td>
         <td class="kop-identitas">
             <div class="nama-usaha">{{ $usaha['nama'] }}</div>
-            <div class="tagline">Paperbag &amp; Packaging</div>
             <div class="bantu">{{ $usaha['alamat'] }}@if ($usaha['wa']) · WA {{ $usaha['wa'] }}@endif</div>
         </td>
         <td class="kop-judul">
@@ -213,7 +212,9 @@
                                                 @if ($qrisKeterangan !== '')
                                                     <div>{{ $qrisKeterangan }}</div>
                                                 @endif
-                                                <div style="color: #44403C;">{{ $qrisPengingat }}</div>
+                                                @if ($qrisPengingat)
+                                                    <div style="color: #44403C;">{{ $qrisPengingat }}</div>
+                                                @endif
                                             </td>
                                         </tr>
                                     </table>

@@ -93,8 +93,8 @@ class PesananPerbaikanQaAlurBaruTest extends TestCase
             $this->edit($p, ['tanggal_lunas' => ''])->assertSessionHasErrors(['tanggal_lunas' => self::PESAN_LUNAS]);
             $this->assertSame('2026-11-18', $p->fresh()->tanggal_lunas->toDateString());
 
-            // Mengoreksi tanggal (tetap terisi) boleh
-            $this->edit($p, ['tanggal_lunas' => '2026-11-19'])->assertSessionHasNoErrors();
+            // Mengoreksi tanggal (tetap terisi) boleh; tanggal berubah = metode pelunasan wajib
+            $this->edit($p, ['tanggal_lunas' => '2026-11-19', 'metode_lunas' => 'cash'])->assertSessionHasNoErrors();
             $this->assertSame('2026-11-19', $p->fresh()->tanggal_lunas->toDateString());
             $this->assertSame($status, $p->fresh()->status_produksi->value);
         }

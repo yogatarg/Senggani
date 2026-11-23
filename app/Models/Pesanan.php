@@ -452,9 +452,10 @@ class Pesanan extends Model
                 $blok[] = [$deadline];
             }
 
-            // Ongkir/diskon/total hanya bila ada ongkir atau diskon, supaya SPP biasa tetap format lama
+            // Ongkir/diskon/total hanya bila ada ongkir atau diskon, supaya SPP biasa tetap format lama.
+            // DP & Lunas hanya bila ada datanya; metode dalam kurung hanya bila tercatat (rancangan 5.5).
+            $biaya = [];
             if ((float) $this->ongkir > 0 || (float) $this->diskon > 0) {
-                $biaya = [];
                 if ((float) $this->ongkir > 0) {
                     $biaya[] = '🚚 Ongkir: ' . self::rupiahSpp($this->ongkir);
                 }
@@ -462,8 +463,15 @@ class Pesanan extends Model
                     $biaya[] = '🏷️ Diskon: -' . self::rupiahSpp($this->diskon);
                 }
                 $biaya[] = '💰 Total: ' . self::rupiahSpp($this->total_tagihan);
-                $blok[] = $biaya;
             }
+            if ((float) $this->dp > 0) {
+                $info = array_filter([$this->metode_dp?->label(), $this->tanggalSpp($this->tanggal_dp)]);
+                $biaya[] = '💳 DP: ' . self::rupiahSpp($this->dp) . ($info ? ' (' . implode(', ', $info) . ')' : '');
+            }
+            if ($this->tanggal_lunas) {
+                $biaya[] = '✅ Lunas: ' . implode(', ', array_filter([$this->metode_lunas?->label(), $this->tanggalSpp($this->tanggal_lunas)]));
+            }
+            $blok[] = $biaya;
 
             $akhir = [];
             if (filled($this->link_desain)) {
@@ -530,6 +538,18 @@ class Pesanan extends Model
         }
 
         return '📌Harga : Rp' . number_format((float) $d->harga_satuan, 0, ',', '.') . ' /pcs';
+    }
+
+    /** Tanggal ringkas teks SPP: "21 Nov" (tahun ditambahkan bila berbeda dari tahun order). */
+    private function tanggalSpp(?\Carbon\CarbonInterface $tanggal): ?string
+    {
+        if (! $tanggal) {
+            return null;
+        }
+
+        $tahunAcuan = ($this->tanggal_order ?? now())->year;
+
+        return $tanggal->translatedFormat($tanggal->year === $tahunAcuan ? 'j M' : 'j M Y');
     }
 
     /** Rupiah gaya teks SPP: "Rp25.000" (tanpa spasi). */

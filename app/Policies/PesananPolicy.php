@@ -106,7 +106,7 @@ class PesananPolicy
         if (! $pesanan->bisa_invoice) {
             return Response::deny($pesanan->status_produksi === StatusProduksi::HitungHarga
                 ? 'Invoice tersedia setelah semua harga terisi.'
-                : 'Invoice tidak tersedia untuk SPP berstatus ' . $pesanan->status_produksi->label() . '.');
+                : 'Invoice tidak tersedia untuk SPP berstatus ' . $pesanan->status_produksi->label() . ' karena tidak ada tagihan.');
         }
 
         return Response::allow();

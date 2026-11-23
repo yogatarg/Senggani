@@ -232,7 +232,7 @@ class PesananPerbaikanQaTest extends TestCase
         // Lewat form edit: hanya untuk SPP yang sudah masuk produksi
         $pesanan = $this->masukProduksi($this->buat());
         $edit = fn (string $tgl) => $this->sebagai($this->admin)->put(route('admin.pesanan.update', $pesanan),
-            $this->dataEdit($pesanan, ['dp' => '100.000', 'tanggal_lunas' => $tgl]));
+            $this->dataEdit($pesanan, ['dp' => '100.000', 'tanggal_lunas' => $tgl, 'metode_lunas' => 'cash']));
 
         $edit('2026-11-09')->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh sebelum tanggal SPP.']);
         $edit('2026-11-19')->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh setelah hari ini.']);
