@@ -914,4 +914,62 @@ class InvoiceTest extends TestCase
         $this->sebagai($this->produksi)->get(route('admin.pesanan.invoice', $hitung))
             ->assertRedirect(route('admin.pesanan.index'))->assertSessionHas('error', 'Invoice hanya untuk admin.');
     }
+
+    public function test_input_nomor_rekening_boleh_spasi_dan_pola_klien_sama_dengan_server(): void
+    {
+        $res = $this->sebagai($this->admin)->get(route('admin.pengaturan.invoice.edit'))->assertOk();
+        $this->assertMatchesRegularExpression('/name="rekening\[0\]\[nomor\]"[^>]*inputmode="text"/', $res->getContent());
+        $res->assertSee('Nomor rekening: tulis persis seperti ingin tampil di invoice, boleh dengan spasi (contoh: 3008 0101 7388 537).');
+
+        // Pola klien (atribut pattern, diuji seperti browser: ^(?:pola)$) sama dengan regex server
+        preg_match('/name="rekening\[0\]\[nomor\]"[^>]*pattern="([^"]+)"/', $res->getContent(), $m);
+        $this->assertNotEmpty($m, 'Input nomor rekening punya atribut pattern.');
+        $klien  = '/^(?:' . html_entity_decode($m[1]) . ')$/';
+        $server = '/^(?=(?:\D*\d){5,30}\D*$)[\d ]+$/';
+        foreach (['8023011164', '3008 0101 7388 537', '12345', '802 301-1164', '1234.5678.90', '12 34', str_repeat('1 ', 31), 'abc12'] as $nomor) {
+            $this->assertSame((bool) preg_match($server, $nomor), (bool) preg_match($klien, $nomor), "Pola beda untuk '$nomor'.");
+        }
+    }
+
+    public function test_cache_invoice_dihapus_saat_hapus_permanen_bukan_soft_delete(): void
+    {
+        $p      = $this->buatProduksi();
+        $disk   = Storage::disk(PengaturanInvoice::DISK);
+        $folder = InvoicePdf::folderCache($p);
+        app(InvoicePdf::class)->isi($p->fresh());
+        $this->assertCount(1, $disk->files($folder));
+
+        $p->delete();
+        $this->assertCount(1, $disk->files($folder), 'Soft delete membiarkan cache.');
+
+        $p->forceDelete();
+        $this->assertFalse($disk->exists($folder));
+    }
+
+    public function test_perintah_yatim_membersihkan_cache_invoice(): void
+    {
+        $disk  = Storage::disk(PengaturanInvoice::DISK);
+        $aktif = $this->buat();
+        $arsip = $this->buat();
+        $arsip->delete(); // soft delete: masih dianggap ada
+        $baru  = InvoicePdf::folderCache($aktif) . '/baru.pdf';
+        $lama  = InvoicePdf::folderCache($aktif) . '/lama.pdf';
+        $simpan = InvoicePdf::folderCache($arsip) . '/a.pdf';
+        $yatim = InvoicePdf::FOLDER_CACHE . '/999999/x.pdf';
+        foreach ([$baru, $lama, $simpan, $yatim] as $f) {
+            $disk->put($f, '%PDF');
+            touch($disk->path($f), now()->getTimestamp());
+        }
+        touch($disk->path($lama), now()->subDays(31)->getTimestamp());
+
+        // Tanpa --hapus hanya menampilkan
+        $this->artisan('gambar:yatim')->expectsOutputToContain('2 cache invoice')->assertSuccessful();
+        $this->assertTrue($disk->exists($lama));
+
+        $this->artisan('gambar:yatim', ['--hapus' => true])->assertSuccessful();
+        $this->assertTrue($disk->exists($baru));
+        $this->assertTrue($disk->exists($simpan));
+        $this->assertFalse($disk->exists($lama));
+        $this->assertFalse($disk->exists(InvoicePdf::FOLDER_CACHE . '/999999'));
+    }
 }

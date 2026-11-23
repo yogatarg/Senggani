@@ -1929,7 +1929,7 @@
             tambahRek.hidden = penuh;
             kepalaRek.hidden = semua.length === 0;
             kosongRek.hidden = semua.length > 0;
-            infoRek.textContent = penuh ? 'Sudah ' + maksRek + ' rekening (batas maksimal).' : teksInfoRek;
+            infoRek.textContent = penuh ? teksInfoRek.replace(/^Maksimal \d+ rekening\./, 'Sudah ' + maksRek + ' rekening (batas maksimal).') : teksInfoRek;
         };
 
         tambahRek.addEventListener('click', function () {

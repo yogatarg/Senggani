@@ -5,11 +5,14 @@ namespace App\Models;
 use App\Enums\MetodeBayar;
 use App\Enums\StatusDesain;
 use App\Enums\StatusProduksi;
+use App\Services\InvoicePdf;
+use App\Services\PengaturanInvoice;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Order internal (bukan dari customer langsung). total disimpan & dihitung server
@@ -24,6 +27,14 @@ class Pesanan extends Model
     use HasFactory, SoftDeletes;
 
     protected $table = 'pesanan';
+
+    /** Hapus permanen: cache PDF invoice ikut dihapus. Soft delete membiarkan cache (SPP bisa dipulihkan). */
+    protected static function booted(): void
+    {
+        static::forceDeleted(function (Pesanan $pesanan) {
+            Storage::disk(PengaturanInvoice::DISK)->deleteDirectory(InvoicePdf::folderCache($pesanan));
+        });
+    }
 
     // Tab dashboard (kunci query string ?tab=)
     public const TAB = [

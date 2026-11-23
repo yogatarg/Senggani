@@ -15,7 +15,8 @@
             <label class="sg-label" for="{{ $idF($f) }}" data-rek-label="{{ $label }}">{{ $label }}<span class="visually-hidden" data-rek-ke> rekening ke-{{ $no }}</span></label>
             <input type="text" id="{{ $idF($f) }}" name="rekening[{{ $i }}][{{ $f }}]" value="{{ $r[$f] ?? '' }}" autocomplete="off"
                    @if ($f === 'bank') maxlength="30" list="daftar-bank" placeholder="BCA" data-rek-bank
-                   @elseif ($f === 'nomor') maxlength="40" inputmode="numeric" placeholder="8023011164"
+                   @elseif ($f === 'nomor') maxlength="40" inputmode="text" placeholder="3008 0101 7388 537"
+                       pattern="(?=(?:\D*\d){5,30}\D*$)[\d ]+" title="Hanya angka dan spasi, 5–30 digit."
                    @else maxlength="100" @endif
                    class="form-control {{ $f === 'nomor' ? 'sg-angka' : '' }} {{ $galat ? 'is-invalid' : '' }}"
                    @if ($galat) aria-invalid="true" aria-describedby="g-rekening-{{ $i }}-{{ $f }}" @endif>

@@ -101,7 +101,7 @@
             <button type="button" class="sg-tambah-item mt-2" data-rek-tambah @if (count($rekening) >= $maksRekening) hidden @endif>
                 <i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah rekening
             </button>
-            <p class="sg-bantu" data-rek-info aria-live="polite">Maksimal {{ $maksRekening }} rekening. Spasi dan tanda hubung di nomor rekening dibuang otomatis.</p>
+            <p class="sg-bantu" data-rek-info aria-live="polite">Maksimal {{ $maksRekening }} rekening. Nomor rekening: tulis persis seperti ingin tampil di invoice, boleh dengan spasi (contoh: 3008 0101 7388 537).</p>
         </div>
         <datalist id="daftar-bank"><option value="BCA"><option value="BRI"><option value="Mandiri"><option value="BNI"></datalist>
     </section>
