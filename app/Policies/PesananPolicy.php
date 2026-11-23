@@ -92,4 +92,23 @@ class PesananPolicy
     {
         return $pengguna->isAdmin();
     }
+
+    /**
+     * Unduh invoice PDF: khusus admin, dan hanya untuk status Menunggu DP s.d. Selesai
+     * (Hitung Harga: harga belum lengkap; Tidak Jadi/Dibatalkan: tidak ada tagihan).
+     */
+    public function unduhInvoice(Admin $pengguna, Pesanan $pesanan): Response
+    {
+        if (! $pengguna->isAdmin()) {
+            return Response::deny('Invoice hanya untuk admin.');
+        }
+
+        if (! $pesanan->bisa_invoice) {
+            return Response::deny($pesanan->status_produksi === StatusProduksi::HitungHarga
+                ? 'Invoice tersedia setelah semua harga terisi.'
+                : 'Invoice tidak tersedia untuk SPP berstatus ' . $pesanan->status_produksi->label() . '.');
+        }
+
+        return Response::allow();
+    }
 }

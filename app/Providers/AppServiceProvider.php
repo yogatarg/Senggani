@@ -36,6 +36,9 @@ class AppServiceProvider extends ServiceProvider
         // Menu Katalog Situs (banner, kategori, produk, bahan, finishing, cetak). Rutenya dijaga
         // middleware 'peran:admin' di routes/web.php; ubah keduanya bersamaan bila aturannya berubah.
         Gate::define('kelola-katalog', fn (Admin $pengguna) => $pengguna->isAdmin());
+        // Pengaturan Invoice (penanda tangan, rekening, QRIS). Rutenya di grup panel (auth.admin) dan
+        // dijaga Gate ini di controller, sehingga Produksi mendapat 403.
+        Gate::define('kelola-invoice', fn (Admin $pengguna) => $pengguna->isAdmin());
 
         // Lonceng notifikasi deadline di layout modul Pesanan (admin & produksi):
         // $notifDeadline = ['total', 'lewat', 'mendekat', 'item' => maks 20 entri] (lihat NotifikasiDeadline).

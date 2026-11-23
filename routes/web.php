@@ -5,8 +5,10 @@ use App\Http\Controllers\Admin\BannerController;
 use App\Http\Controllers\Admin\CetakController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\FinishingController;
+use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\KategoriProdukController;
 use App\Http\Controllers\Admin\PasswordController;
+use App\Http\Controllers\Admin\PengaturanInvoiceController;
 use App\Http\Controllers\Admin\PenggunaController;
 use App\Http\Controllers\Admin\PesananController;
 use App\Http\Controllers\Admin\PesananFileController;
@@ -60,6 +62,18 @@ Route::prefix('admin')->name('admin.')->middleware('auth.admin')->group(function
     Route::post('/pesanan/{pesanan}/pulihkan', [PesananController::class, 'pulihkan'])->name('pesanan.pulihkan');
     Route::post('/pesanan/{pesanan}/catatan', [PesananController::class, 'tambahCatatan'])->name('pesanan.catatan');
     Route::post('/pesanan/{pesanan}/lunas', [PesananController::class, 'catatLunas'])->name('pesanan.lunas');
+
+    // Invoice PDF & Pengaturan Invoice: khusus admin lewat Gate/Policy di controller (Produksi 403, bukan redirect)
+    Route::get('/pesanan/{pesanan}/invoice', [InvoiceController::class, 'unduh'])->name('pesanan.invoice');
+    Route::get('/pengaturan-invoice', [PengaturanInvoiceController::class, 'edit'])->name('pengaturan.invoice.edit');
+    Route::put('/pengaturan-invoice', [PengaturanInvoiceController::class, 'update'])->name('pengaturan.invoice.update');
+    Route::get('/pengaturan-invoice/contoh', [PengaturanInvoiceController::class, 'contoh'])->name('pengaturan.invoice.contoh');
+    Route::get('/pengaturan-invoice/gambar/{jenis}', [PengaturanInvoiceController::class, 'gambar'])
+        ->whereIn('jenis', ['ttd', 'stempel', 'qris'])->name('pengaturan.invoice.gambar');
+    Route::post('/pengaturan-invoice/gambar/{jenis}', [PengaturanInvoiceController::class, 'unggah'])
+        ->whereIn('jenis', ['ttd', 'stempel', 'qris'])->name('pengaturan.invoice.unggah');
+    Route::delete('/pengaturan-invoice/gambar/{jenis}', [PengaturanInvoiceController::class, 'hapus'])
+        ->whereIn('jenis', ['ttd', 'stempel', 'qris'])->name('pengaturan.invoice.hapus');
 
     Route::get('/pesanan/{pesanan}/file/{file}', [PesananFileController::class, 'lihat'])->name('pesanan.file.lihat');
     Route::delete('/pesanan/{pesanan}/file/{file}', [PesananFileController::class, 'hapus'])->name('pesanan.file.hapus');
