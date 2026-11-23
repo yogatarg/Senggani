@@ -17,7 +17,7 @@ use Illuminate\Validation\Validator;
  * "Catat DP & masukkan ke produksi" (khusus admin, status menunggu_dp).
  *
  * Field:
- * - dp: rupiah > 0 dan ≤ total tagihan (subtotal + ongkir − diskon; "Rp 500.000" diterima).
+ * - dp: rupiah > 0 dan ≤ total tagihan (subtotal + ongkir; "Rp 500.000" diterima).
  * - metode_dp: wajib, nilai App\Enums\MetodeBayar (cash, transfer_bca, transfer_bri, qris).
  *   Field `metode` diterima sebagai alias.
  * - tanggal_dp (opsional, bawaan hari ini): antara tanggal SPP dan hari ini.

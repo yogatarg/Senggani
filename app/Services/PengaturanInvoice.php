@@ -54,7 +54,7 @@ class PengaturanInvoice
         'rekening'              => [],
         'keterangan_bawah'      => '',
         'persen_dp'             => 50,
-        'qris_keterangan'       => 'QRIS a.n. SENGGANI - FOTOCOPY (satu usaha).',
+        'qris_keterangan'       => 'a.n. SENGGANI',
         'file_ttd'              => null,
         'file_stempel'          => null,
         'file_qris'             => null,

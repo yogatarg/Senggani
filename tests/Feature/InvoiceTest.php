@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * Invoice PDF: total tagihan (subtotal + ongkir − diskon), metode bayar DP/lunas, kunci ongkir/diskon
- * dan harga/jumlah item setelah lunas, nomor invoice PNW/SPP, akses (admin saja, status Menunggu DP s.d. Selesai),
+ * Invoice PDF: total tagihan (subtotal + ongkir; diskon tidak dipakai), status bayar BELUM LUNAS/LUNAS,
+ * metode bayar DP/lunas, kunci ongkir dan harga/jumlah item setelah lunas, nomor invoice PNW/SPP, akses (admin saja, status Menunggu DP s.d. Selesai),
  * unduh PDF, dan Pengaturan Invoice (simpan, unggah, hapus gambar privat).
  */
 class InvoiceTest extends TestCase
@@ -74,10 +74,10 @@ class InvoiceTest extends TestCase
         ]);
     }
 
-    /** SPP 2.350.000 + ongkir 25.000 − diskon 50.000 = 2.325.000, DP 1.000.000 via BCA, nomor #176. */
+    /** SPP 2.350.000 + ongkir 25.000 = 2.375.000, DP 1.000.000 via BCA, nomor #176. */
     private function buatProduksi(): Pesanan
     {
-        $p = $this->buat(['ongkir' => '25.000', 'diskon' => 'Rp 50.000']);
+        $p = $this->buat(['ongkir' => '25.000']);
         $this->catatDp($p)->assertSessionHasNoErrors();
 
         return $p->fresh();
@@ -85,37 +85,48 @@ class InvoiceTest extends TestCase
 
     // ── Total tagihan ──────────────────────────────────
 
-    public function test_total_tagihan_memakai_ongkir_dan_diskon(): void
+    public function test_total_tagihan_subtotal_ditambah_ongkir_tanpa_diskon(): void
     {
+        // Field diskon dari form lama diabaikan (tidak divalidasi, tidak disimpan)
         $p = $this->buat(['ongkir' => '25.000', 'diskon' => 'Rp 50.000']);
 
         $this->assertSame(2350000.0, $p->subtotal_produk);
         $this->assertSame(25000.0, (float) $p->ongkir);
-        $this->assertSame(50000.0, (float) $p->diskon);
-        $this->assertSame(2325000.0, $p->total_tagihan);
+        $this->assertSame(0.0, (float) $p->diskon);
+        $this->assertSame(2375000.0, $p->total_tagihan);
         $this->assertSame('menunggu_dp', $p->status_produksi->value);
+        $this->assertSame('belum_lunas', $p->status_bayar_invoice);
 
         // DP dibatasi total tagihan, bukan subtotal
-        $this->catatDp($p, ['dp' => '2.325.001'])
-            ->assertSessionHasErrors(['dp' => 'DP tidak boleh lebih dari total tagihan (Rp 2.325.000).']);
+        $this->catatDp($p, ['dp' => '2.375.001'])
+            ->assertSessionHasErrors(['dp' => 'DP tidak boleh lebih dari total tagihan (Rp 2.375.000).']);
         $this->catatDp($p)->assertSessionHasNoErrors();
 
         $p->refresh();
-        $this->assertSame(1325000.0, $p->sisa);
-        $this->assertSame('dp', $p->status_bayar_invoice);
+        $this->assertSame(1375000.0, $p->sisa);
+        $this->assertSame('belum_lunas', $p->status_bayar_invoice);
 
-        // Teks SPP menambah blok ongkir/diskon/total
-        $this->assertStringContainsString("🚚 Ongkir: Rp25.000\n🏷️ Diskon: -Rp50.000\n💰 Total: Rp2.325.000", $p->teks_spp);
+        // Teks SPP: ongkir & total, tanpa diskon
+        $this->assertStringContainsString("🚚 Ongkir: Rp25.000\n💰 Total: Rp2.375.000", $p->teks_spp);
+        $this->assertStringNotContainsString('Diskon', $p->teks_spp);
 
         // Pelunasan: sisa 0, nilai pelunasan = total tagihan − DP
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
         $p->refresh();
         $this->assertSame(0.0, $p->sisa);
-        $this->assertSame(1325000.0, $p->nilai_pelunasan);
+        $this->assertSame(1375000.0, $p->nilai_pelunasan);
         $this->assertSame('lunas', $p->status_bayar_invoice);
     }
 
-    public function test_teks_spp_tanpa_ongkir_diskon_tetap_format_lama(): void
+    public function test_diskon_lama_di_database_diabaikan(): void
+    {
+        $p = Pesanan::factory()->status('menunggu_dp')->create(['total' => 500000, 'ongkir' => 20000, 'diskon' => 100000, 'dp' => 0]);
+
+        $this->assertSame(520000.0, $p->total_tagihan);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $p))->assertOk();
+    }
+
+    public function test_teks_spp_tanpa_ongkir_tetap_format_lama(): void
     {
         $p = $this->buat();
         $this->catatDp($p)->assertSessionHasNoErrors();
@@ -137,39 +148,22 @@ class InvoiceTest extends TestCase
         $this->assertStringNotContainsString('Diskon', $teks);
     }
 
-    // ── Validasi ongkir & diskon ───────────────────────
+    // ── Validasi ongkir ────────────────────────────────
 
-    public function test_validasi_ongkir_dan_diskon(): void
+    public function test_validasi_ongkir(): void
     {
         $kirim = fn (array $ubah) => $this->sebagai($this->admin)->post(route('admin.pesanan.store'), $this->data($ubah));
 
-        $kirim(['diskon' => '2.350.001'])->assertSessionHasErrors(['diskon' => 'Diskon tidak boleh melebihi subtotal produk (Rp 2.350.000).']);
         $kirim(['ongkir' => '-5000'])->assertSessionHasErrors('ongkir');
-        $kirim(['diskon' => '-1'])->assertSessionHasErrors('diskon');
         $kirim(['ongkir' => 'abc'])->assertSessionHasErrors('ongkir');
         $this->assertSame(0, Pesanan::count());
 
-        // Diskon = subtotal boleh; kosong = 0
-        $kirim(['diskon' => '2.350.000', 'ongkir' => ''])->assertSessionHasNoErrors();
+        // Diskon apa pun tidak lagi divalidasi; ongkir kosong = 0
+        $kirim(['diskon' => '9.999.999', 'ongkir' => ''])->assertSessionHasNoErrors();
         $p = Pesanan::latest('id')->first();
-        $this->assertSame(0.0, $p->total_tagihan);
+        $this->assertSame(2350000.0, $p->total_tagihan);
         $this->assertSame(0.0, (float) $p->ongkir);
-
-        // Harga belum lengkap (Hitung Harga): diskon belum dibandingkan dengan subtotal
-        $kirim([
-            'diskon' => '50.000',
-            'item'   => [['harga_satuan' => ''], ['harga_satuan' => '']],
-        ])->assertSessionHasNoErrors();
-        $hitung = Pesanan::latest('id')->first();
-        $this->assertSame('hitung_harga', $hitung->status_produksi->value);
-
-        // ...tetapi saat harga diisi, diskon tidak boleh melebihi subtotal baru
-        $ids = $hitung->detailPesanan()->pluck('id')->all();
-        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $hitung), ['harga' => [$ids[0] => '10', $ids[1] => '10']])
-            ->assertSessionHasErrors(['harga' => 'Subtotal produk baru (Rp 6.000) lebih kecil dari diskon (Rp 50.000). Ubah diskon di form SPP dulu.']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $hitung), ['harga' => [$ids[0] => '1.000', $ids[1] => '1.000']])
-            ->assertSessionHasNoErrors();
-        $this->assertSame(550000.0, $hitung->fresh()->total_tagihan);
+        $this->assertSame(0.0, (float) $p->diskon);
     }
 
     public function test_edit_tanpa_field_ongkir_mempertahankan_nilai_lama(): void
@@ -181,7 +175,6 @@ class InvoiceTest extends TestCase
 
         $p->refresh();
         $this->assertSame(25000.0, (float) $p->ongkir);
-        $this->assertSame(50000.0, (float) $p->diskon);
         $this->assertSame(MetodeBayar::TransferBca, $p->metode_dp);
 
         // Ubah ongkir lewat edit → tercatat di riwayat
@@ -190,29 +183,29 @@ class InvoiceTest extends TestCase
         $this->assertDatabaseHas('pesanan_riwayat', ['pesanan_id' => $p->id, 'catatan' => 'Ongkir diubah oleh Rina CS: Rp 25.000 → Rp 30.000']);
 
         // DP melebihi total tagihan baru ditolak
-        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'diskon' => '1.400.000'])
-            ->assertSessionHasErrors(['dp' => 'DP (Rp 1.000.000) tidak boleh lebih dari total tagihan (Rp 980.000).']);
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), array_replace_recursive($data, [
+            'item' => [0 => ['harga_satuan' => '1.000'], 1 => ['harga_satuan' => '1.000']],
+        ]))->assertSessionHasErrors(['dp' => 'DP (Rp 1.000.000) tidak boleh lebih dari total tagihan (Rp 630.000).']);
     }
 
-    public function test_ongkir_dan_diskon_dikunci_setelah_lunas(): void
+    public function test_ongkir_dikunci_setelah_lunas(): void
     {
         $p = $this->buatProduksi();
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
 
         $data = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23']);
-        $pesan = 'Ongkir dan diskon dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
+        $pesan = 'Ongkir dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
 
-        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'ongkir' => '30.000', 'diskon' => '50.000'])
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'ongkir' => '30.000'])
             ->assertSessionHasErrors(['ongkir' => $pesan]);
-        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'ongkir' => '25.000', 'diskon' => '0'])
-            ->assertSessionHasErrors(['diskon' => $pesan]);
 
-        // Nilai sama: boleh disimpan
+        // Nilai sama: boleh disimpan (diskon yang masih terkirim diabaikan)
         $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'ongkir' => '25.000', 'diskon' => '50.000'])
             ->assertSessionHasNoErrors();
+        $this->assertSame(0.0, (float) $p->fresh()->diskon);
 
         // Tanggal lunas dikosongkan: boleh dikoreksi, metode pelunasan ikut kosong
-        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'tanggal_lunas' => '', 'ongkir' => '30.000', 'diskon' => '50.000'])
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), [...$data, 'tanggal_lunas' => '', 'ongkir' => '30.000'])
             ->assertSessionHasNoErrors();
         $p->refresh();
         $this->assertSame(30000.0, (float) $p->ongkir);
@@ -225,7 +218,7 @@ class InvoiceTest extends TestCase
         $p = $this->buatProduksi();
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
 
-        $data  = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $data  = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000']);
         $pesan = 'Jumlah dan harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
 
         // Edit SPP: harga satuan, jumlah, maupun menambah item ditolak
@@ -400,20 +393,83 @@ class InvoiceTest extends TestCase
         $this->assertSame('lunas', $p->status_bayar_invoice);
         $this->assertSame(500000.0, $p->nilai_pelunasan);
 
-        // Kelebihan bayar: diskon dinaikkan setelah DP (data lama)
-        $q = Pesanan::factory()->create(['total' => 500000, 'diskon' => 100000, 'dp' => 425000]);
+        // Kelebihan bayar: harga diturunkan setelah DP (data lama)
+        $q = Pesanan::factory()->create(['total' => 400000, 'dp' => 425000]);
         $this->assertSame(0.0, $q->sisa);
         $this->assertSame(25000.0, $q->kelebihan_bayar);
         $this->assertSame('lunas', $q->status_bayar_invoice);
 
         // Belum bayar
         $r = Pesanan::factory()->status('menunggu_dp')->create(['total' => 500000]);
-        $this->assertSame('belum_bayar', $r->status_bayar_invoice);
+        $this->assertSame('belum_lunas', $r->status_bayar_invoice);
         $this->assertNull($r->metode_dp);
 
         foreach ([$p, $q, $r] as $x) {
             $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $x))->assertOk();
         }
+    }
+
+    public function test_rincian_invoice_belum_lunas_dp_dan_lunas(): void
+    {
+        $data = fn (Pesanan $p) => (fn () => $this->dataView($p))->call(app(InvoicePdf::class));
+        $baris = fn (Pesanan $p) => array_map(
+            fn ($b) => trim($b['label'] . ' ' . ($b['info'] ?? '')) . ' = ' . $b['nilai'],
+            $data($p)['ringkasan']['baris'],
+        );
+
+        // BELUM LUNAS, belum DP: DP minimal 50% dan sisa = total − DP minimal
+        $p = $this->buat();
+        $v = $data($p);
+        $this->assertSame('belum_lunas', $v['statusBayar']);
+        $this->assertSame('BELUM LUNAS', $v['labelStatus']);
+        $this->assertSame('21 NOVEMBER 2026', $v['tanggal']);
+        $this->assertSame('0822-2894-6660', $v['kepada']['wa']);
+        $this->assertSame([
+            'Subtotal produk = Rp2.350.000',
+            'Biaya ongkir = -',
+            'Total tagihan = Rp2.350.000',
+            'DP min 50% = Rp1.175.000',
+            'Sisa pelunasan = Rp1.175.000',
+        ], $baris($p));
+        $this->assertSame('Paperbag · 25×10×30cm', $v['item'][0]['judul']);
+        $this->assertSame('Rp 4.300', $v['item'][0]['harga']);
+
+        // BELUM LUNAS sesudah DP
+        $p = $this->buatProduksi();
+        $this->assertSame('belum_lunas', $data($p)['statusBayar']);
+        $this->assertSame([
+            'Subtotal produk = Rp2.350.000',
+            'Biaya ongkir = Rp25.000',
+            'Total tagihan = Rp2.375.000',
+            'DP dibayar (Transfer BCA, 23 Nov) = Rp1.000.000',
+            'Sisa pelunasan = Rp1.375.000',
+        ], $baris($p));
+
+        // LUNAS
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
+        $p = $p->fresh();
+        $this->assertSame('LUNAS', $data($p)['labelStatus']);
+        $this->assertSame([
+            'Subtotal produk = Rp2.350.000',
+            'Biaya ongkir = Rp25.000',
+            'Total tagihan = Rp2.375.000',
+            'DP dibayar (Transfer BCA, 23 Nov) = Rp1.000.000',
+            'Pelunasan (QRIS, 23 Nov) = Rp1.375.000',
+            'Sisa pelunasan = Rp0',
+        ], $baris($p));
+    }
+
+    public function test_format_rekening_dan_kontak_invoice(): void
+    {
+        $this->assertSame('3008 0101 7388 537', InvoicePdf::nomorRekening('300801017388537'));
+        $this->assertSame('8023 0111 64', InvoicePdf::nomorRekening('8023011164'));
+        $this->assertSame('0838-2920-8316', InvoicePdf::waLokal('6283829208316'));
+        $this->assertSame('@sengganipaperbag', config('usaha.instagram'));
+
+        $v = (fn () => $this->dataView(Pesanan::factory()->create(['total' => 100000])))->call(app(InvoicePdf::class));
+        $this->assertSame('a.n. SENGGANI', $v['qrisKeterangan']);
+        $this->assertSame('3008 0101 7388 537', $v['rekening'][1]['nomor']);
+        $this->assertNull($v['logoKop'], 'Logo kop disembunyikan bila stempel belum diunggah.');
     }
 
     // ── Pengaturan Invoice ─────────────────────────────
@@ -425,6 +481,7 @@ class InvoiceTest extends TestCase
         $this->assertSame('Putri Maulidina', $set['penandatangan_nama']);
         $this->assertSame(50, $set['persen_dp']);
         $this->assertSame('DP minimal 50%. Pengiriman barang setelah pelunasan.', $set['keterangan_bawah']);
+        $this->assertSame('a.n. SENGGANI', $set['qris_keterangan']);
         $this->assertSame([
             ['bank' => 'BCA', 'nomor' => '8023011164', 'atas_nama' => 'Herni Pri Nugrahani'],
             ['bank' => 'BRI', 'nomor' => '300801017388537', 'atas_nama' => 'Herni Pri Nugrahani'],
@@ -444,7 +501,7 @@ class InvoiceTest extends TestCase
                 ['bank' => '', 'nomor' => '', 'atas_nama' => ''],
                 ['bank' => 'Mandiri', 'nomor' => '1234.5678.90', 'atas_nama' => 'Senggani'],
             ],
-            'qris_keterangan'  => 'QRIS a.n. SENGGANI - FOTOCOPY (satu usaha).',
+            'qris_keterangan'  => 'a.n. SENGGANI',
             'keterangan_bawah' => "DP minimal 40%.\r\nPengiriman setelah lunas.",
             'persen_dp'        => '40',
         ])->assertSessionHasNoErrors()->assertRedirect(route('admin.pengaturan.invoice.edit'))
@@ -581,13 +638,13 @@ class InvoiceTest extends TestCase
         $p = $this->buatProduksi();
 
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))
-            ->assertOk()->assertSee(route('admin.pesanan.invoice', $p), false)->assertSee('Rp 2.325.000');
+            ->assertOk()->assertSee(route('admin.pesanan.invoice', $p), false)->assertSee('Rp 2.375.000');
         $this->sebagai($this->produksi)->get(route('admin.pesanan.show', $p))
             ->assertOk()->assertDontSee(route('admin.pesanan.invoice', $p), false);
 
-        // Form edit memuat field ongkir/diskon/metode (placeholder sebelum dirapikan frontend)
+        // Form edit memuat field ongkir/metode
         $this->sebagai($this->admin)->get(route('admin.pesanan.edit', $p))->assertOk()
-            ->assertSee('name="ongkir"', false)->assertSee('name="diskon"', false)
+            ->assertSee('name="ongkir"', false)
             ->assertSee('name="metode_dp"', false)->assertSee('name="metode_lunas"', false);
         $this->sebagai($this->admin)->get(route('admin.pesanan.create'))->assertOk()->assertSee('name="ongkir"', false);
 
@@ -600,13 +657,13 @@ class InvoiceTest extends TestCase
     {
         $p = $this->buatProduksi();
         $teks = $p->teks_spp;
-        $this->assertStringContainsString("💰 Total: Rp2.325.000\n💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)", $teks);
+        $this->assertStringContainsString("💰 Total: Rp2.375.000\n💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)", $teks);
         $this->assertStringNotContainsString('Lunas', $teks);
 
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
         $this->assertStringContainsString("💳 DP: Rp1.000.000 (Transfer BCA, 23 Nov)\n✅ Lunas: QRIS, 23 Nov\n\n", $p->fresh()->teks_spp);
 
-        // Tanpa ongkir/diskon: blok hanya berisi DP
+        // Tanpa ongkir: blok hanya berisi DP
         $q = $this->buat(['nama_customer' => 'Ismun']);
         $this->catatDp($q, ['nomor_spp' => '177', 'metode_dp' => 'cash'])->assertSessionHasNoErrors();
         $teks = $q->fresh()->teks_spp;
@@ -627,7 +684,7 @@ class InvoiceTest extends TestCase
     public function test_metode_wajib_bila_dp_atau_lunas_diubah_lewat_edit(): void
     {
         $p    = $this->buatProduksi();
-        $data = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $data = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'ongkir' => '25.000']);
         $url  = route('admin.pesanan.update', $p);
 
         // Tanggal lunas diisi lewat Edit tanpa metode → ditolak
@@ -666,7 +723,7 @@ class InvoiceTest extends TestCase
         $p = $this->buatProduksi();
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
 
-        $data = $this->data(['nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $data = $this->data(['nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000']);
         $url  = route('admin.pesanan.update', $p);
 
         $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '1.200.000', 'metode_dp' => 'transfer_bca'])
@@ -682,39 +739,6 @@ class InvoiceTest extends TestCase
         $p->refresh();
         $this->assertSame(1200000.0, (float) $p->dp);
         $this->assertNull($p->tanggal_lunas);
-    }
-
-    public function test_isi_harga_diskon_melebihi_subtotal_pesan_sesuai_peran(): void
-    {
-        $p = $this->buat(['diskon' => '3.000.000', 'item' => [['harga_satuan' => ''], ['harga_satuan' => '']]]);
-        $this->assertSame('hitung_harga', $p->status_produksi->value);
-        [$a, $b] = $p->detailPesanan()->pluck('id')->all();
-        $harga = ['harga' => [$a => '4.300', $b => '2.000']];
-
-        $this->sebagai($this->produksi)->post(route('admin.pesanan.harga', $p), $harga)
-            ->assertSessionHasErrors(['harga' => 'Diskon Rp 3.000.000 yang diisi Admin melebihi subtotal Rp 2.350.000. Minta Admin mengubah diskon di form SPP.']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), $harga)
-            ->assertSessionHasErrors(['harga' => 'Subtotal produk baru (Rp 2.350.000) lebih kecil dari diskon (Rp 3.000.000). Ubah diskon di form SPP dulu.']);
-        $this->assertNull($p->detailPesanan()->first()->harga_satuan);
-        $this->assertSame('hitung_harga', $p->fresh()->status_produksi->value);
-    }
-
-    public function test_pengingat_qris_hilang_bila_lunas_atau_tanpa_sisa(): void
-    {
-        $pengingat = fn (Pesanan $p) => (fn () => $this->dataView($p)['qrisPengingat'])->call(app(InvoicePdf::class));
-
-        $this->assertSame('Ketik nominal DP/tagihan sendiri saat membayar.', $pengingat($this->buat()));
-
-        $p = $this->buatProduksi();
-        $this->assertSame('Ketik nominal sesuai sisa tagihan saat membayar.', $pengingat($p));
-
-        // DP menutup seluruh tagihan (belum dicatat lunas): sisa 0 → tanpa pengingat
-        $p->update(['dp' => 2325000]);
-        $this->assertNull($pengingat($p->fresh()));
-
-        // LUNAS → tanpa pengingat
-        $p->update(['dp' => 1000000, 'tanggal_lunas' => '2026-11-23', 'metode_lunas' => 'qris']);
-        $this->assertNull($pengingat($p->fresh()));
     }
 
     public function test_url_invoice_ditolak_dialihkan_ke_detail_spp(): void

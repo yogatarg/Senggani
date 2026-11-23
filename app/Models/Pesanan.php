@@ -70,10 +70,9 @@ class Pesanan extends Model
         'lunas'    => 'Lunas',
     ];
 
-    // Status bayar di invoice PDF (lihat statusBayarInvoice)
+    // Status bayar di invoice PDF (lihat statusBayarInvoice): hanya dua, otomatis
     public const STATUS_BAYAR_INVOICE = [
-        'belum_bayar' => 'BELUM BAYAR',
-        'dp'          => 'DP',
+        'belum_lunas' => 'BELUM LUNAS',
         'lunas'       => 'LUNAS',
     ];
 
@@ -151,8 +150,9 @@ class Pesanan extends Model
     // ── Pembayaran (dihitung) ──────────────────────────
     //
     // Kolom `total` = subtotal produk (jumlah subtotal item, dihitung PesananService).
-    // Total tagihan = subtotal produk + ongkir − diskon; semua hitungan sisa, status bayar,
-    // batas DP, dan syarat lunas memakai total tagihan.
+    // Total tagihan = subtotal produk + ongkir; semua hitungan sisa, status bayar,
+    // batas DP, dan syarat lunas memakai total tagihan. Diskon tidak dipakai lagi (kolom `diskon`
+    // dibiarkan di DB, nilainya diabaikan).
 
     /** Subtotal produk (alias kolom total). */
     protected function subtotalProduk(): Attribute
@@ -160,15 +160,15 @@ class Pesanan extends Model
         return Attribute::get(fn () => round((float) $this->total, 2));
     }
 
-    /** Subtotal produk + ongkir − diskon (tidak pernah negatif). */
+    /** Subtotal produk + ongkir (tidak pernah negatif). */
     protected function totalTagihan(): Attribute
     {
-        return Attribute::get(fn () => self::hitungTotalTagihan($this->total, $this->ongkir, $this->diskon));
+        return Attribute::get(fn () => self::hitungTotalTagihan($this->total, $this->ongkir));
     }
 
-    public static function hitungTotalTagihan(mixed $subtotal, mixed $ongkir, mixed $diskon): float
+    public static function hitungTotalTagihan(mixed $subtotal, mixed $ongkir): float
     {
-        return max(round((float) $subtotal + (float) $ongkir - (float) $diskon, 2), 0.0);
+        return max(round((float) $subtotal + (float) $ongkir, 2), 0.0);
     }
 
     /** Sisa tagihan: 0 bila sudah lunas, selain itu max(total tagihan − dp, 0). */
@@ -179,7 +179,7 @@ class Pesanan extends Model
             : max(round($this->total_tagihan - (float) $this->dp, 2), 0.0));
     }
 
-    /** DP melebihi total tagihan (mis. diskon ditambah setelah DP). 0 bila tidak. */
+    /** DP melebihi total tagihan (mis. harga diturunkan setelah DP). 0 bila tidak. */
     protected function kelebihanBayar(): Attribute
     {
         return Attribute::get(fn () => max(round((float) $this->dp - $this->total_tagihan, 2), 0.0));
@@ -194,19 +194,17 @@ class Pesanan extends Model
     }
 
     /**
-     * Status bayar di invoice: lunas (tanggal_lunas terisi atau DP >= total tagihan > 0),
-     * dp (0 < DP < total tagihan), belum_bayar (DP 0).
+     * Status bayar di invoice (dua saja): lunas (pelunasan dicatat / tanggal_lunas terisi, atau DP
+     * sudah menutup total tagihan > 0), selain itu belum_lunas (belum bayar maupun sesudah DP).
      */
     protected function statusBayarInvoice(): Attribute
     {
         return Attribute::get(function () {
             $total = $this->total_tagihan;
 
-            if ($this->tanggal_lunas || ($total > 0 && (float) $this->dp >= $total)) {
-                return 'lunas';
-            }
-
-            return (float) $this->dp > 0 ? 'dp' : 'belum_bayar';
+            return $this->tanggal_lunas || ($total > 0 && (float) $this->dp >= $total)
+                ? 'lunas'
+                : 'belum_lunas';
         });
     }
 
@@ -452,16 +450,11 @@ class Pesanan extends Model
                 $blok[] = [$deadline];
             }
 
-            // Ongkir/diskon/total hanya bila ada ongkir atau diskon, supaya SPP biasa tetap format lama.
+            // Ongkir & total hanya bila ada ongkir, supaya SPP biasa tetap format lama.
             // DP & Lunas hanya bila ada datanya; metode dalam kurung hanya bila tercatat (rancangan 5.5).
             $biaya = [];
-            if ((float) $this->ongkir > 0 || (float) $this->diskon > 0) {
-                if ((float) $this->ongkir > 0) {
-                    $biaya[] = '🚚 Ongkir: ' . self::rupiahSpp($this->ongkir);
-                }
-                if ((float) $this->diskon > 0) {
-                    $biaya[] = '🏷️ Diskon: -' . self::rupiahSpp($this->diskon);
-                }
+            if ((float) $this->ongkir > 0) {
+                $biaya[] = '🚚 Ongkir: ' . self::rupiahSpp($this->ongkir);
                 $biaya[] = '💰 Total: ' . self::rupiahSpp($this->total_tagihan);
             }
             if ((float) $this->dp > 0) {

@@ -32,7 +32,7 @@ return new class extends Migration
             ],
             'invoice.keterangan_bawah' => 'DP minimal 50%. Pengiriman barang setelah pelunasan.',
             'invoice.persen_dp'        => 50,
-            'invoice.qris_keterangan'  => 'QRIS a.n. SENGGANI - FOTOCOPY (satu usaha).',
+            'invoice.qris_keterangan'  => 'a.n. SENGGANI',
             'invoice.file_ttd'         => null,
             'invoice.file_stempel'     => null,
             'invoice.file_qris'        => null,

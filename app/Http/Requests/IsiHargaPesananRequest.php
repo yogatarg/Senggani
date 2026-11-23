@@ -72,7 +72,7 @@ class IsiHargaPesananRequest extends FormRequest
                 }
             }
 
-            // Kunci setelah lunas (sama seperti ongkir/diskon di form SPP)
+            // Kunci setelah lunas (sama seperti ongkir di form SPP)
             if ($pesanan->tanggal_lunas) {
                 foreach ($harga as $id => $nilai) {
                     $lama = $item[(int) $id]->harga_satuan;

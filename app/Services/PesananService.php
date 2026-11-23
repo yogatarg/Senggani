@@ -29,7 +29,7 @@ class PesananService
     // Folder sementara hasil olah gambar sebelum order tersimpan (disk local)
     public const FOLDER_SEMENTARA = 'pesanan/sementara';
 
-    // Isi Harga ditolak setelah SPP lunas (kunci yang sama dengan ongkir/diskon di form SPP)
+    // Isi Harga ditolak setelah SPP lunas (kunci yang sama dengan ongkir di form SPP)
     public const PESAN_HARGA_TERKUNCI = 'Harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas di form SPP dulu bila perlu dikoreksi.';
 
     /**
@@ -127,7 +127,6 @@ class PesananService
                 $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
                 $totalLama  = (float) $pesanan->total;
                 $ongkirLama = (float) $pesanan->ongkir;
-                $diskonLama = (float) $pesanan->diskon;
 
                 // customer_id kosong: tetap customer lama, kecuali admin menekan "Lepas" (lepas_customer=1)
                 // sehingga customer ditentukan ulang dari isian seperti saat tambah SPP.
@@ -153,10 +152,6 @@ class PesananService
                 if ($ongkirLama !== (float) $pesanan->ongkir) {
                     $this->catat($pesanan, $oleh, null, null, 'Ongkir diubah oleh ' . $oleh->nama . ': '
                         . self::rupiah($ongkirLama) . ' → ' . self::rupiah((float) $pesanan->ongkir));
-                }
-                if ($diskonLama !== (float) $pesanan->diskon) {
-                    $this->catat($pesanan, $oleh, null, null, 'Diskon diubah oleh ' . $oleh->nama . ': '
-                        . self::rupiah($diskonLama) . ' → ' . self::rupiah((float) $pesanan->diskon));
                 }
                 $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
 
@@ -330,7 +325,7 @@ class PesananService
      * @return string pesan untuk pengguna
      *
      * @throws AksiDitolak bila produksi menyimpan setelah status bukan hitung_harga lagi
-     * @throws ValidationException bila total tagihan baru lebih kecil dari DP, atau diskon melebihi subtotal
+     * @throws ValidationException bila total tagihan baru lebih kecil dari DP
      */
     public function isiHarga(Pesanan $pesanan, array $harga, ?string $catatan, Admin $oleh): string
     {
@@ -373,19 +368,7 @@ class PesananService
 
             $lengkap = $item->every(fn ($d) => $d->harga_satuan !== null);
 
-            // Diskon dibandingkan dengan subtotal hanya bila semua harga sudah terisi
-            // Pesan menurut peran: Produksi tidak bisa membuka form SPP, jadi diarahkan ke Admin
-            if ($lengkap && (float) $segar->diskon > $total) {
-                throw ValidationException::withMessages([
-                    'harga' => $oleh->isAdmin()
-                        ? 'Subtotal produk baru (' . self::rupiah($total) . ') lebih kecil dari diskon ('
-                            . self::rupiah((float) $segar->diskon) . '). Ubah diskon di form SPP dulu.'
-                        : 'Diskon ' . self::rupiah((float) $segar->diskon) . ' yang diisi Admin melebihi subtotal '
-                            . self::rupiah($total) . '. Minta Admin mengubah diskon di form SPP.',
-                ]);
-            }
-
-            $tagihan = Pesanan::hitungTotalTagihan($total, $segar->ongkir, $segar->diskon);
+            $tagihan = Pesanan::hitungTotalTagihan($total, $segar->ongkir);
             if ($tagihan < (float) $segar->dp) {
                 throw ValidationException::withMessages([
                     'harga' => 'Total tagihan baru (' . self::rupiah($tagihan) . ') lebih kecil dari DP yang sudah dicatat ('

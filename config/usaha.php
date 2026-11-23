@@ -36,6 +36,11 @@ return [
 
     'email' => $teks('USAHA_EMAIL', 'sengganipaperbag@gmail.com'),
 
+    // Nama pengguna Instagram (dengan @) dan domain situs tanpa https://, dipakai kop invoice PDF
+    'instagram' => $teks('USAHA_INSTAGRAM', '@sengganipaperbag'),
+
+    'situs' => $teks('USAHA_SITUS', 'senggani.web.id'),
+
     'alamat' => [
         'jalan'     => 'Pilahan, RT 40, RW 12',
         'kelurahan' => 'Rejowinangun',
