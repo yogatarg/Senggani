@@ -41,7 +41,9 @@ use Illuminate\Validation\Validator;
  * - ongkir, diskon (opsional, rupiah >= 0, kosong = 0): ikut total tagihan (subtotal + ongkir − diskon).
  *   Diskon tidak boleh melebihi subtotal produk (dicek bila semua harga item terisi). Saat edit, field
  *   yang tidak dikirim = nilai lama. Setelah SPP lunas (tanggal_lunas tersimpan dan tetap diisi),
- *   ongkir & diskon dikunci: perubahan ditolak sampai tanggal lunas dikosongkan.
+ *   ongkir & diskon dikunci: perubahan ditolak sampai tanggal lunas dikosongkan. Begitu juga jumlah dan
+ *   harga satuan item (dibandingkan per urutan; menambah/menghapus item juga ditolak). Isian teks item
+ *   (bahan, finishing, catatan, dsb.) tetap boleh diubah.
  * - metode_dp, metode_lunas (opsional, App\Enums\MetodeBayar): hanya untuk SPP yang sudah masuk produksi;
  *   kosong diizinkan untuk data lama. metode_lunas otomatis null bila tanggal_lunas kosong.
  *   Field yang tidak dikirim = nilai lama.
@@ -52,6 +54,8 @@ class SimpanPesananRequest extends FormRequest
 
     // Batas total order agar muat di kolom decimal(15,2)
     public const MAKS_TOTAL = 9_999_999_999_999;
+
+    public const PESAN_ITEM_TERKUNCI = 'Jumlah dan harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
 
     private const PESAN_BUKAN_GAMBAR = 'File harus berupa gambar JPG, PNG, atau WebP.';
 
@@ -230,6 +234,11 @@ class SimpanPesananRequest extends FormRequest
             if ($tetapLunas && ($ongkir !== (int) $pesanan->ongkir || $diskon !== (int) $pesanan->diskon)) {
                 $validator->errors()->add($ongkir !== (int) $pesanan->ongkir ? 'ongkir' : 'diskon',
                     'Ongkir dan diskon dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.');
+            }
+
+            // Kunci setelah lunas: jumlah & harga satuan item (urut sesuai form) tidak boleh berubah
+            if ($tetapLunas && $this->jumlahHargaItem() !== $this->jumlahHargaItemLama($pesanan)) {
+                $validator->errors()->add('item', self::PESAN_ITEM_TERKUNCI);
             }
 
             $total = Pesanan::hitungTotalTagihan($subtotal, $ongkir, $diskon);
@@ -420,6 +429,24 @@ class SimpanPesananRequest extends FormRequest
     }
 
     /** Semua item isian punya harga satuan (diskon baru dibandingkan dengan subtotal bila lengkap). */
+    /** @return list<array{0: int, 1: ?int}> [jumlah, harga_satuan] per item kiriman form */
+    private function jumlahHargaItem(): array
+    {
+        return array_map(fn ($b) => [
+            (int) ($b['jumlah'] ?? 0),
+            isset($b['harga_satuan']) && $b['harga_satuan'] !== '' ? (int) $b['harga_satuan'] : null,
+        ], array_values((array) $this->input('item', [])));
+    }
+
+    /** @return list<array{0: int, 1: ?int}> [jumlah, harga_satuan] per item tersimpan */
+    private function jumlahHargaItemLama(Pesanan $pesanan): array
+    {
+        return $pesanan->detailPesanan()->get()->map(fn ($d) => [
+            (int) $d->jumlah,
+            $d->harga_satuan === null ? null : (int) $d->harga_satuan,
+        ])->values()->all();
+    }
+
     private function hargaItemLengkap(): bool
     {
         $item = (array) $this->input('item', []);

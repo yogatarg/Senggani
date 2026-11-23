@@ -29,6 +29,9 @@ class PesananService
     // Folder sementara hasil olah gambar sebelum order tersimpan (disk local)
     public const FOLDER_SEMENTARA = 'pesanan/sementara';
 
+    // Isi Harga ditolak setelah SPP lunas (kunci yang sama dengan ongkir/diskon di form SPP)
+    public const PESAN_HARGA_TERKUNCI = 'Harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas di form SPP dulu bila perlu dikoreksi.';
+
     /**
      * Info untuk admin setelah buat/perbarui, mis. SPP dikaitkan ke customer lama
      * karena nomor WA-nya sudah terdaftar. null bila tidak ada.
@@ -361,6 +364,11 @@ class PesananService
                     }
                 }
                 $total += (int) $d->subtotal;
+            }
+
+            // Kunci setelah lunas (dicek juga di Form Request; ini menjaga balapan dengan Catat lunas)
+            if ($berubah && $segar->tanggal_lunas) {
+                throw ValidationException::withMessages(['harga' => self::PESAN_HARGA_TERKUNCI]);
             }
 
             $lengkap = $item->every(fn ($d) => $d->harga_satuan !== null);

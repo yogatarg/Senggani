@@ -15,7 +15,7 @@ use Tests\TestCase;
 
 /**
  * Invoice PDF: total tagihan (subtotal + ongkir − diskon), metode bayar DP/lunas, kunci ongkir/diskon
- * setelah lunas, nomor invoice PNW/SPP, akses (admin saja, status Menunggu DP s.d. Selesai),
+ * dan harga/jumlah item setelah lunas, nomor invoice PNW/SPP, akses (admin saja, status Menunggu DP s.d. Selesai),
  * unduh PDF, dan Pengaturan Invoice (simpan, unggah, hapus gambar privat).
  */
 class InvoiceTest extends TestCase
@@ -220,6 +220,42 @@ class InvoiceTest extends TestCase
         $this->assertNull($p->metode_lunas);
     }
 
+    public function test_harga_dan_jumlah_item_dikunci_setelah_lunas(): void
+    {
+        $p = $this->buatProduksi();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
+
+        $data  = $this->data(['dp' => '1.000.000', 'nomor_spp' => '176', 'tanggal_lunas' => '2026-11-23', 'ongkir' => '25.000', 'diskon' => '50.000']);
+        $pesan = 'Jumlah dan harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.';
+
+        // Edit SPP: harga satuan, jumlah, maupun menambah item ditolak
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), array_replace_recursive($data, ['item' => [0 => ['harga_satuan' => '4.500']]]))
+            ->assertSessionHasErrors(['item' => $pesan]);
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), array_replace_recursive($data, ['item' => [1 => ['jumlah' => '120']]]))
+            ->assertSessionHasErrors(['item' => $pesan]);
+        $tambah = $data;
+        $tambah['item'][] = ['jenis_packaging' => 'Stiker', 'jenis_bahan' => 'Vinyl', 'jumlah' => '10', 'harga_satuan' => '1.000'];
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), $tambah)->assertSessionHasErrors(['item' => $pesan]);
+        $this->assertSame(2350000.0, (float) $p->fresh()->total);
+
+        // Isian teks item tetap boleh diubah selama jumlah & harga sama
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), array_replace_recursive($data, ['item' => [0 => ['catatan' => 'Sablon 1 warna']]]))
+            ->assertSessionHasNoErrors();
+
+        // Isi Harga: perubahan ditolak, harga sama (hanya catatan) boleh
+        $ids = $p->detailPesanan()->pluck('id')->all();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), ['harga' => [$ids[0] => '4.500']])
+            ->assertSessionHasErrors(['harga' => 'Harga item dikunci karena SPP sudah lunas. Kosongkan tanggal lunas di form SPP dulu bila perlu dikoreksi.']);
+        $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), ['harga' => [$ids[0] => '4.300'], 'catatan_harga' => 'Harga final'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(4300, (int) $p->detailPesanan()->first()->harga_satuan);
+
+        // Tanggal lunas dikosongkan: harga boleh dikoreksi
+        $this->sebagai($this->admin)->put(route('admin.pesanan.update', $p), array_replace_recursive($data, ['tanggal_lunas' => '', 'item' => [0 => ['harga_satuan' => '4.500']]]))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(2450000.0, (float) $p->fresh()->total);
+    }
+
     // ── Metode bayar ───────────────────────────────────
 
     public function test_metode_wajib_saat_catat_dp(): void
@@ -386,7 +422,7 @@ class InvoiceTest extends TestCase
     {
         $set = app(PengaturanInvoice::class)->semua();
 
-        $this->assertSame('', $set['penandatangan_nama']);
+        $this->assertSame('Putri Maulidina', $set['penandatangan_nama']);
         $this->assertSame(50, $set['persen_dp']);
         $this->assertSame('DP minimal 50%. Pengiriman barang setelah pelunasan.', $set['keterangan_bawah']);
         $this->assertSame([

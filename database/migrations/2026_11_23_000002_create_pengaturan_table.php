@@ -24,7 +24,7 @@ return new class extends Migration
 
         $sekarang = now();
         $awal = [
-            'invoice.penandatangan_nama'    => '',
+            'invoice.penandatangan_nama'    => 'Putri Maulidina',
             'invoice.penandatangan_jabatan' => '',
             'invoice.rekening'              => [
                 ['bank' => 'BCA', 'nomor' => '8023011164', 'atas_nama' => 'Herni Pri Nugrahani'],

@@ -7,6 +7,7 @@ use App\Exceptions\AksiDitolak;
 use App\Http\Requests\Concerns\AngkaRupiah;
 use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Pesanan;
+use App\Services\PesananService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Validator;
@@ -19,6 +20,7 @@ use Illuminate\Validation\Validator;
  * - harga[<detail_pesanan.id>]: harga satuan rupiah ("4.300" / "Rp 4.300" diterima), minimal Rp 1. Kosong = belum
  *   dihitung (hanya boleh saat hitung_harga / tidak_jadi). Item yang tidak dikirim tidak diubah.
  * - catatan_harga (opsional): catatan perhitungan; dikirim kosong = dikosongkan.
+ * Setelah SPP lunas (tanggal_lunas tersimpan), perubahan harga ditolak; harga sama atau catatan saja tetap boleh.
  */
 class IsiHargaPesananRequest extends FormRequest
 {
@@ -67,6 +69,18 @@ class IsiHargaPesananRequest extends FormRequest
                     $validator->errors()->add('harga', 'Ada item yang tidak dikenal. Muat ulang halaman lalu coba lagi.');
 
                     return;
+                }
+            }
+
+            // Kunci setelah lunas (sama seperti ongkir/diskon di form SPP)
+            if ($pesanan->tanggal_lunas) {
+                foreach ($harga as $id => $nilai) {
+                    $lama = $item[(int) $id]->harga_satuan;
+                    if (($nilai === null ? null : (int) $nilai) !== ($lama === null ? null : (int) $lama)) {
+                        $validator->errors()->add('harga', PesananService::PESAN_HARGA_TERKUNCI);
+
+                        return;
+                    }
                 }
             }
 
