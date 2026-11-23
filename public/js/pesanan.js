@@ -575,7 +575,7 @@
             var dp = keAngka(inputDp.value);
             var lebih = dp > totalDp;
             peringatanDp.hidden = !lebih;
-            if (lebih) $('span', peringatanDp).textContent = 'DP melebihi total SPP sebesar ' + rupiah(dp - totalDp) + '.';
+            if (lebih) $('span', peringatanDp).textContent = 'DP melebihi total tagihan sebesar ' + rupiah(dp - totalDp) + '.';
         };
         inputDp.addEventListener('input', cekDp);
 
@@ -612,6 +612,66 @@
         });
         cekDp();
     }
+
+    // ── Metode bayar (ubin radio, [data-metode]) ─────────
+    // Wajib dipilih ([data-metode-wajib], tanpa pilihan bawaan): cek sebelum kirim. Server tetap penentu.
+    var aturGalatMetode = function (fs, tampil) {
+        var galat = $('[data-metode-galat]', fs);
+        if (!galat) return;
+        galat.hidden = !tampil;
+        fs.classList.toggle('sg-metode-galat', tampil);
+        var ids = (fs.getAttribute('aria-describedby') || '').split(/\s+/).filter(function (x) { return x && x !== galat.id; });
+        if (tampil) ids.unshift(galat.id);
+        if (ids.length) fs.setAttribute('aria-describedby', ids.join(' ')); else fs.removeAttribute('aria-describedby');
+        $$('input[type="radio"]', fs).forEach(function (r) {
+            if (tampil) r.setAttribute('aria-invalid', 'true'); else r.removeAttribute('aria-invalid');
+        });
+    };
+    $$('[data-metode]').forEach(function (fs) {
+        fs.addEventListener('change', function () {
+            aturGalatMetode(fs, false);
+            var kosong = $('[data-metode-kosong]', fs);
+            if (kosong) kosong.hidden = !!$('input:checked', fs);
+        });
+    });
+    $$('form').forEach(function (f) {
+        if (!$('[data-metode-wajib]', f)) return;
+        f.addEventListener('submit', function (e) {
+            var belum = $$('[data-metode-wajib]', f).filter(function (fs) {
+                return !fs.hidden && !$('input:checked', fs);
+            });
+            belum.forEach(function (fs) { aturGalatMetode(fs, true); });
+            if (!belum.length) return;
+            e.preventDefault();
+            var r = $('input[type="radio"]', belum[0]);
+            belum[0].scrollIntoView({ block: 'nearest', behavior: gerakHalus() });
+            if (r) r.focus({ preventScroll: true });
+        });
+    });
+
+    // ── Unduh invoice PDF: status sibuk ±3 detik (unduhan tidak memberi event selesai) ──
+    $$('[data-unduh-invoice]').forEach(function (a) {
+        var ikon = $('[data-unduh-ikon]', a);
+        var label = $('[data-unduh-label]', a);
+        var teksAwal = label.textContent;
+        a.addEventListener('click', function (e) {
+            if (a.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+            // Ubah tampilan setelah navigasi dimulai
+            setTimeout(function () {
+                a.setAttribute('aria-busy', 'true');
+                a.classList.add('sg-sibuk');
+                ikon.className = 'fa-solid fa-spinner fa-spin';
+                label.textContent = 'Menyiapkan…';
+            }, 0);
+            setTimeout(function () {
+                a.removeAttribute('aria-busy');
+                a.classList.remove('sg-sibuk');
+                ikon.className = 'fa-solid fa-file-invoice';
+                label.textContent = teksAwal;
+            }, 3000);
+        });
+    });
 
     // Tombol yang dikunci (aria-disabled, tetap bisa difokus supaya keterangannya terbaca)
     document.addEventListener('click', function (e) {
@@ -923,19 +983,47 @@
             var lengkap = tanpaHarga === 0;
             var teksTotal = lengkap ? rupiah(total) : (total > 0 ? rupiah(total) + ' · belum lengkap' : 'Belum lengkap');
             $$('[data-total]').forEach(function (el) {
-                // Bilah HP sempit: cukup "Belum lengkap" supaya tidak terpotong
-                el.textContent = (!lengkap && el.closest('.sg-bilah')) ? 'Belum lengkap' : teksTotal;
+                el.textContent = teksTotal;
                 el.classList.toggle('sg-belum-harga', !lengkap);
             });
             $$('[data-total-ket]').forEach(function (el) {
                 el.textContent = lengkap ? 'Dihitung dari item' : tanpaHarga + ' item belum diberi harga';
             });
 
+            // Total tagihan = subtotal produk + ongkir − diskon (rancangan invoice 5.3)
+            var inputOngkir = $('[data-ongkir]', formOrder);
+            var inputDiskon = $('[data-diskon]', formOrder);
+            var ongkir = inputOngkir ? keAngka(inputOngkir.value) : 0;
+            var diskon = inputDiskon ? keAngka(inputDiskon.value) : 0;
+            var tagihan = Math.max(total + ongkir - diskon, 0);
+            var teksTagihan = lengkap ? rupiah(tagihan) : (total > 0 ? rupiah(tagihan) + ' (belum lengkap)' : 'Belum lengkap');
+            $$('[data-total-tagihan]').forEach(function (el) {
+                // Bilah HP sempit: cukup "Belum lengkap" supaya tidak terpotong
+                el.textContent = (!lengkap && el.closest('.sg-bilah')) ? 'Belum lengkap' : teksTagihan;
+                el.classList.toggle('sg-belum-harga', !lengkap);
+            });
+            $$('[data-baris-ongkir]').forEach(function (el) { el.hidden = ongkir <= 0; });
+            $$('[data-baris-diskon]').forEach(function (el) { el.hidden = diskon <= 0; });
+            $$('[data-ongkir-tampil]').forEach(function (el) { el.textContent = rupiah(ongkir); });
+            $$('[data-diskon-tampil]').forEach(function (el) { el.textContent = '− ' + rupiah(diskon); });
+
+            // Diskon ≤ subtotal produk. Sama seperti server: dicek hanya bila semua harga terisi.
+            var galatDiskon = $('[data-galat-diskon]', formOrder);
+            if (inputDiskon && galatDiskon) {
+                var diskonLebih = lengkap && diskon > total;
+                galatDiskon.hidden = !diskonLebih;
+                $('span', galatDiskon).textContent = diskonLebih ? 'Diskon tidak boleh melebihi subtotal produk (' + rupiah(total) + ').' : '';
+                var galatServer = inputDiskon.hasAttribute('data-galat-server');
+                inputDiskon.classList.toggle('is-invalid', diskonLebih || galatServer);
+                if (diskonLebih || galatServer) inputDiskon.setAttribute('aria-invalid', 'true');
+                else inputDiskon.removeAttribute('aria-invalid');
+            }
+
             var dpInput = $('[data-dp]', formOrder);
             if (!dpInput) return;
             var dp = keAngka(dpInput.value);
             var lunas = $('[data-tanggal-lunas]', formOrder).value !== '';
-            var sisa = lunas ? 0 : Math.max(total - dp, 0);
+            var sisa = lunas ? 0 : Math.max(tagihan - dp, 0);
             $$('[data-sisa]').forEach(function (el) { el.textContent = rupiah(sisa); });
             $$('[data-dp-tampil]').forEach(function (el) { el.textContent = rupiah(dp); });
 
@@ -948,19 +1036,44 @@
             });
 
             var peringatan = $('[data-peringatan-dp]', formOrder);
-            if (dp > total) {
+            if (dp > tagihan) {
                 peringatan.hidden = false;
-                $('span', peringatan).textContent = 'DP melebihi total SPP sebesar ' + rupiah(dp - total) + '.';
+                $('span', peringatan).textContent = 'DP melebihi total tagihan sebesar ' + rupiah(dp - tagihan) + '.';
             } else {
                 peringatan.hidden = true;
+                $('span', peringatan).textContent = '';
             }
         };
+
+        // Metode pelunasan hanya tampil (dan ikut terkirim) bila tanggal lunas terisi
+        var aturMetodeLunas = function () {
+            var wadah = $('[data-metode-lunas]', formOrder);
+            var tglLunas = $('[data-tanggal-lunas]', formOrder);
+            if (!wadah || !tglLunas) return;
+            var tampil = tglLunas.value !== '';
+            wadah.hidden = !tampil;
+            $$('input', wadah).forEach(function (r) { r.disabled = !tampil; });
+        };
+        aturMetodeLunas();
+
         formOrder.addEventListener('input', function (e) {
-            if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas]')) hitungTotal();
+            if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir], [data-diskon]')) hitungTotal();
+            if (e.target.matches('[data-tanggal-lunas]')) aturMetodeLunas();
         });
         formOrder.addEventListener('change', function (e) {
-            if (e.target.matches('[data-tanggal-lunas]')) hitungTotal();
+            if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); }
         });
+        // Diskon melebihi subtotal: tahan kirim dan arahkan ke field (server tetap penentu)
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                var galat = $('[data-galat-diskon]', formOrder);
+                if (!galat || galat.hidden) return;
+                e.preventDefault();
+                var d = $('[data-diskon]', formOrder);
+                d.scrollIntoView({ block: 'center', behavior: gerakHalus() });
+                d.focus({ preventScroll: true });
+            });
+        }
 
         // Deadline tidak boleh sebelum tanggal order
         var tglOrder = $('[data-tanggal-order]', formOrder);
@@ -1437,6 +1550,11 @@
         var srcLama = img.getAttribute('data-src-lama') || '';
         var maksMb = parseFloat(w.getAttribute('data-maks-mb')) || 2;
         var urlBaru = null;
+        // Opsional (Pengaturan Invoice): tombol hapus gambar tersimpan, sisi minimal, peringatan lunak JPG
+        var hapus = $('[data-gi-hapus]', w);
+        var minSisi = parseInt(w.getAttribute('data-min-sisi'), 10) || 0;
+        var peringatan = $('[data-gi-peringatan]', w);
+        var urutan = 0;
 
         var tampil = function (keadaan, file) {
             var adaGambar = keadaan !== 'kosong';
@@ -1451,6 +1569,13 @@
             if (keadaan === 'lama') { img.src = srcLama; ket.textContent = 'Gambar saat ini'; }
             if (keadaan === 'baru') { img.src = urlBaru; ket.textContent = file.name + ' · ' + teksMb(file.size); }
             if (keadaan === 'kosong') img.removeAttribute('src');
+            // Gambar baru belum disimpan: "Hapus" (gambar tersimpan) disembunyikan supaya tidak rancu
+            if (hapus) hapus.hidden = keadaan === 'baru';
+            if (peringatan) {
+                var jpg = keadaan === 'baru' && w.hasAttribute('data-peringatan-jpg') && /jpe?g$/i.test(file.type || file.name);
+                peringatan.hidden = !jpg;
+                peringatan.innerHTML = jpg ? '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>JPG punya latar putih, sehingga tanda tangan akan menutupi stempel. Disarankan PNG transparan.</span>' : '';
+            }
         };
         var lepasUrl = function () { if (urlBaru) { URL.revokeObjectURL(urlBaru); urlBaru = null; } };
         var awal = function () { lepasUrl(); tampil(srcLama ? 'lama' : 'kosong'); };
@@ -1468,7 +1593,24 @@
             }
             lepasUrl();
             urlBaru = URL.createObjectURL(f);
-            tampil('baru', f);
+            if (!minSisi) { tampil('baru', f); return; }
+            // Sisi terpendek minimal (QRIS harus tetap bisa dipindai). Server tetap memeriksa lagi.
+            var ke = ++urutan;
+            var uji = new Image();
+            uji.onload = function () {
+                if (ke !== urutan) return;
+                var sisi = Math.min(uji.naturalWidth, uji.naturalHeight);
+                if (sisi < minSisi) {
+                    input.value = '';
+                    isiTolak(galat, (w.getAttribute('data-label-gambar') || 'Gambar') + ' terlalu kecil',
+                        ' (' + sisi + ' px). Pakai gambar minimal ' + minSisi + ' px agar bisa dipindai.');
+                    awal();
+                    return;
+                }
+                tampil('baru', f);
+            };
+            uji.onerror = function () { if (ke === urutan) tampil('baru', f); };
+            uji.src = urlBaru;
         });
         ganti.addEventListener('click', function () { input.click(); });
         batal.addEventListener('click', function () {
@@ -1646,4 +1788,80 @@
         }
     });
     if (kartuPilihan.length) perbaruiRingkas();
+    // ════════════════════════════════════════════════
+    // Pengaturan Invoice: baris rekening dinamis ([data-rekening])
+    // ════════════════════════════════════════════════
+    var wadahRek = $('[data-rekening]');
+    if (wadahRek) {
+        var daftarRek = $('[data-rek-daftar]', wadahRek);
+        var templateRek = $('#template-rekening');
+        var tambahRek = $('[data-rek-tambah]', wadahRek);
+        var kepalaRek = $('[data-rek-kepala]', wadahRek);
+        var kosongRek = $('[data-rek-kosong]', wadahRek);
+        var infoRek = $('[data-rek-info]', wadahRek);
+        var maksRek = parseInt(wadahRek.getAttribute('data-maks'), 10) || 4;
+        var teksInfoRek = infoRek.textContent;
+        var barisRek = function () { return $$('[data-rek-baris]', daftarRek); };
+
+        var labelHapusRek = function (baris, n) {
+            var bank = $('[data-rek-bank]', baris).value.trim();
+            $('[data-rek-hapus]', baris).setAttribute('aria-label', 'Hapus rekening ' + (bank || 'ke-' + n));
+        };
+        // Indeks name/id berurutan (0..n-1) supaya pesan galat server cocok dengan barisnya
+        var rapikanRek = function () {
+            var semua = barisRek();
+            semua.forEach(function (baris, i) {
+                $$('input', baris).forEach(function (inp) {
+                    inp.name = inp.name.replace(/^rekening\[[^\]]*\]/, 'rekening[' + i + ']');
+                    var idLama = inp.id;
+                    inp.id = idLama.replace(/^f-rekening-[^-]+-/, 'f-rekening-' + i + '-');
+                    var lbl = $('label[for="' + idLama + '"]', baris);
+                    if (lbl) lbl.setAttribute('for', inp.id);
+                });
+                $$('[data-rek-ke]', baris).forEach(function (el) { el.textContent = ' rekening ke-' + (i + 1); });
+                labelHapusRek(baris, i + 1);
+            });
+            var penuh = semua.length >= maksRek;
+            tambahRek.hidden = penuh;
+            kepalaRek.hidden = semua.length === 0;
+            kosongRek.hidden = semua.length > 0;
+            infoRek.textContent = penuh ? 'Sudah ' + maksRek + ' rekening (batas maksimal).' : teksInfoRek;
+        };
+
+        tambahRek.addEventListener('click', function () {
+            if (barisRek().length >= maksRek) return;
+            var tmp = document.createElement('div');
+            tmp.innerHTML = templateRek.innerHTML.trim();
+            var baru = tmp.firstElementChild;
+            daftarRek.appendChild(baru);
+            rapikanRek();
+            wadahRek.dispatchEvent(new Event('input', { bubbles: true }));
+            var bank = $('[data-rek-bank]', baru);
+            bank.scrollIntoView({ block: 'nearest', behavior: gerakHalus() });
+            bank.focus({ preventScroll: true });
+        });
+
+        daftarRek.addEventListener('click', function (e) {
+            var tombol = e.target.closest('[data-rek-hapus]');
+            if (!tombol) return;
+            var baris = tombol.closest('[data-rek-baris]');
+            var semua = barisRek();
+            var posisi = semua.indexOf(baris);
+            baris.remove();
+            rapikanRek();
+            wadahRek.dispatchEvent(new Event('input', { bubbles: true }));
+            // Fokus ke baris berikutnya/sebelumnya, atau tombol tambah bila sudah kosong
+            var sisaRek = barisRek();
+            var tuju = sisaRek[Math.min(posisi, sisaRek.length - 1)];
+            (tuju ? $('[data-rek-hapus]', tuju) : tambahRek).focus();
+            toast('Rekening dihapus. Simpan pengaturan untuk menerapkan.');
+        });
+
+        daftarRek.addEventListener('input', function (e) {
+            if (!e.target.matches('[data-rek-bank]')) return;
+            var baris = e.target.closest('[data-rek-baris]');
+            labelHapusRek(baris, barisRek().indexOf(baris) + 1);
+        });
+        rapikanRek();
+    }
 })();

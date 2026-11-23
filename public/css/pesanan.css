@@ -1235,6 +1235,130 @@ button.sg-avatar { background: transparent; }
     .sg-master-tata > .sg-kartu:first-child { position: sticky; top: 24px; }
 }
 
+/* ── Invoice ─────────────────────────────────── */
+/* Acuan: catatan desain 2026-11-23-desain-invoice-senggani.md (bagian 5 & 6). Tanpa token baru. */
+
+/* Aksi kepala detail SPP (5.1): urutan diatur dengan order, markup tetap satu urutan */
+.sg-aksi-kepala .sg-ak-wa { order: 1; }
+.sg-aksi-kepala .sg-ak-invoice { order: 2; }
+.sg-aksi-kepala .sg-ak-edit { order: 3; }
+.sg-aksi-kepala .sg-ak-salin { order: 4; }
+.sg-aksi-kepala .sg-ak-ket { order: 5; flex-basis: 100%; margin: 0; }
+.sg-aksi-kepala .sg-ak-ket a { min-height: 48px; display: inline-flex; align-items: center; text-underline-offset: 3px; }
+.sg-aksi-kepala p.sg-bantu.sg-ak-ket { line-height: 1.45; }
+@media (max-width: 575.98px) {
+    /* HP: grid 2 kolom. [WhatsApp] / [Invoice PDF][Edit] / keterangan / [Salin teks SPP] */
+    .sg-aksi-kepala { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .sg-aksi-kepala .sg-ak-wa, .sg-aksi-kepala .sg-ak-salin, .sg-aksi-kepala .sg-ak-ket { grid-column: 1 / -1; }
+    .sg-aksi-kepala .sg-ak-ket { order: 4; }
+    .sg-aksi-kepala .sg-ak-salin { order: 5; }
+    .sg-aksi-kepala .sg-btn { padding: 0 12px; }
+}
+@media (min-width: 992px) {
+    .sg-aksi-kepala .sg-ak-ket { justify-content: flex-end; text-align: right; }
+}
+@media (min-width: 1200px) {
+    .sg-aksi-kepala .sg-ak-edit { order: 2; }
+    .sg-aksi-kepala .sg-ak-invoice { order: 3; }
+}
+.sg-btn.sg-sibuk { cursor: progress; }
+
+/* Ubin metode bayar (5.2): radio tersembunyi, seluruh ubin jadi target sentuh ≥ 56 px */
+.sg-metode { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+.sg-metode legend { float: none; width: auto; padding: 0; }
+.sg-metode-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.sg-metode-ubin {
+    position: relative; display: flex; align-items: center; gap: 10px; min-height: 56px; margin: 0; padding: 8px 12px;
+    border: 1px solid var(--sg-border-strong); border-radius: var(--sg-r-md); background: var(--sg-surface);
+    color: var(--sg-text-2); font-weight: 500; line-height: 1.3; cursor: pointer; overflow-wrap: anywhere;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+}
+.sg-metode-ubin > span { min-width: 0; }
+.sg-metode-ikon { font-size: 20px; width: 20px; text-align: center; flex: none; }
+.sg-metode-cek { display: none; margin-left: auto; flex: none; }
+.sg-metode-ubin:has(input:checked) {
+    background: var(--sg-brand-tint); border: 2px solid var(--sg-brand); padding: 7px 11px; color: var(--sg-brand); font-weight: 600;
+}
+.sg-metode-ubin:has(input:checked) .sg-metode-cek { display: inline-block; }
+.sg-metode-ubin:has(input:focus-visible) { box-shadow: var(--sg-ring); }
+@media (hover: hover) {
+    .sg-metode-ubin:hover { background: var(--sg-bg); }
+    .sg-metode-ubin:has(input:checked):hover { background: var(--sg-brand-tint); }
+}
+.sg-metode-galat .sg-metode-ubin { border-color: var(--sg-danger); }
+
+/* Total tagihan: keterangan "termasuk ongkir · diskon" (modal DP & kartu status) */
+.sg-total-dp-ket { margin: -10px 0 16px; padding: 0 14px; font-size: 14px; line-height: 1.45; color: var(--sg-text-muted); }
+
+/* Kartu Pembayaran (5.4) & ringkasan form */
+.sg-ringkas .sg-baris-total { border-top: 1px solid var(--sg-border); margin-top: 4px; padding-top: 10px; }
+.sg-ringkas .sg-baris-total dt { font-weight: 600; color: var(--sg-text); }
+.sg-ket-bayar { display: block; font-size: 14px; font-weight: 400; color: var(--sg-text-muted); line-height: 1.45; }
+
+/* Form SPP bagian ④ (5.3) */
+.sg-otomatis-total { border-top: 1px solid var(--sg-border); margin-top: 4px; padding-top: 12px; }
+.sg-otomatis-total > span { color: var(--sg-text); font-weight: 600; }
+.sg-dua-md { display: grid; grid-template-columns: minmax(0,1fr); gap: 0 12px; }
+@media (max-width: 767.98px) { .sg-dua-md > div + div { margin-top: 16px; } }
+@media (min-width: 768px) { .sg-dua-md { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.sg-otomatis strong { white-space: nowrap; }
+
+/* Halaman Pengaturan Invoice (6) */
+@media (min-width: 992px) { .sg-lebar-720 { max-width: 720px; } }
+.sg-pengaturan-invoice > .sg-kartu + .sg-kartu { margin-top: 16px; }
+.sg-pengaturan-invoice .sg-dua { margin-bottom: 16px; }
+.sg-contoh-pdf { display: flex; flex-direction: column; align-items: flex-start; }
+@media (max-width: 575.98px) { .sg-contoh-pdf, .sg-contoh-pdf .sg-btn { width: 100%; } }
+.sg-persen-dp { max-width: 160px; }
+
+/* Unggah gambar invoice: pratinjau utuh di atas papan catur (transparansi PNG terlihat) */
+.sg-gi-baris { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 16px; }
+.sg-gi-invoice .sg-gambar-bingkai { width: var(--gambar-maks); max-width: 100%; flex: none; }
+.sg-gi-samping { flex: 1 1 200px; min-width: 0; }
+.sg-gi-samping .sg-gambar-kendali { margin-top: 0; }
+.sg-gi-samping .sg-gambar-kendali .sg-btn-teks { padding: 0 8px; }
+.sg-gi-samping .sg-bantu { margin-top: 4px; }
+.sg-gi-catur img { object-fit: contain; }
+.sg-gi-catur:not(.sg-gi-kosong) {
+    background-color: #FFFFFF;
+    background-image: conic-gradient(#F5F5F4 90deg, #FFFFFF 90deg 180deg, #F5F5F4 180deg 270deg, #FFFFFF 270deg);
+    background-size: 16px 16px;
+}
+.sg-gambar-bingkai .sg-pratinjau-label.sg-gi-belum { background: var(--sg-warning); }
+
+/* Baris rekening: kartu kecil bertumpuk di HP, tabel 4 kolom ≥768 */
+.sg-rek-kepala { display: none; }
+.sg-rek-baris {
+    position: relative; border: 1px solid var(--sg-border); border-radius: var(--sg-r-md);
+    padding: 12px; background: #FCFCFB;
+}
+.sg-rek-baris > .sg-rek-isian:first-child { padding-right: 48px; }
+.sg-rek-baris + .sg-rek-baris { margin-top: 12px; }
+.sg-rek-isian + .sg-rek-isian { margin-top: 12px; }
+.sg-rek-hapus {
+    position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border: 0; padding: 0;
+    background: transparent; color: var(--sg-danger); border-radius: var(--sg-r-sm);
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background-color 150ms ease-out;
+}
+@media (hover: hover) { .sg-rek-hapus:hover { background: #FEF3F2; } }
+.sg-rek-kosong { margin: 0 0 4px; }
+@media (min-width: 768px) {
+    .sg-rek-kepala, .sg-rek-baris {
+        display: grid; grid-template-columns: minmax(0,2fr) minmax(0,3fr) minmax(0,4fr) 40px; gap: 8px; align-items: start;
+    }
+    .sg-rek-kepala { margin-bottom: 6px; font-size: 14px; font-weight: 500; color: var(--sg-text-2); }
+    .sg-rek-baris { border: 0; padding: 0; background: transparent; }
+    .sg-rek-baris + .sg-rek-baris { margin-top: 8px; }
+    .sg-rek-isian + .sg-rek-isian { margin-top: 0; }
+    .sg-rek-baris > .sg-rek-isian:first-child { padding-right: 0; }
+    .sg-rek-isian .sg-label {
+        position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important;
+        overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important;
+    }
+    .sg-rek-hapus { position: static; margin-top: 4px; }
+}
+
 /* ── Gerak dikurangi ─────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto !important; }

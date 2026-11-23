@@ -334,69 +334,74 @@
 
             <div class="sg-otomatis"><span>Subtotal produk <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
 
-            {{-- PLACEHOLDER backend: ongkir & diskon (frontend: hitung total tagihan langsung di JS, rancangan 5.3) --}}
+            {{-- Ongkir & diskon (rancangan invoice 5.3): total tagihan & sisa dihitung langsung di pesanan.js --}}
             @php
-                $biayaTampil = fn (string $f) => old($f, (float) $pesanan->{$f} > 0 ? number_format((float) $pesanan->{$f}, 0, ',', '.') : '');
+                $biayaTampil = function (string $f) use ($pesanan) {
+                    $v = old($f, (float) $pesanan->{$f} > 0 ? (int) $pesanan->{$f} : '');
+                    return is_int($v) || (is_string($v) && ctype_digit($v) && $v !== '') ? number_format((int) $v, 0, ',', '.') : $v;
+                };
             @endphp
             <div class="sg-dua mt-2">
-                @foreach (['ongkir' => 'Ongkir', 'diskon' => 'Diskon'] as $f => $lbl)
-                    <div class="sg-field">
-                        <label class="sg-label" for="f-{{ $f }}">{{ $lbl }} <span class="fw-normal sg-muted">(opsional)</span></label>
-                        <div class="sg-imbuh sg-imbuh-depan">
-                            <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                            <input type="text" inputmode="numeric" id="f-{{ $f }}" name="{{ $f }}" value="{{ $biayaTampil($f) }}" autocomplete="off" placeholder="0"
-                                   class="form-control sg-angka @error($f) is-invalid @enderror" data-rupiah data-{{ $f }}
-                                   @error($f) aria-invalid="true" aria-describedby="{{ $gid($f) }}" @enderror>
-                        </div>
-                        {!! $galat($f) !!}
-                        @if ($f === 'diskon')<p class="sg-bantu">Potongan dalam rupiah.</p>@endif
-                    </div>
-                @endforeach
-            </div>
-            @if ($pesanan->exists && ((float) $pesanan->ongkir > 0 || (float) $pesanan->diskon > 0))
-                <p class="sg-bantu">Total tagihan tersimpan: Rp {{ number_format($pesanan->total_tagihan, 0, ',', '.') }}</p>
-            @endif
-
-            @if ($pakaiBayar)
-            <div class="sg-dua mt-2">
                 <div class="sg-field">
-                    <label class="sg-label" for="f-dp">DP / sudah dibayar <span class="sg-wajib" aria-hidden="true">*</span></label>
+                    <label class="sg-label" for="f-ongkir">Ongkir <span class="fw-normal sg-muted">(opsional)</span></label>
                     <div class="sg-imbuh sg-imbuh-depan">
                         <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                        <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpTampil }}" autocomplete="off" placeholder="0" required
-                               pattern=".*[1-9].*" data-min-rupiah="DP minimal Rp 1 karena SPP sudah masuk produksi."
-                               class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp
-                               aria-describedby="bantu-dp peringatan-dp {{ $errors->has('dp') ? $gid('dp') : '' }}" @error('dp') aria-invalid="true" @enderror>
+                        <input type="text" inputmode="numeric" id="f-ongkir" name="ongkir" value="{{ $biayaTampil('ongkir') }}" autocomplete="off" placeholder="0"
+                               class="form-control sg-angka @error('ongkir') is-invalid @enderror" data-rupiah data-ongkir {!! $aria('ongkir') !!}>
                     </div>
-                    {!! $galat('dp') !!}
-                    <p class="sg-bantu" id="bantu-dp">SPP sudah masuk produksi, DP wajib diisi minimal Rp 1.</p>
-                    <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
-                    {{-- PLACEHOLDER backend: frontend ganti dengan ubin radio (rancangan 5.2) --}}
-                    <label class="sg-label mt-2" for="f-metode_dp">Metode DP</label>
-                    <select id="f-metode_dp" name="metode_dp" class="form-select @error('metode_dp') is-invalid @enderror">
-                        <option value="">Belum dicatat</option>
-                        @foreach ($metodeBayar as $nilai => $label)
-                            <option value="{{ $nilai }}" @selected(old('metode_dp', $pesanan->metode_dp?->value) === $nilai)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    {!! $galat('metode_dp') !!}
+                    {!! $galat('ongkir') !!}
                 </div>
                 <div class="sg-field">
-                    <label class="sg-label" for="f-tanggal_lunas">Tanggal lunas @if ($lunasWajib)<span class="sg-wajib" aria-hidden="true">*</span>@endif</label>
-                    <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', $tgl($pesanan->tanggal_lunas)) }}" max="{{ today()->toDateString() }}" @if ($lunasWajib) required @endif
-                           class="form-control @error('tanggal_lunas') is-invalid @enderror" data-tanggal-lunas
-                           aria-describedby="bantu-lunas {{ $errors->has('tanggal_lunas') ? $gid('tanggal_lunas') : '' }}" @error('tanggal_lunas') aria-invalid="true" @enderror>
-                    {!! $galat('tanggal_lunas') !!}
-                    <p class="sg-bantu" id="bantu-lunas">{{ $lunasWajib ? 'Kembalikan status ke Pesanan Selesai bila pelunasan perlu dikoreksi.' : 'Isi bila customer sudah melunasi.' }}</p>
-                    {{-- PLACEHOLDER backend: frontend tampilkan hanya bila tanggal lunas terisi (rancangan 5.2) --}}
-                    <label class="sg-label mt-2" for="f-metode_lunas">Metode pelunasan</label>
-                    <select id="f-metode_lunas" name="metode_lunas" class="form-select @error('metode_lunas') is-invalid @enderror">
-                        <option value="">Belum dicatat</option>
-                        @foreach ($metodeBayar as $nilai => $label)
-                            <option value="{{ $nilai }}" @selected(old('metode_lunas', $pesanan->metode_lunas?->value) === $nilai)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    {!! $galat('metode_lunas') !!}
+                    <label class="sg-label" for="f-diskon">Diskon <span class="fw-normal sg-muted">(opsional)</span></label>
+                    <div class="sg-imbuh sg-imbuh-depan">
+                        <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
+                        <input type="text" inputmode="numeric" id="f-diskon" name="diskon" value="{{ $biayaTampil('diskon') }}" autocomplete="off" placeholder="0"
+                               class="form-control sg-angka @error('diskon') is-invalid @enderror" data-diskon
+                               aria-describedby="bantu-diskon galat-diskon-langsung {{ $errors->has('diskon') ? $gid('diskon') : '' }}" @error('diskon') aria-invalid="true" data-galat-server @enderror data-rupiah>
+                    </div>
+                    {!! $galat('diskon') !!}
+                    <p class="sg-galat" id="galat-diskon-langsung" data-galat-diskon hidden><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i><span></span></p>
+                    <p class="sg-bantu" id="bantu-diskon">Potongan dalam rupiah.</p>
+                </div>
+            </div>
+
+            <div class="sg-otomatis sg-otomatis-total"><span>Total tagihan <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total-tagihan aria-live="polite">Rp 0</strong></div>
+
+            @if ($pakaiBayar)
+            <div class="sg-dua-md mt-2">
+                <div>
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-dp">DP / sudah dibayar <span class="sg-wajib" aria-hidden="true">*</span></label>
+                        <div class="sg-imbuh sg-imbuh-depan">
+                            <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
+                            <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpTampil }}" autocomplete="off" placeholder="0" required
+                                   pattern=".*[1-9].*" data-min-rupiah="DP minimal Rp 1 karena SPP sudah masuk produksi."
+                                   class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp
+                                   aria-describedby="bantu-dp peringatan-dp {{ $errors->has('dp') ? $gid('dp') : '' }}" @error('dp') aria-invalid="true" @enderror>
+                        </div>
+                        {!! $galat('dp') !!}
+                        <p class="sg-bantu" id="bantu-dp">SPP sudah masuk produksi, DP wajib diisi minimal Rp 1.</p>
+                        <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
+                    </div>
+                    @include('admin.pesanan._metode-bayar', [
+                        'nama' => 'metode_dp', 'legend' => 'Metode DP', 'terpilih' => $pesanan->metode_dp?->value,
+                        'bantuKosong' => 'Belum dicatat',
+                    ])
+                </div>
+                <div>
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-tanggal_lunas">Tanggal lunas @if ($lunasWajib)<span class="sg-wajib" aria-hidden="true">*</span>@endif</label>
+                        <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', $tgl($pesanan->tanggal_lunas)) }}" max="{{ today()->toDateString() }}" @if ($lunasWajib) required @endif
+                               class="form-control @error('tanggal_lunas') is-invalid @enderror" data-tanggal-lunas
+                               aria-describedby="bantu-lunas {{ $errors->has('tanggal_lunas') ? $gid('tanggal_lunas') : '' }}" @error('tanggal_lunas') aria-invalid="true" @enderror>
+                        {!! $galat('tanggal_lunas') !!}
+                        <p class="sg-bantu" id="bantu-lunas">{{ $lunasWajib ? 'Kembalikan status ke Pesanan Selesai bila pelunasan perlu dikoreksi.' : 'Isi bila customer sudah melunasi.' }}</p>
+                    </div>
+                    {{-- Hanya tampil (dan ikut terkirim) bila tanggal lunas terisi; diatur pesanan.js --}}
+                    @include('admin.pesanan._metode-bayar', [
+                        'nama' => 'metode_lunas', 'legend' => 'Metode pelunasan', 'terpilih' => $pesanan->metode_lunas?->value,
+                        'bantuKosong' => 'Belum dicatat', 'atribut' => 'data-metode-lunas',
+                    ])
                 </div>
             </div>
 
@@ -427,7 +432,10 @@
             <h2 class="sg-kartu-judul">Ringkasan</h2>
             <dl>
                 <div><dt>Item</dt><dd data-jumlah-item>1</dd></div>
-                <div @unless ($pakaiBayar) class="sg-sisa" @endunless><dt>Total</dt><dd data-total>Rp 0</dd></div>
+                <div><dt>Subtotal</dt><dd data-total>Rp 0</dd></div>
+                <div data-baris-ongkir hidden><dt>Ongkir</dt><dd data-ongkir-tampil>Rp 0</dd></div>
+                <div data-baris-diskon hidden><dt>Diskon</dt><dd data-diskon-tampil>− Rp 0</dd></div>
+                <div class="sg-baris-total {{ $pakaiBayar ? '' : 'sg-sisa' }}"><dt>Total</dt><dd data-total-tagihan>Rp 0</dd></div>
                 @if ($pakaiBayar)
                     <div><dt>DP</dt><dd data-dp-tampil>Rp 0</dd></div>
                     <div class="sg-sisa"><dt>Sisa</dt><dd data-sisa>Rp 0</dd></div>
@@ -457,7 +465,7 @@
 {{-- Bilah sticky (< 1200) --}}
 <div class="sg-bilah sg-bilah-form">
     <div class="sg-bilah-ringkas sg-angka">
-        <strong>Total <span data-total>Rp 0</span></strong>
+        <strong>Total <span data-total-tagihan>Rp 0</span></strong>
         @if ($pakaiBayar)
             <span>Sisa <span data-sisa>Rp 0</span></span>
         @else

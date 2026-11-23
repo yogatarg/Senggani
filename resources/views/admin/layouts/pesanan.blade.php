@@ -19,6 +19,7 @@
     $diPengguna = request()->routeIs('admin.pengguna.*');
     $diCustomer = request()->routeIs('admin.customer.*');
     $diPassword = request()->routeIs('admin.password.*');
+    $diInvoice  = request()->routeIs('admin.pengaturan.invoice.*');
     $diProduk    = request()->routeIs('admin.produk.*');
     $diKategori  = request()->routeIs('admin.kategori-produk.*');
     $diBanner    = request()->routeIs('admin.banner.*');
@@ -134,6 +135,9 @@
                 @can('kelola-pengguna')
                     <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
                 @endcan
+                @can('kelola-invoice')
+                    <li><a class="sg-menu-item" href="{{ route('admin.pengaturan.invoice.edit') }}" @if ($diInvoice) aria-current="page" @endif><i class="fa-solid fa-file-signature" aria-hidden="true"></i> Pengaturan Invoice</a></li>
+                @endcan
                 <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
             </ul>
         </nav>
@@ -217,7 +221,7 @@
                 <span class="sg-bn-ikon"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></span> Tambah
             </a>
         @endcan
-        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword || $diCustomer || $diKatalog) aria-current="page" @endif>
+        <button type="button" data-bs-toggle="offcanvas" data-bs-target="#sheetAkun" aria-controls="sheetAkun" @if ($diPengguna || $diPassword || $diCustomer || $diKatalog || $diInvoice) aria-current="page" @endif>
             <span class="sg-bn-ikon"><i class="fa-solid fa-circle-user" aria-hidden="true"></i></span> Akun
         </button>
     </nav>
@@ -260,6 +264,9 @@
             <ul class="sg-menu">
                 @can('kelola-pengguna')
                     <li><a class="sg-menu-item" href="{{ route('admin.pengguna.index') }}" @if ($diPengguna) aria-current="page" @endif><i class="fa-solid fa-users" aria-hidden="true"></i> Kelola Pengguna</a></li>
+                @endcan
+                @can('kelola-invoice')
+                    <li><a class="sg-menu-item" href="{{ route('admin.pengaturan.invoice.edit') }}" @if ($diInvoice) aria-current="page" @endif><i class="fa-solid fa-file-signature" aria-hidden="true"></i> Pengaturan Invoice</a></li>
                 @endcan
                 <li><a class="sg-menu-item" href="{{ route('admin.password.edit') }}" @if ($diPassword) aria-current="page" @endif><i class="fa-solid fa-key" aria-hidden="true"></i> Ubah Password</a></li>
                 <li>
