@@ -393,9 +393,11 @@
                         <p class="sg-bantu" id="bantu-dp">SPP sudah masuk produksi, DP wajib diisi minimal Rp 1.</p>
                         <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
                     </div>
+                    {{-- Wajib dipilih bila nominal DP (> 0) berbeda dari nilai tersimpan; diatur pesanan.js, server tetap penentu --}}
                     @include('admin.pesanan._metode-bayar', [
                         'nama' => 'metode_dp', 'legend' => 'Metode DP', 'terpilih' => $pesanan->metode_dp?->value,
-                        'bantuKosong' => 'Belum dicatat',
+                        'bantuKosong' => 'Belum dicatat', 'pesanWajib' => 'Pilih metode pembayaran DP.',
+                        'atribut' => 'data-metode-dp data-dp-awal="' . (int) $pesanan->dp . '"',
                     ])
                 </div>
                 <div>
@@ -407,10 +409,12 @@
                         {!! $galat('tanggal_lunas') !!}
                         <p class="sg-bantu" id="bantu-lunas">{{ $lunasWajib ? 'Kembalikan status ke Pesanan Selesai bila pelunasan perlu dikoreksi.' : 'Isi bila customer sudah melunasi.' }}</p>
                     </div>
-                    {{-- Hanya tampil (dan ikut terkirim) bila tanggal lunas terisi; diatur pesanan.js --}}
+                    {{-- Hanya tampil (dan ikut terkirim) bila tanggal lunas terisi; wajib dipilih bila tanggal lunas
+                         berbeda dari nilai tersimpan. Diatur pesanan.js, server tetap penentu --}}
                     @include('admin.pesanan._metode-bayar', [
                         'nama' => 'metode_lunas', 'legend' => 'Metode pelunasan', 'terpilih' => $pesanan->metode_lunas?->value,
-                        'bantuKosong' => 'Belum dicatat', 'atribut' => 'data-metode-lunas',
+                        'bantuKosong' => 'Belum dicatat', 'pesanWajib' => 'Pilih metode pelunasan.',
+                        'atribut' => 'data-metode-lunas data-lunas-awal="' . $tgl($pesanan->tanggal_lunas) . '"',
                     ])
                 </div>
             </div>

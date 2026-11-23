@@ -634,13 +634,18 @@
             if (kosong) kosong.hidden = !!$('input:checked', fs);
         });
     });
+    // Wajib bisa berubah setelah halaman dimuat (Edit SPP: aturWajibMetode), jadi dicek saat kirim.
     $$('form').forEach(function (f) {
-        if (!$('[data-metode-wajib]', f)) return;
+        if (!$('[data-metode]', f)) return;
         f.addEventListener('submit', function (e) {
             var belum = $$('[data-metode-wajib]', f).filter(function (fs) {
                 return !fs.hidden && !$('input:checked', fs);
             });
-            belum.forEach(function (fs) { aturGalatMetode(fs, true); });
+            belum.forEach(function (fs) {
+                var teks = $('[data-metode-galat] span', fs);
+                if (teks && fs.dataset.pesanWajib) teks.textContent = fs.dataset.pesanWajib;
+                aturGalatMetode(fs, true);
+            });
             if (!belum.length) return;
             e.preventDefault();
             var r = $('input[type="radio"]', belum[0]);
@@ -1056,6 +1061,35 @@
         };
         aturMetodeLunas();
 
+        // Metode wajib bersyarat (sama seperti SimpanPesananRequest): metode DP bila DP > 0 dan berbeda dari
+        // nilai tersimpan, metode pelunasan bila tanggal lunas terisi dan berbeda dari nilai tersimpan.
+        var aturWajibMetode = function () {
+            var jadikan = function (fs, wajib) {
+                if (!fs) return;
+                var sebelumnya = fs.hasAttribute('data-metode-wajib');
+                fs.toggleAttribute('data-metode-wajib', wajib);
+                var tanda = $('[data-tanda-wajib]', fs);
+                if (tanda) tanda.hidden = !wajib;
+                $$('input[type="radio"]', fs).forEach(function (r) {
+                    if (wajib) r.setAttribute('aria-required', 'true'); else r.removeAttribute('aria-required');
+                });
+                // Tidak lagi wajib: galat "belum dipilih" tidak berlaku lagi
+                if (sebelumnya && !wajib) aturGalatMetode(fs, false);
+            };
+            var fsDp = $('[data-metode-dp]', formOrder);
+            var inputDp = $('[data-dp]', formOrder);
+            if (fsDp && inputDp) {
+                var dp = keAngka(inputDp.value);
+                jadikan(fsDp, dp > 0 && dp !== Number(fsDp.dataset.dpAwal || 0));
+            }
+            var fsLunas = $('[data-metode-lunas]', formOrder);
+            var tglLunas = $('[data-tanggal-lunas]', formOrder);
+            if (fsLunas && tglLunas) {
+                jadikan(fsLunas, tglLunas.value !== '' && tglLunas.value !== (fsLunas.dataset.lunasAwal || ''));
+            }
+        };
+        aturWajibMetode();
+
         // Kunci setelah lunas: selama tanggal lunas (tersimpan) tetap terisi, jumlah, harga, ongkir, diskon, dan DP
         // readonly (bukan disabled, supaya nilainya tetap terkirim dan cocok dengan pemeriksaan server);
         // tombol tambah/hapus item disembunyikan lewat CSS [data-terkunci-lunas]. Teks item tetap bisa diubah.
@@ -1078,9 +1112,10 @@
         formOrder.addEventListener('input', function (e) {
             if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir], [data-diskon]')) hitungTotal();
             if (e.target.matches('[data-tanggal-lunas]')) { aturMetodeLunas(); aturKunciLunas(); }
+            if (e.target.matches('[data-dp], [data-tanggal-lunas]')) aturWajibMetode();
         });
         formOrder.addEventListener('change', function (e) {
-            if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); aturKunciLunas(); }
+            if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); aturKunciLunas(); aturWajibMetode(); }
         });
         // Diskon melebihi subtotal: tahan kirim dan arahkan ke field (server tetap penentu)
         if (form) {
