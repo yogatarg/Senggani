@@ -71,9 +71,13 @@
     $kunciKonfirmasi = 'konfirmasi_ganti_nomor';
     $tampilKonfirmasi = $errors->has($kunciKonfirmasi) || old($kunciKonfirmasi);
     $maksFile = \App\Models\PesananFile::MAKS_PER_ORDER;
+    // Kunci setelah lunas (sama seperti SimpanPesananRequest): jumlah, harga, ongkir, diskon, DP readonly
+    // selama tanggal lunas tetap terisi. pesanan.js membuka kunci begitu tanggal lunas dikosongkan.
+    $lunasTersimpan = $pesanan->exists && (bool) $pesanan->tanggal_lunas;
+    $kunciLunas = $lunasTersimpan && (! $pakaiBayar || filled(old('tanggal_lunas', $tgl($pesanan->tanggal_lunas))));
 @endphp
 
-<div class="sg-form-tata" data-form-order data-maks-file="{{ $maksFile }}" data-maks-mb="{{ \App\Models\PesananFile::MAKS_KB / 1024 }}">
+<div class="sg-form-tata" data-form-order @if ($lunasTersimpan) data-lunas-tersimpan @endif @if ($kunciLunas) data-terkunci-lunas @endif data-maks-file="{{ $maksFile }}" data-maks-mb="{{ \App\Models\PesananFile::MAKS_KB / 1024 }}">
     <div class="sg-form-utama">
 
         {{-- ① SPP & customer --}}
@@ -202,6 +206,12 @@
         {{-- ② Item --}}
         <section class="sg-kartu" id="bagian-item" aria-labelledby="judul-bagian-item">
             <h2 class="sg-kartu-judul" id="judul-bagian-item"><span class="sg-no" aria-hidden="true">2</span> Item</h2>
+            @if ($lunasTersimpan)
+                <p class="sg-alert sg-alert-info" id="ket-kunci-lunas" data-ket-kunci-lunas @unless ($kunciLunas) hidden @endunless>
+                    <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                    <span>Harga, jumlah, ongkir, diskon, dan DP dikunci karena SPP sudah lunas. Kosongkan tanggal lunas untuk mengoreksi.</span>
+                </p>
+            @endif
             <div id="f-item">{!! $galat('item') !!}</div>
             <div id="daftar-item" data-daftar-item>
                 @foreach (array_values($daftarItem) as $i => $it)
@@ -209,7 +219,7 @@
                 @endforeach
             </div>
             <template id="template-item">
-                @include('admin.pesanan._item', ['i' => '__I__', 'it' => []])
+                @include('admin.pesanan._item', ['i' => '__I__', 'it' => [], 'kunciLunas' => false])
             </template>
             <button type="button" class="sg-tambah-item" data-tambah-item><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah item</button>
         </section>
@@ -347,7 +357,7 @@
                     <div class="sg-imbuh sg-imbuh-depan">
                         <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
                         <input type="text" inputmode="numeric" id="f-ongkir" name="ongkir" value="{{ $biayaTampil('ongkir') }}" autocomplete="off" placeholder="0"
-                               class="form-control sg-angka @error('ongkir') is-invalid @enderror" data-rupiah data-ongkir {!! $aria('ongkir') !!}>
+                               class="form-control sg-angka @error('ongkir') is-invalid @enderror" data-rupiah data-ongkir @if ($kunciLunas) readonly @endif {!! $aria('ongkir') !!}>
                     </div>
                     {!! $galat('ongkir') !!}
                 </div>
@@ -356,7 +366,7 @@
                     <div class="sg-imbuh sg-imbuh-depan">
                         <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
                         <input type="text" inputmode="numeric" id="f-diskon" name="diskon" value="{{ $biayaTampil('diskon') }}" autocomplete="off" placeholder="0"
-                               class="form-control sg-angka @error('diskon') is-invalid @enderror" data-diskon
+                               class="form-control sg-angka @error('diskon') is-invalid @enderror" data-diskon @if ($kunciLunas) readonly @endif
                                aria-describedby="bantu-diskon galat-diskon-langsung {{ $errors->has('diskon') ? $gid('diskon') : '' }}" @error('diskon') aria-invalid="true" data-galat-server @enderror data-rupiah>
                     </div>
                     {!! $galat('diskon') !!}
@@ -376,7 +386,7 @@
                             <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
                             <input type="text" inputmode="numeric" id="f-dp" name="dp" value="{{ $dpTampil }}" autocomplete="off" placeholder="0" required
                                    pattern=".*[1-9].*" data-min-rupiah="DP minimal Rp 1 karena SPP sudah masuk produksi."
-                                   class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp
+                                   class="form-control sg-angka @error('dp') is-invalid @enderror" data-rupiah data-dp @if ($kunciLunas) readonly @endif
                                    aria-describedby="bantu-dp peringatan-dp {{ $errors->has('dp') ? $gid('dp') : '' }}" @error('dp') aria-invalid="true" @enderror>
                         </div>
                         {!! $galat('dp') !!}

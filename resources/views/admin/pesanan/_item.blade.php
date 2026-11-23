@@ -146,7 +146,7 @@
         <div class="sg-field">
             <label class="sg-label" for="{{ $fidI('jumlah') }}">Jumlah <span class="sg-wajib" aria-hidden="true">*</span></label>
             <div class="sg-imbuh sg-imbuh-belakang">
-                <input type="text" inputmode="numeric" id="{{ $fidI('jumlah') }}" name="{{ $n }}[jumlah]" value="{{ $v('jumlah') }}" required autocomplete="off"
+                <input type="text" inputmode="numeric" id="{{ $fidI('jumlah') }}" name="{{ $n }}[jumlah]" value="{{ $v('jumlah') }}" required autocomplete="off" @if ($kunciLunas ?? false) readonly @endif
                        class="form-control sg-angka @error($k('jumlah')) is-invalid @enderror" data-jumlah {!! $aria($k('jumlah')) !!}>
                 <span class="sg-imbuh-teks" aria-hidden="true">pcs</span>
             </div>
@@ -156,7 +156,7 @@
             <label class="sg-label" for="{{ $fidI('harga_satuan') }}">Harga satuan @if ($hargaWajib)<span class="sg-wajib" aria-hidden="true">*</span>@else<span class="fw-normal sg-muted">(opsional)</span>@endif</label>
             <div class="sg-imbuh sg-imbuh-depan">
                 <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
-                <input type="text" inputmode="numeric" id="{{ $fidI('harga_satuan') }}" name="{{ $n }}[harga_satuan]" value="{{ $hargaTampil }}" @if ($hargaWajib) required @endif autocomplete="off"
+                <input type="text" inputmode="numeric" id="{{ $fidI('harga_satuan') }}" name="{{ $n }}[harga_satuan]" value="{{ $hargaTampil }}" @if ($hargaWajib) required @endif autocomplete="off" @if ($kunciLunas ?? false) readonly @endif
                        pattern=".*[1-9].*" data-min-rupiah="Harga satuan minimal Rp 1."
                        class="form-control sg-angka @error($k('harga_satuan')) is-invalid @enderror" data-rupiah data-harga
                        @if ($errors->has($k('harga_satuan'))) aria-invalid="true" aria-describedby="{{ $gid($k('harga_satuan')) }}" @elseif (! $hargaWajib) aria-describedby="{{ $fidI('bantu-harga') }}" @endif>

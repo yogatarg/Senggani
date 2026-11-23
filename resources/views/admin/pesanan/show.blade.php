@@ -471,7 +471,10 @@
             @php $hargaBelumLengkap = ! $sudahProduksi && ! $pesanan->harga_lengkap; @endphp
             <dl>
                 @if ($adaBiaya)
+                    {{-- Harga belum dihitung sama sekali: jangan tampilkan "Subtotal produk Rp 0" di samping "Belum dihitung" --}}
+                    @unless ($hargaBelumLengkap && (float) $pesanan->total <= 0)
                     <div><dt>Subtotal produk</dt><dd @if ($hargaBelumLengkap) class="sg-belum-harga" @endif>{{ $rp($pesanan->total) }}</dd></div>
+                    @endunless
                     @if ($ongkir > 0)<div><dt>Ongkir</dt><dd>{{ $rp($ongkir) }}</dd></div>@endif
                     @if ($diskon > 0)<div><dt>Diskon</dt><dd>− {{ $rp($diskon) }}</dd></div>@endif
                 @endif

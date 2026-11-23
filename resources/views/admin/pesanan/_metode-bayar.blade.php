@@ -20,7 +20,12 @@
                 <input type="radio" class="visually-hidden" name="{{ $nama }}" value="{{ $nilai }}" @checked($terpilih === $nilai)
                        @if ($wajib) aria-required="true" @endif @if ($adaGalat) aria-invalid="true" @endif>
                 <i class="fa-solid {{ \App\Enums\MetodeBayar::from($nilai)->ikon() }} sg-metode-ikon" aria-hidden="true"></i>
-                <span>{{ $label }}</span>
+                {{-- "Transfer BCA/BRI" selalu dua baris (Transfer / nama bank) supaya semua ubin seragam di layar sempit maupun lebar --}}
+                @if (str_starts_with($label, 'Transfer '))
+                    <span>Transfer <span class="sg-metode-bank">{{ substr($label, 9) }}</span></span>
+                @else
+                    <span>{{ $label }}</span>
+                @endif
                 <i class="fa-solid fa-circle-check sg-metode-cek" aria-hidden="true"></i>
             </label>
         @endforeach

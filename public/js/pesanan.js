@@ -1056,12 +1056,31 @@
         };
         aturMetodeLunas();
 
+        // Kunci setelah lunas: selama tanggal lunas (tersimpan) tetap terisi, jumlah, harga, ongkir, diskon, dan DP
+        // readonly (bukan disabled, supaya nilainya tetap terkirim dan cocok dengan pemeriksaan server);
+        // tombol tambah/hapus item disembunyikan lewat CSS [data-terkunci-lunas]. Teks item tetap bisa diubah.
+        var aturKunciLunas = function () {
+            if (!formOrder.hasAttribute('data-lunas-tersimpan')) return;
+            var tglLunas = $('[data-tanggal-lunas]', formOrder);
+            var kunci = !tglLunas || tglLunas.value !== '';
+            formOrder.toggleAttribute('data-terkunci-lunas', kunci);
+            var ket = $('[data-ket-kunci-lunas]', formOrder);
+            if (ket) ket.hidden = !kunci;
+            $$('[data-jumlah], [data-harga], [data-ongkir], [data-diskon], [data-dp]', formOrder).forEach(function (el) {
+                el.readOnly = kunci;
+                var ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== 'ket-kunci-lunas'; });
+                if (kunci && ket) ids.unshift('ket-kunci-lunas');
+                if (ids.length) el.setAttribute('aria-describedby', ids.join(' ')); else el.removeAttribute('aria-describedby');
+            });
+        };
+        aturKunciLunas();
+
         formOrder.addEventListener('input', function (e) {
             if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir], [data-diskon]')) hitungTotal();
-            if (e.target.matches('[data-tanggal-lunas]')) aturMetodeLunas();
+            if (e.target.matches('[data-tanggal-lunas]')) { aturMetodeLunas(); aturKunciLunas(); }
         });
         formOrder.addEventListener('change', function (e) {
-            if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); }
+            if (e.target.matches('[data-tanggal-lunas]')) { hitungTotal(); aturMetodeLunas(); aturKunciLunas(); }
         });
         // Diskon melebihi subtotal: tahan kirim dan arahkan ke field (server tetap penentu)
         if (form) {

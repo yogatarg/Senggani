@@ -444,6 +444,8 @@ button.sg-avatar { background: transparent; }
 @media (hover: hover) { .sg .form-control:hover, .sg .form-select:hover { border-color: #A8A29E; } }
 .sg .form-control:focus, .sg .form-select:focus { border-color: var(--sg-brand); box-shadow: var(--sg-ring); outline: none; }
 .sg .form-control:disabled, .sg .form-control[readonly] { background: var(--sg-bg); color: var(--sg-text-muted); }
+/* Edit SPP lunas: tambah/hapus item disembunyikan selama isian harga dikunci (pesanan.js) */
+[data-terkunci-lunas] [data-tambah-item], [data-terkunci-lunas] [data-hapus-item] { display: none; }
 .sg .form-control.is-invalid, .sg .form-select.is-invalid {
     border-color: var(--sg-danger); border-width: 1.5px; background-image: none; padding-right: 14px;
 }
@@ -1266,7 +1268,7 @@ button.sg-avatar { background: transparent; }
 /* Ubin metode bayar (5.2): radio tersembunyi, seluruh ubin jadi target sentuh ≥ 56 px */
 .sg-metode { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
 .sg-metode legend { float: none; width: auto; padding: 0; }
-.sg-metode-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.sg-metode-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); grid-auto-rows: 1fr; gap: 8px; }
 .sg-metode-ubin {
     position: relative; display: flex; align-items: center; gap: 10px; min-height: 56px; margin: 0; padding: 8px 12px;
     border: 1px solid var(--sg-border-strong); border-radius: var(--sg-r-md); background: var(--sg-surface);
@@ -1274,6 +1276,7 @@ button.sg-avatar { background: transparent; }
     transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
 }
 .sg-metode-ubin > span { min-width: 0; }
+.sg-metode-bank { display: block; }
 .sg-metode-ikon { font-size: 20px; width: 20px; text-align: center; flex: none; }
 .sg-metode-cek { display: none; margin-left: auto; flex: none; }
 .sg-metode-ubin:has(input:checked) {
