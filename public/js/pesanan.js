@@ -654,27 +654,105 @@
         });
     });
 
-    // ── Unduh invoice PDF: status sibuk ±3 detik (unduhan tidak memberi event selesai) ──
+    // ── Unduh invoice PDF lewat fetch: tombol sibuk sampai PDF benar-benar diterima ──
+    // Tanpa JS, link biasa tetap jalan. Browser tanpa dukungan atribut download (iOS lama):
+    // link dibuka di tab baru tanpa dicegat.
+    var PESAN_INVOICE_UMUM = 'Invoice belum bisa dibuat. Coba lagi.';
+    var BATAS_INVOICE_MS = 60000;
+    var bisaUnduhBlob = 'download' in document.createElement('a') && !!(window.fetch && window.URL && URL.createObjectURL);
+
+    var namaDariDisposition = function (h) {
+        if (!h) return '';
+        var m = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(h);
+        if (m) { try { return decodeURIComponent(m[1].trim().replace(/^"|"$/g, '')); } catch (err) { /* lanjut ke filename biasa */ } }
+        m = /filename\s*=\s*"([^"]+)"/.exec(h) || /filename\s*=\s*([^;]+)/.exec(h);
+        return m ? m[1].trim() : '';
+    };
+
+    var GalatInvoice = function (pesan) { this.message = pesan; };
+
     $$('[data-unduh-invoice]').forEach(function (a) {
         var ikon = $('[data-unduh-ikon]', a);
         var label = $('[data-unduh-label]', a);
         var teksAwal = label.textContent;
-        a.addEventListener('click', function (e) {
-            if (a.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-            // Ubah tampilan setelah navigasi dimulai
-            setTimeout(function () {
+        var kelasIkon = ikon.className;
+
+        if (!bisaUnduhBlob) {
+            a.target = '_blank';
+            a.rel = 'noopener';
+            return;
+        }
+
+        var aturSibuk = function (sibuk) {
+            if (sibuk) {
                 a.setAttribute('aria-busy', 'true');
+                a.setAttribute('aria-disabled', 'true');
                 a.classList.add('sg-sibuk');
                 ikon.className = 'fa-solid fa-spinner fa-spin';
                 label.textContent = 'Menyiapkan…';
-            }, 0);
-            setTimeout(function () {
+            } else {
                 a.removeAttribute('aria-busy');
+                a.removeAttribute('aria-disabled');
                 a.classList.remove('sg-sibuk');
-                ikon.className = 'fa-solid fa-file-invoice';
+                ikon.className = kelasIkon;
                 label.textContent = teksAwal;
-            }, 3000);
+            }
+        };
+
+        a.addEventListener('click', function (e) {
+            if (a.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (e.button && e.button !== 0)) return;
+            e.preventDefault();
+            aturSibuk(true);
+
+            var pengendali = window.AbortController ? new AbortController() : null;
+            var habis = false;
+            var timer = setTimeout(function () {
+                habis = true;
+                if (pengendali) pengendali.abort();
+            }, BATAS_INVOICE_MS);
+
+            fetch(a.href, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json, application/pdf', 'X-Requested-With': 'XMLHttpRequest' },
+                signal: pengendali ? pengendali.signal : undefined
+            }).then(function (r) {
+                var jenis = (r.headers.get('Content-Type') || '').toLowerCase();
+                if (r.ok && jenis.indexOf('application/pdf') !== -1) {
+                    var nama = namaDariDisposition(r.headers.get('Content-Disposition')) || 'invoice.pdf';
+                    return r.blob().then(function (blob) { return { blob: blob, nama: nama }; });
+                }
+                if (r.status === 401) throw new GalatInvoice('Sesi Anda berakhir. Muat ulang halaman lalu masuk lagi.');
+                // Pesan JSON hanya dipakai untuk 4xx (mis. izin ditolak); 5xx dan redirect HTML memakai teks umum.
+                if (r.status >= 400 && r.status < 500 && jenis.indexOf('json') !== -1) {
+                    return r.json().catch(function () { return {}; }).then(function (j) {
+                        throw new GalatInvoice((j && typeof j.message === 'string' && j.message) || PESAN_INVOICE_UMUM);
+                    });
+                }
+                throw new GalatInvoice(PESAN_INVOICE_UMUM);
+            }).then(function (hasil) {
+                if (habis) throw new GalatInvoice('');
+                clearTimeout(timer);
+                var url = URL.createObjectURL(hasil.blob);
+                var pemicu = document.createElement('a');
+                pemicu.href = url;
+                pemicu.download = hasil.nama;
+                pemicu.hidden = true;
+                document.body.appendChild(pemicu);
+                pemicu.click();
+                document.body.removeChild(pemicu);
+                // iOS Safari butuh URL tetap hidup sampai lembar unduhan muncul
+                setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+                aturSibuk(false);
+                toast('Invoice terunduh', { durasi: 3000 });
+            }).catch(function (err) {
+                clearTimeout(timer);
+                aturSibuk(false);
+                var pesan = habis
+                    ? 'Invoice terlalu lama dibuat. Coba lagi sebentar lagi.'
+                    : (err instanceof GalatInvoice ? err.message : 'Koneksi terputus. Periksa internet lalu coba lagi.');
+                toast(pesan, { galat: true, durasi: 6000 });
+            });
         });
     });
 
