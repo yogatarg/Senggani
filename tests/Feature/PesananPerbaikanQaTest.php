@@ -70,7 +70,7 @@ class PesananPerbaikanQaTest extends TestCase
     private function masukProduksi(Pesanan $pesanan, int $nomor = 1): Pesanan
     {
         $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $pesanan), [
-            'dp' => '100.000', 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1',
+            'dp' => '100.000', 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1', 'metode_dp' => 'transfer_bri',
         ])->assertSessionHasNoErrors();
 
         return $pesanan->fresh();
@@ -207,7 +207,7 @@ class PesananPerbaikanQaTest extends TestCase
     public function test_nomor_spp_format_aneh_ditolak(): void
     {
         $dp = fn (Pesanan $p, string $nomor) => $this->sebagai($this->admin)
-            ->post(route('admin.pesanan.dp', $p), ['dp' => '100.000', 'nomor_spp' => $nomor]);
+            ->post(route('admin.pesanan.dp', $p), ['dp' => '100.000', 'nomor_spp' => $nomor, 'metode_dp' => 'cash']);
 
         $a = $this->buat();
         foreach (['12.5', '1e3', '1.000', '17a', '-5x'] as $nomor) {
@@ -240,9 +240,9 @@ class PesananPerbaikanQaTest extends TestCase
         $this->assertSame('2026-11-10', $pesanan->fresh()->tanggal_lunas->toDateString());
 
         $lain = Pesanan::factory()->create(['tanggal_order' => '2026-11-15', 'total' => 100000]);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $lain), ['tanggal_lunas' => '2026-11-14'])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $lain), ['tanggal_lunas' => '2026-11-14', 'metode_lunas' => 'cash'])
             ->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak boleh sebelum tanggal SPP (15 November 2026).']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $lain), ['tanggal_lunas' => '2026-11-15'])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $lain), ['tanggal_lunas' => '2026-11-15', 'metode_lunas' => 'cash'])
             ->assertSessionHasNoErrors();
         $this->assertSame('2026-11-15', $lain->fresh()->tanggal_lunas->toDateString());
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\MetodeBayar;
 use App\Enums\StatusDesain;
 use App\Enums\StatusProduksi;
 use App\Http\Requests\Concerns\AngkaRupiah;
@@ -37,6 +38,13 @@ use Illuminate\Validation\Validator;
  *   dan customer ditentukan ulang dari isian (pemilik WA bila ada, jika tidak customer baru).
  *   Tanpa lepas_customer, customer_id kosong saat edit = customer lama tetap.
  * - item[i][panjang|lebar|tinggi]: boleh koma desimal ("12,5" → 12.5).
+ * - ongkir, diskon (opsional, rupiah >= 0, kosong = 0): ikut total tagihan (subtotal + ongkir − diskon).
+ *   Diskon tidak boleh melebihi subtotal produk (dicek bila semua harga item terisi). Saat edit, field
+ *   yang tidak dikirim = nilai lama. Setelah SPP lunas (tanggal_lunas tersimpan dan tetap diisi),
+ *   ongkir & diskon dikunci: perubahan ditolak sampai tanggal lunas dikosongkan.
+ * - metode_dp, metode_lunas (opsional, App\Enums\MetodeBayar): hanya untuk SPP yang sudah masuk produksi;
+ *   kosong diizinkan untuk data lama. metode_lunas otomatis null bila tanggal_lunas kosong.
+ *   Field yang tidak dikirim = nilai lama.
  */
 class SimpanPesananRequest extends FormRequest
 {
@@ -83,8 +91,10 @@ class SimpanPesananRequest extends FormRequest
         // supaya ditolak aturan integer, bukan diubah diam-diam menjadi angka lain.
         $this->rapikanNomorSpp();
 
-        if ($this->has('dp')) {
-            $this->merge(['dp' => $this->keAngka($this->input('dp'))]);
+        foreach (['dp', 'ongkir', 'diskon'] as $rupiah) {
+            if ($this->has($rupiah)) {
+                $this->merge([$rupiah => $this->keAngka($this->input($rupiah))]);
+            }
         }
     }
 
@@ -148,6 +158,10 @@ class SimpanPesananRequest extends FormRequest
             'deadline'        => ['required', 'date', 'after_or_equal:tanggal_order'],
             'dp'              => $bayar ? ['required', 'integer', 'min:1'] : ['exclude'],
             'tanggal_lunas'   => $bayar ? [$this->lunasWajib() ? 'required' : 'nullable', 'date', 'after_or_equal:tanggal_order', 'before_or_equal:today'] : ['exclude'],
+            'metode_dp'       => $bayar ? ['nullable', Rule::enum(MetodeBayar::class)] : ['exclude'],
+            'metode_lunas'    => $bayar ? ['nullable', Rule::enum(MetodeBayar::class)] : ['exclude'],
+            'ongkir'          => ['sometimes', 'nullable', 'integer', 'min:0', 'max:' . self::MAKS_TOTAL],
+            'diskon'          => ['sometimes', 'nullable', 'integer', 'min:0', 'max:' . self::MAKS_TOTAL],
             'link_desain'     => ['nullable', 'url', 'max:500', 'starts_with:https://drive.google.com/,https://docs.google.com/'],
             'catatan_desain'  => ['nullable', 'string', 'max:5000'],
             'status_desain'   => ['nullable', Rule::enum(StatusDesain::class)],
@@ -197,22 +211,38 @@ class SimpanPesananRequest extends FormRequest
                 $validator->errors()->add('nomor_whatsapp', 'Nomor WhatsApp tidak valid. Contoh: 0812 3456 7890.');
             }
 
-            $total = $this->hitungTotal();
-            if ($total > self::MAKS_TOTAL) {
+            $subtotal = $this->hitungTotal();
+            if ($subtotal > self::MAKS_TOTAL) {
                 $validator->errors()->add('item', 'Total SPP terlalu besar.');
             }
 
             $pesanan = $this->pesananEdit();
+            $ongkir  = $this->nilaiBiaya('ongkir');
+            $diskon  = $this->nilaiBiaya('diskon');
+
+            if ($this->hargaItemLengkap() && $diskon > $subtotal) {
+                $validator->errors()->add('diskon', 'Diskon tidak boleh melebihi subtotal produk ('
+                    . self::rupiah($subtotal) . ').');
+            }
+
+            // Kunci setelah lunas: ongkir & diskon tidak boleh berubah selama SPP tetap tercatat lunas
+            $tetapLunas = $pesanan?->tanggal_lunas && (! $this->pakaiPembayaran() || $this->filled('tanggal_lunas'));
+            if ($tetapLunas && ($ongkir !== (int) $pesanan->ongkir || $diskon !== (int) $pesanan->diskon)) {
+                $validator->errors()->add($ongkir !== (int) $pesanan->ongkir ? 'ongkir' : 'diskon',
+                    'Ongkir dan diskon dikunci karena SPP sudah lunas. Kosongkan tanggal lunas dulu bila perlu dikoreksi.');
+            }
+
+            $total = Pesanan::hitungTotalTagihan($subtotal, $ongkir, $diskon);
 
             // DP yang dibandingkan: isian form (SPP produksi) atau DP yang sudah tercatat
             $dp = $this->pakaiPembayaran() ? (int) $this->input('dp', 0) : (int) ($pesanan?->dp ?? 0);
             if ($dp > $total) {
                 $validator->errors()->add($this->pakaiPembayaran() ? 'dp' : 'item',
-                    'DP (Rp ' . number_format($dp, 0, ',', '.') . ') tidak boleh lebih dari total SPP (Rp ' . number_format($total, 0, ',', '.') . ').');
+                    'DP (' . self::rupiah($dp) . ') tidak boleh lebih dari total tagihan (' . self::rupiah($total) . ').');
             }
 
             if ($this->pakaiPembayaran() && $this->filled('tanggal_lunas') && $total <= 0) {
-                $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total SPP lebih dari Rp 0.');
+                $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total tagihan lebih dari Rp 0.');
             }
 
             $sudahAda = $pesanan ? $pesanan->file()->count() : 0;
@@ -270,6 +300,12 @@ class SimpanPesananRequest extends FormRequest
             'nomor_whatsapp.regex'   => 'Nomor WhatsApp hanya boleh berisi angka, spasi, +, dan -.',
             'customer_id.exists'     => 'Customer yang dipilih tidak ditemukan. Pilih ulang atau kosongkan.',
             'jenis_deadline.in'      => 'Pilih jenis deadline: Siap atau Kirim.',
+            'ongkir.integer'         => 'Ongkir harus berupa angka rupiah, mis. 25.000.',
+            'ongkir.min'             => 'Ongkir tidak boleh kurang dari Rp 0.',
+            'diskon.integer'         => 'Diskon harus berupa angka rupiah, mis. 50.000.',
+            'diskon.min'             => 'Diskon tidak boleh kurang dari Rp 0.',
+            'metode_dp.enum'         => 'Pilih metode pembayaran DP.',
+            'metode_lunas.enum'      => 'Pilih metode pelunasan.',
         ];
     }
 
@@ -288,6 +324,10 @@ class SimpanPesananRequest extends FormRequest
             'deadline'       => 'Deadline',
             'dp'             => 'DP',
             'tanggal_lunas'  => 'Tanggal lunas',
+            'ongkir'         => 'Ongkir',
+            'diskon'         => 'Diskon',
+            'metode_dp'      => 'Metode DP',
+            'metode_lunas'   => 'Metode pelunasan',
             'link_desain'    => 'Link Google Drive',
             'catatan_desain' => 'Catatan desain',
             'status_desain'  => 'Status approval desain',
@@ -347,9 +387,55 @@ class SimpanPesananRequest extends FormRequest
         if ($this->pakaiPembayaran()) {
             $data['dp']            = (int) ($v['dp'] ?? 0);
             $data['tanggal_lunas'] = $v['tanggal_lunas'] ?? null;
+
+            if (array_key_exists('metode_dp', $v)) {
+                $data['metode_dp'] = $v['metode_dp'] ?: null;
+            }
+            if (array_key_exists('metode_lunas', $v)) {
+                $data['metode_lunas'] = $v['metode_lunas'] ?: null;
+            }
+            if ($data['tanggal_lunas'] === null) {
+                $data['metode_lunas'] = null;
+            }
+        }
+
+        // Ongkir & diskon: tidak dikirim saat edit = nilai lama; saat tambah = 0
+        foreach (['ongkir', 'diskon'] as $biaya) {
+            if (array_key_exists($biaya, $v) || ! $this->pesananEdit()) {
+                $data[$biaya] = (int) ($v[$biaya] ?? 0);
+            }
         }
 
         return $data;
+    }
+
+    /** Ongkir/diskon yang akan berlaku: isian form, nilai lama bila tidak dikirim (edit), atau 0. */
+    private function nilaiBiaya(string $field): int
+    {
+        if ($this->has($field)) {
+            return (int) $this->input($field, 0);
+        }
+
+        return (int) ($this->pesananEdit()?->{$field} ?? 0);
+    }
+
+    /** Semua item isian punya harga satuan (diskon baru dibandingkan dengan subtotal bila lengkap). */
+    private function hargaItemLengkap(): bool
+    {
+        $item = (array) $this->input('item', []);
+
+        foreach ($item as $baris) {
+            if (! isset($baris['harga_satuan']) || $baris['harga_satuan'] === '') {
+                return false;
+            }
+        }
+
+        return $item !== [];
+    }
+
+    private static function rupiah(int|float $n): string
+    {
+        return 'Rp ' . number_format($n, 0, ',', '.');
     }
 
     /** Customer yang dipilih admin (null = cari lewat WA / buat baru). */

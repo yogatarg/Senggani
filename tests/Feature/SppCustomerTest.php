@@ -72,7 +72,7 @@ class SppCustomerTest extends TestCase
     private function dp(Pesanan $pesanan, array $ubah = [])
     {
         return $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $pesanan), [
-            'dp' => '500.000', ...$ubah,
+            'dp' => '500.000', 'metode_dp' => 'transfer_bca', ...$ubah,
         ]);
     }
 
@@ -178,7 +178,7 @@ class SppCustomerTest extends TestCase
         $p = $this->buat();
 
         $this->dp($p, ['nomor_spp' => '999', 'dp' => '99.999.999'])
-            ->assertSessionHasErrors(['konfirmasi_nomor', 'dp' => 'DP tidak boleh lebih dari total SPP (Rp 2.150.000).']);
+            ->assertSessionHasErrors(['konfirmasi_nomor', 'dp' => 'DP tidak boleh lebih dari total tagihan (Rp 2.150.000).']);
     }
 
     // ── Nomor SPP: ganti setelah tersimpan ─────────────
@@ -236,7 +236,7 @@ class SppCustomerTest extends TestCase
         $p = $this->buat();
 
         try {
-            app(PesananService::class)->catatDp($p, 100000, now(), 176, $this->admin);
+            app(PesananService::class)->catatDp($p, 100000, now(), 176, \App\Enums\MetodeBayar::Cash, $this->admin);
             $this->fail('Seharusnya ValidationException.');
         } catch (ValidationException $e) {
             $this->assertSame(['nomor_spp' => ['SPP #176 sudah dipakai oleh Toko Sebelah.']], $e->errors());

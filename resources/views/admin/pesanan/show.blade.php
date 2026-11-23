@@ -39,7 +39,7 @@
     $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && Gate::allows('batalkan', $pesanan);
     $bisaHapus = Gate::allows('delete', $pesanan);
     $bisaPulihkan = $diArsipBatal && Gate::allows('pulihkan', $pesanan);
-    $bisaCatatLunas = $sudahProduksi && ! $pesanan->tanggal_lunas && (float) $pesanan->total > 0 && Gate::allows('catatLunas', $pesanan);
+    $bisaCatatLunas = $sudahProduksi && ! $pesanan->tanggal_lunas && $pesanan->total_tagihan > 0 && Gate::allows('catatLunas', $pesanan);
     $tampilHitungHarga = $hitungHarga && $bisaIsiHarga;
 
     // Ke Pengiriman dikunci sampai lunas (backend menolak; tombol ditampilkan nonaktif dengan keterangan)
@@ -50,13 +50,14 @@
     $riwayatTidakJadi = $tidakJadi ? $riwayat->first(fn ($r) => $r->status_ke === StatusProduksi::TidakJadi) : null;
 
     // Teks total: harga bisa belum lengkap sebelum produksi
+    // Total tagihan = subtotal produk + ongkir − diskon
     $teksTotal = $sudahProduksi || $pesanan->harga_lengkap
-        ? $rp($pesanan->total)
-        : ((float) $pesanan->total > 0 ? $rp($pesanan->total) . ' (belum lengkap)' : 'Belum dihitung');
+        ? $rp($pesanan->total_tagihan)
+        : ((float) $pesanan->total > 0 ? $rp($pesanan->total_tagihan) . ' (belum lengkap)' : 'Belum dihitung');
 
     // Modal yang dibuka ulang otomatis bila ada galat validasi dari form di dalamnya
-    $galatDp = $errors->hasAny(['dp', 'tanggal_dp', 'nomor_spp', 'konfirmasi_nomor', 'status']);
-    $galatLunas = $errors->has('tanggal_lunas');
+    $galatDp = $errors->hasAny(['dp', 'tanggal_dp', 'nomor_spp', 'konfirmasi_nomor', 'status', 'metode_dp']);
+    $galatLunas = $errors->hasAny(['tanggal_lunas', 'metode_lunas']);
     $saranNomorBaru = \App\Models\Pesanan::saranNomorSpp();
 
     $gid = fn (string $kunci) => 'g-' . str_replace('.', '-', $kunci);
@@ -95,6 +96,14 @@
             @if ($isAdmin)
                 <a href="{{ $pesanan->link_whatsapp }}" target="_blank" rel="noopener" class="sg-btn sg-btn-wa"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp Customer</a>
                 <a href="{{ route('admin.pesanan.edit', $pesanan) }}" class="sg-btn sg-btn-sekunder"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
+                {{-- PLACEHOLDER backend: frontend rapikan urutan, status sibuk & teks bantu (rancangan 5.1) --}}
+                @if ($bisaUnduhInvoice)
+                    <a href="{{ route('admin.pesanan.invoice', $pesanan) }}" class="sg-btn sg-btn-sekunder" download
+                       aria-label="Unduh invoice {{ $pesanan->nomor_invoice }} (PDF)"><i class="fa-solid fa-file-invoice" aria-hidden="true"></i> Invoice PDF</a>
+                @elseif ($hitungHarga)
+                    <span class="sg-btn sg-btn-sekunder" aria-disabled="true" aria-describedby="ket-invoice"><i class="fa-solid fa-lock" aria-hidden="true"></i> Invoice PDF</span>
+                    <span class="sg-kunci-ket" id="ket-invoice">Invoice tersedia setelah semua harga terisi.</span>
+                @endif
             @endif
             @if ($teksSpp)
                 <button type="button" class="sg-btn sg-btn-sekunder d-xl-none" data-salin-teks="#teks-spp"><i class="fa-regular fa-copy" aria-hidden="true"></i> <span data-salin-label>Salin teks SPP</span></button>
@@ -576,7 +585,7 @@
     @endphp
     <div class="modal fade modal-sheet" id="modalCatatDp" tabindex="-1" aria-labelledby="modalCatatDpJudul" aria-hidden="true" @if ($galatDp) data-buka-otomatis @endif>
         <div class="modal-dialog modal-dialog-centered">
-            <form class="modal-content" method="POST" action="{{ route('admin.pesanan.dp', $pesanan) }}" data-kirim data-form-dp data-total="{{ (int) $pesanan->total }}" novalidate>
+            <form class="modal-content" method="POST" action="{{ route('admin.pesanan.dp', $pesanan) }}" data-kirim data-form-dp data-total="{{ (int) $pesanan->total_tagihan }}" novalidate>
                 @csrf
                 <div class="modal-header">
                     <h2 class="modal-title" id="modalCatatDpJudul">Catat DP &amp; masukkan ke produksi</h2>
@@ -584,7 +593,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="m-0 sg-muted">{{ $pesanan->kode_tampil }} · {{ $pesanan->nama_customer }}</p>
-                    <div class="sg-total-dp"><span>Total SPP</span><strong>{{ $rp($pesanan->total) }}</strong></div>
+                    <div class="sg-total-dp"><span>Total tagihan</span><strong>{{ $rp($pesanan->total_tagihan) }}</strong></div>
                     @error('status')<p class="sg-galat mb-3"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
 
                     <div class="sg-field">
@@ -597,6 +606,19 @@
                         </div>
                         @error('dp')<p class="sg-galat" id="g-dp"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
                         <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
+                    </div>
+
+                    {{-- PLACEHOLDER backend: frontend ganti dengan ubin radio tanpa pilihan bawaan (rancangan 5.2) --}}
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-metode_dp">Metode pembayaran <span class="sg-wajib" aria-hidden="true">*</span></label>
+                        <select id="f-metode_dp" name="metode_dp" required class="form-select @error('metode_dp') is-invalid @enderror"
+                                @error('metode_dp') aria-invalid="true" aria-describedby="g-metode_dp" @enderror>
+                            <option value="">Pilih metode…</option>
+                            @foreach ($metodeBayar as $nilai => $label)
+                                <option value="{{ $nilai }}" @selected(old('metode_dp') === $nilai)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        @error('metode_dp')<p class="sg-galat" id="g-metode_dp"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
                     </div>
 
                     <div class="sg-field">
@@ -658,6 +680,16 @@
                 <div class="modal-body">
                     <p class="m-0 sg-muted">{{ $pesanan->kode_tampil }} · {{ $pesanan->nama_customer }}</p>
                     <div class="sg-total-dp"><span>Sisa tagihan</span><strong>{{ $rp($pesanan->sisa) }}</strong></div>
+                    {{-- PLACEHOLDER backend: frontend ganti dengan ubin radio tanpa pilihan bawaan (rancangan 5.2) --}}
+                    <label for="f-metode_lunas" class="sg-label">Metode pembayaran <span class="sg-wajib" aria-hidden="true">*</span></label>
+                    <select id="f-metode_lunas" name="metode_lunas" required class="form-select mb-3 @error('metode_lunas') is-invalid @enderror"
+                            @error('metode_lunas') aria-invalid="true" aria-describedby="g-metode_lunas" @enderror>
+                        <option value="">Pilih metode…</option>
+                        @foreach ($metodeBayar as $nilai => $label)
+                            <option value="{{ $nilai }}" @selected(old('metode_lunas') === $nilai)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('metode_lunas')<p class="sg-galat" id="g-metode_lunas"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{{ $message }}</p>@enderror
                     <label for="f-tanggal_lunas" class="sg-label">Tanggal lunas</label>
                     <input type="date" id="f-tanggal_lunas" name="tanggal_lunas" value="{{ old('tanggal_lunas', today()->toDateString()) }}"
                            min="{{ $pesanan->tanggal_order?->toDateString() }}" max="{{ today()->toDateString() }}"

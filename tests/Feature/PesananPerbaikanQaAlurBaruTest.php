@@ -68,7 +68,7 @@ class PesananPerbaikanQaAlurBaruTest extends TestCase
     {
         $p = $this->buat($ubah);
         $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $p), [
-            'dp' => '1.000.000', 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1',
+            'dp' => '1.000.000', 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1', 'metode_dp' => 'transfer_bca',
         ])->assertSessionHasNoErrors();
 
         $p->forceFill(['status_produksi' => $status, ...$kolom])->save();
@@ -160,7 +160,7 @@ class PesananPerbaikanQaAlurBaruTest extends TestCase
         // Saran itu sendiri lolos validasi Catat DP
         $c = $this->buat(['nomor_whatsapp' => '0813 1111 4444']);
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $c))->assertViewHas('saranNomor', 179);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $c), ['dp' => '1.000.000', 'nomor_spp' => '179'])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $c), ['dp' => '1.000.000', 'nomor_spp' => '179', 'metode_dp' => 'cash'])
             ->assertSessionHasNoErrors();
         $this->assertSame(179, $c->fresh()->nomor_spp);
         $this->assertSame(180, Pesanan::saranNomorSpp());
@@ -175,11 +175,11 @@ class PesananPerbaikanQaAlurBaruTest extends TestCase
 
         // Saran juga dipakai sebagai acuan nomor loncat: 177 tidak dianggap loncat
         $c = $this->buat(['nomor_whatsapp' => '0813 1111 4444']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $c), ['dp' => '1.000.000', 'nomor_spp' => '177'])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $c), ['dp' => '1.000.000', 'nomor_spp' => '177', 'metode_dp' => 'cash'])
             ->assertSessionHasNoErrors();
         // Nomor typo yang dihapus tetap tidak boleh dipakai ulang
         $d = $this->buat(['nomor_whatsapp' => '0813 1111 5555']);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $d), ['dp' => '1.000.000', 'nomor_spp' => '1776', 'konfirmasi_nomor' => '1'])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $d), ['dp' => '1.000.000', 'nomor_spp' => '1776', 'konfirmasi_nomor' => '1', 'metode_dp' => 'cash'])
             ->assertSessionHasErrors('nomor_spp');
     }
 

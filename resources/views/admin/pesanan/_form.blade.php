@@ -332,7 +332,30 @@
                 </div>
             </div>
 
-            <div class="sg-otomatis"><span>Total <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
+            <div class="sg-otomatis"><span>Subtotal produk <span class="sg-kecil sg-muted">(otomatis)</span></span><strong data-total>Rp 0</strong></div>
+
+            {{-- PLACEHOLDER backend: ongkir & diskon (frontend: hitung total tagihan langsung di JS, rancangan 5.3) --}}
+            @php
+                $biayaTampil = fn (string $f) => old($f, (float) $pesanan->{$f} > 0 ? number_format((float) $pesanan->{$f}, 0, ',', '.') : '');
+            @endphp
+            <div class="sg-dua mt-2">
+                @foreach (['ongkir' => 'Ongkir', 'diskon' => 'Diskon'] as $f => $lbl)
+                    <div class="sg-field">
+                        <label class="sg-label" for="f-{{ $f }}">{{ $lbl }} <span class="fw-normal sg-muted">(opsional)</span></label>
+                        <div class="sg-imbuh sg-imbuh-depan">
+                            <span class="sg-imbuh-teks" aria-hidden="true">Rp</span>
+                            <input type="text" inputmode="numeric" id="f-{{ $f }}" name="{{ $f }}" value="{{ $biayaTampil($f) }}" autocomplete="off" placeholder="0"
+                                   class="form-control sg-angka @error($f) is-invalid @enderror" data-rupiah data-{{ $f }}
+                                   @error($f) aria-invalid="true" aria-describedby="{{ $gid($f) }}" @enderror>
+                        </div>
+                        {!! $galat($f) !!}
+                        @if ($f === 'diskon')<p class="sg-bantu">Potongan dalam rupiah.</p>@endif
+                    </div>
+                @endforeach
+            </div>
+            @if ($pesanan->exists && ((float) $pesanan->ongkir > 0 || (float) $pesanan->diskon > 0))
+                <p class="sg-bantu">Total tagihan tersimpan: Rp {{ number_format($pesanan->total_tagihan, 0, ',', '.') }}</p>
+            @endif
 
             @if ($pakaiBayar)
             <div class="sg-dua mt-2">
@@ -348,6 +371,15 @@
                     {!! $galat('dp') !!}
                     <p class="sg-bantu" id="bantu-dp">SPP sudah masuk produksi, DP wajib diisi minimal Rp 1.</p>
                     <p class="sg-galat" id="peringatan-dp" data-peringatan-dp hidden><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span></span></p>
+                    {{-- PLACEHOLDER backend: frontend ganti dengan ubin radio (rancangan 5.2) --}}
+                    <label class="sg-label mt-2" for="f-metode_dp">Metode DP</label>
+                    <select id="f-metode_dp" name="metode_dp" class="form-select @error('metode_dp') is-invalid @enderror">
+                        <option value="">Belum dicatat</option>
+                        @foreach ($metodeBayar as $nilai => $label)
+                            <option value="{{ $nilai }}" @selected(old('metode_dp', $pesanan->metode_dp?->value) === $nilai)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    {!! $galat('metode_dp') !!}
                 </div>
                 <div class="sg-field">
                     <label class="sg-label" for="f-tanggal_lunas">Tanggal lunas @if ($lunasWajib)<span class="sg-wajib" aria-hidden="true">*</span>@endif</label>
@@ -356,6 +388,15 @@
                            aria-describedby="bantu-lunas {{ $errors->has('tanggal_lunas') ? $gid('tanggal_lunas') : '' }}" @error('tanggal_lunas') aria-invalid="true" @enderror>
                     {!! $galat('tanggal_lunas') !!}
                     <p class="sg-bantu" id="bantu-lunas">{{ $lunasWajib ? 'Kembalikan status ke Pesanan Selesai bila pelunasan perlu dikoreksi.' : 'Isi bila customer sudah melunasi.' }}</p>
+                    {{-- PLACEHOLDER backend: frontend tampilkan hanya bila tanggal lunas terisi (rancangan 5.2) --}}
+                    <label class="sg-label mt-2" for="f-metode_lunas">Metode pelunasan</label>
+                    <select id="f-metode_lunas" name="metode_lunas" class="form-select @error('metode_lunas') is-invalid @enderror">
+                        <option value="">Belum dicatat</option>
+                        @foreach ($metodeBayar as $nilai => $label)
+                            <option value="{{ $nilai }}" @selected(old('metode_lunas', $pesanan->metode_lunas?->value) === $nilai)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    {!! $galat('metode_lunas') !!}
                 </div>
             </div>
 

@@ -76,7 +76,7 @@ class PesananTest extends TestCase
     private function masukProduksi(Pesanan $pesanan, int $nomor = 1, int $dp = 500000): Pesanan
     {
         $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $pesanan), [
-            'dp' => (string) $dp, 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1',
+            'dp' => (string) $dp, 'nomor_spp' => (string) $nomor, 'konfirmasi_nomor' => '1', 'metode_dp' => 'transfer_bca',
         ])->assertSessionHasNoErrors();
 
         return $pesanan->fresh();
@@ -285,14 +285,14 @@ class PesananTest extends TestCase
             ->assertSessionHasErrors(['tanggal_lunas' => 'Pelunasan dicatat setelah DP dicatat dan SPP masuk produksi.']);
 
         $pesanan = $this->masukProduksi($pesanan);
-        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan))->assertRedirect();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan), ['metode_lunas' => 'qris'])->assertRedirect();
 
         $pesanan->refresh();
         $this->assertSame('lunas', $pesanan->status_pembayaran);
         $this->assertTrue($pesanan->tanggal_lunas->isToday());
         $this->assertSame('proses', $pesanan->status_produksi->value);
 
-        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan), ['tanggal_lunas' => today()->addDay()->toDateString()])
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $pesanan), ['tanggal_lunas' => today()->addDay()->toDateString(), 'metode_lunas' => 'qris'])
             ->assertSessionHasErrors('tanggal_lunas');
     }
 

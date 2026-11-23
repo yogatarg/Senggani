@@ -84,7 +84,7 @@ class PesananAlurBaruTest extends TestCase
     private function catatDp(Pesanan $p, array $ubah = [])
     {
         return $this->sebagai($this->admin)->post(route('admin.pesanan.dp', $p), [
-            'dp' => '1.000.000', 'nomor_spp' => '176', ...$ubah,
+            'dp' => '1.000.000', 'nomor_spp' => '176', 'metode_dp' => 'transfer_bca', ...$ubah,
         ]);
     }
 
@@ -184,7 +184,7 @@ class PesananAlurBaruTest extends TestCase
         $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), ['harga' => [$id => '']])
             ->assertSessionHasErrors("harga.{$id}");
         $this->sebagai($this->admin)->post(route('admin.pesanan.harga', $p), ['harga' => $this->harga($p, ['1', '1'])])
-            ->assertSessionHasErrors(['harga' => 'Total baru (Rp 600) lebih kecil dari DP yang sudah dicatat (Rp 1.000.000).']);
+            ->assertSessionHasErrors(['harga' => 'Total tagihan baru (Rp 600) lebih kecil dari DP yang sudah dicatat (Rp 1.000.000).']);
         $this->assertEquals(2700000, (float) $p->fresh()->total);
 
         // Item SPP lain ditolak
@@ -247,7 +247,7 @@ class PesananAlurBaruTest extends TestCase
         $this->assertStringContainsString('Detail SPP: ' . route('admin.pesanan.show', $p), $p->teks_spp);
         $this->assertDatabaseHas('pesanan_riwayat', [
             'pesanan_id' => $p->id, 'status_dari' => 'menunggu_dp', 'status_ke' => 'proses',
-            'catatan' => 'DP Rp 1.000.000 dicatat (19/11/2026), nomor SPP #176', 'nama_pengguna' => 'Rina CS',
+            'catatan' => 'DP Rp 1.000.000 via Transfer BCA dicatat (19/11/2026), nomor SPP #176', 'nama_pengguna' => 'Rina CS',
         ]);
 
         // Tanggal DP kosong = hari ini
@@ -257,7 +257,7 @@ class PesananAlurBaruTest extends TestCase
 
         // JSON
         $r = $this->buatBerharga();
-        $this->sebagai($this->admin)->postJson(route('admin.pesanan.dp', $r), ['dp' => '100000', 'nomor_spp' => '178'])
+        $this->sebagai($this->admin)->postJson(route('admin.pesanan.dp', $r), ['dp' => '100000', 'nomor_spp' => '178', 'metode_dp' => 'qris'])
             ->assertOk()->assertJson(['status' => 'proses', 'kode_tampil' => 'SPP #178']);
     }
 
@@ -267,7 +267,7 @@ class PesananAlurBaruTest extends TestCase
 
         $this->catatDp($p, ['dp' => '0'])->assertSessionHasErrors(['dp' => 'DP harus lebih dari Rp 0.']);
         $this->catatDp($p, ['dp' => ''])->assertSessionHasErrors(['dp' => 'DP wajib diisi.']);
-        $this->catatDp($p, ['dp' => '2.350.001'])->assertSessionHasErrors(['dp' => 'DP tidak boleh lebih dari total SPP (Rp 2.350.000).']);
+        $this->catatDp($p, ['dp' => '2.350.001'])->assertSessionHasErrors(['dp' => 'DP tidak boleh lebih dari total tagihan (Rp 2.350.000).']);
         $this->catatDp($p, ['tanggal_dp' => '2026-11-20'])->assertSessionHasErrors(['tanggal_dp' => 'Tanggal DP tidak boleh setelah hari ini.']);
         $this->catatDp($p, ['dp' => '2.350.000'])->assertSessionHasNoErrors(); // DP = total boleh
 
@@ -377,7 +377,7 @@ class PesananAlurBaruTest extends TestCase
         $this->assertSame(StatusProduksi::SelesaiProduksi, $p->fresh()->status_produksi);
         $this->assertSame(0, $p->riwayat()->count());
 
-        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p))->assertSessionHasNoErrors();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
         $this->assertFalse($p->fresh()->menunggu_pelunasan);
 
         $this->sebagai($this->produksi)->post(route('admin.pesanan.status', $p), $kirim)->assertSessionHas('success');

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\MetodeBayar;
 use App\Enums\StatusProduksi;
 use App\Exceptions\AksiDitolak;
 use App\Exceptions\StatusBentrok;
@@ -52,7 +53,7 @@ class PesananService
         $dipindah = [];
         $this->infoCustomer = null;
 
-        unset($data['nomor_spp'], $data['dp'], $data['tanggal_dp'], $data['tanggal_lunas']);
+        unset($data['nomor_spp'], $data['dp'], $data['tanggal_dp'], $data['tanggal_lunas'], $data['metode_dp'], $data['metode_lunas']);
 
         try {
             return DB::transaction(function () use ($data, $item, $fileBaru, $oleh, $customerId, $perbaruiCustomer, &$dipindah) {
@@ -121,7 +122,9 @@ class PesananService
 
                 $nomorLama = (int) $pesanan->nomor_spp;
                 $nomorBaru = (int) ($data['nomor_spp'] ?? $nomorLama);
-                $totalLama = (float) $pesanan->total;
+                $totalLama  = (float) $pesanan->total;
+                $ongkirLama = (float) $pesanan->ongkir;
+                $diskonLama = (float) $pesanan->diskon;
 
                 // customer_id kosong: tetap customer lama, kecuali admin menekan "Lepas" (lepas_customer=1)
                 // sehingga customer ditentukan ulang dari isian seperti saat tambah SPP.
@@ -143,6 +146,14 @@ class PesananService
                 if ($totalLama !== (float) $pesanan->total) {
                     $this->catat($pesanan, $oleh, null, null, 'Harga diubah oleh ' . $oleh->nama . ': total '
                         . self::rupiah($totalLama) . ' → ' . self::rupiah((float) $pesanan->total));
+                }
+                if ($ongkirLama !== (float) $pesanan->ongkir) {
+                    $this->catat($pesanan, $oleh, null, null, 'Ongkir diubah oleh ' . $oleh->nama . ': '
+                        . self::rupiah($ongkirLama) . ' → ' . self::rupiah((float) $pesanan->ongkir));
+                }
+                if ($diskonLama !== (float) $pesanan->diskon) {
+                    $this->catat($pesanan, $oleh, null, null, 'Diskon diubah oleh ' . $oleh->nama . ': '
+                        . self::rupiah($diskonLama) . ' → ' . self::rupiah((float) $pesanan->diskon));
                 }
                 $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
 
@@ -316,7 +327,7 @@ class PesananService
      * @return string pesan untuk pengguna
      *
      * @throws AksiDitolak bila produksi menyimpan setelah status bukan hitung_harga lagi
-     * @throws ValidationException bila total baru lebih kecil dari DP
+     * @throws ValidationException bila total tagihan baru lebih kecil dari DP, atau diskon melebihi subtotal
      */
     public function isiHarga(Pesanan $pesanan, array $harga, ?string $catatan, Admin $oleh): string
     {
@@ -352,9 +363,20 @@ class PesananService
                 $total += (int) $d->subtotal;
             }
 
-            if ($total < (float) $segar->dp) {
+            $lengkap = $item->every(fn ($d) => $d->harga_satuan !== null);
+
+            // Diskon dibandingkan dengan subtotal hanya bila semua harga sudah terisi
+            if ($lengkap && (float) $segar->diskon > $total) {
                 throw ValidationException::withMessages([
-                    'harga' => 'Total baru (' . self::rupiah($total) . ') lebih kecil dari DP yang sudah dicatat ('
+                    'harga' => 'Subtotal produk baru (' . self::rupiah($total) . ') lebih kecil dari diskon ('
+                        . self::rupiah((float) $segar->diskon) . '). Ubah diskon di form SPP dulu.',
+                ]);
+            }
+
+            $tagihan = Pesanan::hitungTotalTagihan($total, $segar->ongkir, $segar->diskon);
+            if ($tagihan < (float) $segar->dp) {
+                throw ValidationException::withMessages([
+                    'harga' => 'Total tagihan baru (' . self::rupiah($tagihan) . ') lebih kecil dari DP yang sudah dicatat ('
                         . self::rupiah((float) $segar->dp) . ').',
                 ]);
             }
@@ -367,7 +389,6 @@ class PesananService
             $segar->touch();
 
             $tambahan = filled($catatan) ? "\nCatatan: " . trim($catatan) : '';
-            $lengkap  = $item->every(fn ($d) => $d->harga_satuan !== null);
 
             if ($status === StatusProduksi::HitungHarga && $lengkap) {
                 $this->pindahStatusDalamTransaksi($segar, StatusProduksi::HitungHarga, StatusProduksi::MenungguDp,
@@ -412,16 +433,22 @@ class PesananService
      * @throws StatusBentrok bila status bukan menunggu_dp lagi
      * @throws ValidationException bila nomor SPP keduluan admin lain (indeks unik)
      */
-    public function catatDp(Pesanan $pesanan, int $dp, Carbon $tanggal, int $nomor, Admin $oleh): void
+    public function catatDp(Pesanan $pesanan, int $dp, Carbon $tanggal, int $nomor, MetodeBayar $metode, Admin $oleh): void
     {
         $nomorLama = $pesanan->nomor_spp ? (int) $pesanan->nomor_spp : null;
 
         try {
             $this->pindahStatus(
                 $pesanan, StatusProduksi::MenungguDp, StatusProduksi::Proses,
-                'DP ' . self::rupiah($dp) . ' dicatat (' . $tanggal->translatedFormat('d/m/Y') . "), nomor SPP #{$nomor}",
+                'DP ' . self::rupiah($dp) . ' via ' . $metode->label() . ' dicatat ('
+                    . $tanggal->translatedFormat('d/m/Y') . "), nomor SPP #{$nomor}",
                 $oleh,
-                kolom: ['dp' => $dp, 'tanggal_dp' => $tanggal->toDateString(), 'nomor_spp' => $nomor],
+                kolom: [
+                    'dp'         => $dp,
+                    'tanggal_dp' => $tanggal->toDateString(),
+                    'metode_dp'  => $metode->value,
+                    'nomor_spp'  => $nomor,
+                ],
                 setelah: function (Pesanan $p) use ($nomorLama, $nomor, $oleh) {
                     if ($nomorLama && $nomorLama !== $nomor) {
                         $this->catat($p, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomor} oleh {$oleh->nama}");
@@ -657,11 +684,12 @@ class PesananService
         return $riwayat;
     }
 
-    public function catatLunas(Pesanan $pesanan, Carbon $tanggal, Admin $oleh): void
+    public function catatLunas(Pesanan $pesanan, Carbon $tanggal, MetodeBayar $metode, Admin $oleh): void
     {
-        DB::transaction(function () use ($pesanan, $tanggal, $oleh) {
-            $pesanan->update(['tanggal_lunas' => $tanggal->toDateString()]);
-            $this->catat($pesanan, $oleh, null, null, 'Pelunasan dicatat, tanggal ' . $tanggal->translatedFormat('d/m/Y'));
+        DB::transaction(function () use ($pesanan, $tanggal, $metode, $oleh) {
+            $pesanan->update(['tanggal_lunas' => $tanggal->toDateString(), 'metode_lunas' => $metode]);
+            $this->catat($pesanan, $oleh, null, null, 'Pelunasan via ' . $metode->label() . ' dicatat, tanggal '
+                . $tanggal->translatedFormat('d/m/Y'));
         });
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MetodeBayar;
 use App\Enums\StatusDesain;
 use App\Enums\StatusProduksi;
 use Illuminate\Database\Eloquent\Builder;
@@ -69,9 +70,23 @@ class Pesanan extends Model
         'lunas'    => 'Lunas',
     ];
 
+    // Status bayar di invoice PDF (lihat statusBayarInvoice)
+    public const STATUS_BAYAR_INVOICE = [
+        'belum_bayar' => 'BELUM BAYAR',
+        'dp'          => 'DP',
+        'lunas'       => 'LUNAS',
+    ];
+
+    // Invoice tersedia untuk status ini (Hitung Harga: harga belum lengkap; Tidak Jadi/Dibatalkan: tidak ada tagihan)
+    public const STATUS_INVOICE = ['menunggu_dp', 'proses', 'selesai_produksi', 'pengiriman', 'selesai'];
+
+    // Awalan nomor invoice: INV-176 setelah DP (nomor SPP), INV-PNW-23 sebelumnya
+    public const AWALAN_INVOICE = 'INV-';
+
     protected $fillable = [
         'nomor_spp', 'customer_id', 'nama_customer', 'nama_brand', 'nomor_whatsapp', 'alamat', 'kota',
-        'tanggal_order', 'deadline', 'jenis_deadline', 'total', 'dp', 'tanggal_dp', 'tanggal_lunas',
+        'tanggal_order', 'deadline', 'jenis_deadline', 'total', 'ongkir', 'diskon', 'dp', 'tanggal_dp', 'metode_dp',
+        'tanggal_lunas', 'metode_lunas',
         'link_desain', 'catatan_desain', 'status_desain', 'catatan_admin', 'catatan_harga',
         'status_produksi', 'selesai_pada', 'dibuat_oleh',
     ];
@@ -81,6 +96,8 @@ class Pesanan extends Model
         'status_desain'   => 'belum_dikirim',
         'jenis_deadline'  => 'kirim',
         'total'           => 0,
+        'ongkir'          => 0,
+        'diskon'          => 0,
         'dp'              => 0,
     ];
 
@@ -94,7 +111,11 @@ class Pesanan extends Model
             'tanggal_lunas'   => 'date',
             'selesai_pada'    => 'datetime',
             'total'           => 'decimal:2',
+            'ongkir'          => 'decimal:2',
+            'diskon'          => 'decimal:2',
             'dp'              => 'decimal:2',
+            'metode_dp'       => MetodeBayar::class,
+            'metode_lunas'    => MetodeBayar::class,
             'status_produksi' => StatusProduksi::class,
             'status_desain'   => StatusDesain::class,
         ];
@@ -128,13 +149,79 @@ class Pesanan extends Model
     }
 
     // ── Pembayaran (dihitung) ──────────────────────────
+    //
+    // Kolom `total` = subtotal produk (jumlah subtotal item, dihitung PesananService).
+    // Total tagihan = subtotal produk + ongkir − diskon; semua hitungan sisa, status bayar,
+    // batas DP, dan syarat lunas memakai total tagihan.
 
-    /** Sisa tagihan: 0 bila sudah lunas, selain itu max(total − dp, 0). */
+    /** Subtotal produk (alias kolom total). */
+    protected function subtotalProduk(): Attribute
+    {
+        return Attribute::get(fn () => round((float) $this->total, 2));
+    }
+
+    /** Subtotal produk + ongkir − diskon (tidak pernah negatif). */
+    protected function totalTagihan(): Attribute
+    {
+        return Attribute::get(fn () => self::hitungTotalTagihan($this->total, $this->ongkir, $this->diskon));
+    }
+
+    public static function hitungTotalTagihan(mixed $subtotal, mixed $ongkir, mixed $diskon): float
+    {
+        return max(round((float) $subtotal + (float) $ongkir - (float) $diskon, 2), 0.0);
+    }
+
+    /** Sisa tagihan: 0 bila sudah lunas, selain itu max(total tagihan − dp, 0). */
     protected function sisa(): Attribute
     {
         return Attribute::get(fn () => $this->tanggal_lunas
             ? 0.0
-            : max(round((float) $this->total - (float) $this->dp, 2), 0.0));
+            : max(round($this->total_tagihan - (float) $this->dp, 2), 0.0));
+    }
+
+    /** DP melebihi total tagihan (mis. diskon ditambah setelah DP). 0 bila tidak. */
+    protected function kelebihanBayar(): Attribute
+    {
+        return Attribute::get(fn () => max(round((float) $this->dp - $this->total_tagihan, 2), 0.0));
+    }
+
+    /** Nilai pelunasan = total tagihan − DP (0 bila belum lunas atau DP sudah menutup total). */
+    protected function nilaiPelunasan(): Attribute
+    {
+        return Attribute::get(fn () => $this->tanggal_lunas
+            ? max(round($this->total_tagihan - (float) $this->dp, 2), 0.0)
+            : 0.0);
+    }
+
+    /**
+     * Status bayar di invoice: lunas (tanggal_lunas terisi atau DP >= total tagihan > 0),
+     * dp (0 < DP < total tagihan), belum_bayar (DP 0).
+     */
+    protected function statusBayarInvoice(): Attribute
+    {
+        return Attribute::get(function () {
+            $total = $this->total_tagihan;
+
+            if ($this->tanggal_lunas || ($total > 0 && (float) $this->dp >= $total)) {
+                return 'lunas';
+            }
+
+            return (float) $this->dp > 0 ? 'dp' : 'belum_bayar';
+        });
+    }
+
+    /** "INV-176" bila sudah bernomor SPP, "INV-PNW-23" sebelum DP, "INV-CONTOH" untuk data contoh. */
+    protected function nomorInvoice(): Attribute
+    {
+        return Attribute::get(fn () => self::AWALAN_INVOICE . ($this->nomor_spp
+            ? $this->nomor_spp
+            : ($this->kode_penawaran ?? 'CONTOH')));
+    }
+
+    /** Status SPP mengizinkan invoice (hak akses admin dicek di PesananPolicy::unduhInvoice). */
+    protected function bisaInvoice(): Attribute
+    {
+        return Attribute::get(fn () => in_array($this->status_produksi?->value, self::STATUS_INVOICE, true));
     }
 
     /** belum_dp | dp | lunas. "Lunas" hanya ditentukan oleh tanggal_lunas. */
@@ -365,6 +452,19 @@ class Pesanan extends Model
                 $blok[] = [$deadline];
             }
 
+            // Ongkir/diskon/total hanya bila ada ongkir atau diskon, supaya SPP biasa tetap format lama
+            if ((float) $this->ongkir > 0 || (float) $this->diskon > 0) {
+                $biaya = [];
+                if ((float) $this->ongkir > 0) {
+                    $biaya[] = '🚚 Ongkir: ' . self::rupiahSpp($this->ongkir);
+                }
+                if ((float) $this->diskon > 0) {
+                    $biaya[] = '🏷️ Diskon: -' . self::rupiahSpp($this->diskon);
+                }
+                $biaya[] = '💰 Total: ' . self::rupiahSpp($this->total_tagihan);
+                $blok[] = $biaya;
+            }
+
             $akhir = [];
             if (filled($this->link_desain)) {
                 $akhir[] = 'File Desain: ' . $this->link_desain;
@@ -392,12 +492,7 @@ class Pesanan extends Model
 
         $baris[] = 'Jumlah: ' . number_format((int) $d->jumlah, 0, ',', '.') . ' pcs';
 
-        $bahan = array_filter([
-            trim($d->jenis_bahan . ' ' . $d->gramasi),
-            ...$d->daftar_finishing,
-            trim($d->jenis_cetak . ' ' . $d->warna_cetak),
-            trim((string) $d->aksesori),
-        ], fn ($b) => $b !== '');
+        $bahan = self::spekItem($d);
         if ($bahan) {
             $baris[] = 'Bahan: ' . implode(' + ', $bahan);
         }
@@ -411,6 +506,22 @@ class Pesanan extends Model
         return $baris;
     }
 
+    /**
+     * Spek item (bahan gramasi, finishing…, cetak warna, aksesori; yang kosong dilewati).
+     * Urutan sama dengan baris "Bahan:" di teks SPP; dipakai juga invoice PDF.
+     *
+     * @return list<string>
+     */
+    public static function spekItem(DetailPesanan $d): array
+    {
+        return array_values(array_filter([
+            trim($d->jenis_bahan . ' ' . $d->gramasi),
+            ...$d->daftar_finishing,
+            trim($d->jenis_cetak . ' ' . $d->warna_cetak),
+            trim((string) $d->aksesori),
+        ], fn ($b) => $b !== ''));
+    }
+
     /** "📌Harga : Rp4.300 /pcs" (dilewati bila harga kosong/0). */
     private function barisHarga(DetailPesanan $d): ?string
     {
@@ -419,6 +530,12 @@ class Pesanan extends Model
         }
 
         return '📌Harga : Rp' . number_format((float) $d->harga_satuan, 0, ',', '.') . ' /pcs';
+    }
+
+    /** Rupiah gaya teks SPP: "Rp25.000" (tanpa spasi). */
+    private static function rupiahSpp(mixed $n): string
+    {
+        return 'Rp' . number_format((float) $n, 0, ',', '.');
     }
 
     /** 33.00 → "33", 12.50 → "12,5" */

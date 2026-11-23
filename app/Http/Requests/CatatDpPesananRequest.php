@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\MetodeBayar;
 use App\Enums\StatusProduksi;
 use App\Http\Requests\Concerns\AngkaRupiah;
 use App\Http\Requests\Concerns\PeriksaNomorSpp;
@@ -9,13 +10,16 @@ use App\Http\Requests\Concerns\PesanIndonesia;
 use App\Models\Pesanan;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
  * "Catat DP & masukkan ke produksi" (khusus admin, status menunggu_dp).
  *
  * Field:
- * - dp: rupiah > 0 dan ≤ total ("Rp 500.000" diterima).
+ * - dp: rupiah > 0 dan ≤ total tagihan (subtotal + ongkir − diskon; "Rp 500.000" diterima).
+ * - metode_dp: wajib, nilai App\Enums\MetodeBayar (cash, transfer_bca, transfer_bri, qris).
+ *   Field `metode` diterima sebagai alias.
  * - tanggal_dp (opsional, bawaan hari ini): antara tanggal SPP dan hari ini.
  * - nomor_spp: angka bulat ≥1 ("#176" / "SPP #176" diterima), unik termasuk SPP terhapus.
  *   Saran: Pesanan::saranNomorSpp() (atau nomor lama bila SPP sudah pernah bernomor).
@@ -39,6 +43,10 @@ class CatatDpPesananRequest extends FormRequest
             $this->merge(['tanggal_dp' => today()->toDateString()]);
         }
         $this->rapikanNomorSpp();
+
+        if (! $this->has('metode_dp') && $this->has('metode')) {
+            $this->merge(['metode_dp' => $this->input('metode')]);
+        }
     }
 
     public function rules(): array
@@ -52,6 +60,7 @@ class CatatDpPesananRequest extends FormRequest
             ])),
             'nomor_spp'        => ['required', 'integer', 'min:1', 'max:' . self::MAKS_NOMOR],
             'konfirmasi_nomor' => ['nullable', 'boolean'],
+            'metode_dp'        => ['required', Rule::enum(MetodeBayar::class)],
         ];
     }
 
@@ -68,9 +77,9 @@ class CatatDpPesananRequest extends FormRequest
                 return;
             }
 
-            $total = (float) $pesanan->total;
+            $total = $pesanan->total_tagihan;
             if (! $validator->errors()->has('dp') && (int) $this->input('dp') > $total) {
-                $validator->errors()->add('dp', 'DP tidak boleh lebih dari total SPP (Rp '
+                $validator->errors()->add('dp', 'DP tidak boleh lebih dari total tagihan (Rp '
                     . number_format($total, 0, ',', '.') . ').');
             }
 
@@ -102,11 +111,18 @@ class CatatDpPesananRequest extends FormRequest
             'tanggal_dp.after_or_equal'  => 'Tanggal DP tidak boleh sebelum tanggal SPP'
                 . ($tanggalSpp ? ' (' . $tanggalSpp->locale('id')->translatedFormat('j F Y') . ').' : '.'),
             'tanggal_dp.before_or_equal' => 'Tanggal DP tidak boleh setelah hari ini.',
+            'metode_dp.required'         => 'Pilih metode pembayaran.',
+            'metode_dp.enum'             => 'Pilih metode pembayaran.',
         ];
     }
 
     public function attributes(): array
     {
-        return ['dp' => 'DP', 'tanggal_dp' => 'Tanggal DP', 'nomor_spp' => 'Nomor SPP'];
+        return ['dp' => 'DP', 'tanggal_dp' => 'Tanggal DP', 'nomor_spp' => 'Nomor SPP', 'metode_dp' => 'Metode pembayaran'];
+    }
+
+    public function metode(): MetodeBayar
+    {
+        return MetodeBayar::from($this->validated('metode_dp'));
     }
 }

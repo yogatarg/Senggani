@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\MetodeBayar;
 use App\Enums\StatusDesain;
 use App\Enums\StatusProduksi;
 use App\Exceptions\AksiDitolak;
@@ -197,6 +198,9 @@ class PesananController extends Controller
             'bisaTidakJadi'      => $status->sebelumProduksi() && Gate::allows('tidakJadi', $pesanan),
             'saranNomor'         => $pesanan->nomor_spp ?: Pesanan::saranNomorSpp(),
             'menungguPelunasan'  => $pesanan->menunggu_pelunasan,
+            // Invoice PDF & metode bayar (UI dirapikan frontend)
+            'bisaUnduhInvoice'   => Gate::allows('unduhInvoice', $pesanan),
+            'metodeBayar'        => MetodeBayar::pilihan(),
         ]);
     }
 
@@ -269,6 +273,7 @@ class PesananController extends Controller
             'lainnya'         => Pesanan::LAINNYA,
             'jenisDeadline'   => Pesanan::JENIS_DEADLINE,
             'urlCariCustomer' => route('admin.customer.cari'),
+            'metodeBayar'     => MetodeBayar::pilihan(),
         ];
     }
 
@@ -316,6 +321,7 @@ class PesananController extends Controller
                 (int) $request->validated('dp'),
                 Carbon::parse($request->validated('tanggal_dp')),
                 (int) $request->validated('nomor_spp'),
+                $request->metode(),
                 Auth::user(),
             );
 
@@ -401,6 +407,7 @@ class PesananController extends Controller
                 'label_status' => $pesanan->status_produksi->label(),
                 'kode_tampil'  => $pesanan->kode_tampil,
                 'total'        => (float) $pesanan->total,
+                'total_tagihan' => $pesanan->total_tagihan,
             ]);
         }
 
@@ -429,7 +436,7 @@ class PesananController extends Controller
 
     public function catatLunas(LunasPesananRequest $request, Pesanan $pesanan)
     {
-        $this->layanan->catatLunas($pesanan, Carbon::parse($request->validated('tanggal_lunas')), Auth::user());
+        $this->layanan->catatLunas($pesanan, Carbon::parse($request->validated('tanggal_lunas')), $request->metode(), Auth::user());
 
         return redirect()->route('admin.pesanan.show', $pesanan)->with('success', 'Pelunasan dicatat.');
     }
