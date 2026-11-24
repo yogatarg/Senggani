@@ -671,10 +671,12 @@ class InvoicePdf
 
     /**
      * Rincian angka kanan blok bawah. Tiap baris: label, nilai, tebal (baris utama), garis (garis di bawahnya).
-     * BELUM LUNAS: Subtotal produk, Biaya ongkir, Total tagihan, DP min X% (DP belum dibayar) atau
-     * DP dibayar (metode, tanggal), Sisa pelunasan. LUNAS: ... DP dibayar, Pelunasan, Sisa pelunasan Rp0.
+     * BELUM LUNAS tanpa DP: Subtotal produk, Biaya ongkir, Total tagihan, DP dibayar "-", Sisa tagihan (= total),
+     * lalu baris sorot "Bayar DP min X%" (ajakan bayar, di luar penjumlahan; tidak ada bila persen/total 0).
+     * BELUM LUNAS dengan DP: ... DP dibayar (metode, tanggal), Sisa pelunasan.
+     * LUNAS: ... DP dibayar, Pelunasan, Sisa pelunasan Rp0.
      *
-     * @return array{baris: list<array{label: string, info?: ?string, nilai: string, tebal: bool, garis: bool}>, kelebihan: ?string}
+     * @return array{baris: list<array{label: string, info?: ?string, nilai: string, tebal: bool, garis: bool, sorot?: bool}>, kelebihan: ?string}
      */
     private function ringkasan(Pesanan $pesanan, array $set): array
     {
@@ -689,16 +691,17 @@ class InvoicePdf
             ['label' => 'Total tagihan', 'nilai' => self::rupiah($total), 'tebal' => true, 'garis' => false],
         ];
 
-        $sisa = max($total - $dp, 0.0);
+        $sisa      = max($total - $dp, 0.0);
+        $belumDp   = ! $lunas && $dp <= 0;
+        $labelSisa = 'Sisa pelunasan';
 
         if ($dp > 0) {
             $baris[] = ['label' => 'DP dibayar', 'info' => self::infoBayar($pesanan->metode_dp?->label(), $pesanan->tanggal_dp),
                 'nilai' => self::rupiah($dp), 'tebal' => false, 'garis' => false];
-        } elseif (! $lunas && $persen > 0 && $total > 0) {
-            // Belum bayar: tampilkan DP minimal; sisa pelunasan = total − DP minimal (seperti acuan)
-            $dpMin   = (float) ceil($total * $persen / 100);
-            $baris[] = ['label' => 'DP min ' . $persen . '%', 'nilai' => self::rupiah($dpMin), 'tebal' => false, 'garis' => false];
-            $sisa    = max($total - $dpMin, 0.0);
+        } elseif ($belumDp) {
+            // Belum ada DP: sisa tagihan = total (DP minimal TIDAK dikurangkan, supaya tidak terkesan sudah dibayar)
+            $baris[]   = ['label' => 'DP dibayar', 'nilai' => '-', 'tebal' => false, 'garis' => false];
+            $labelSisa = 'Sisa tagihan';
         }
 
         if ($lunas) {
@@ -710,7 +713,13 @@ class InvoicePdf
         }
 
         $baris[count($baris) - 1]['garis'] = true;
-        $baris[] = ['label' => 'Sisa pelunasan', 'nilai' => self::rupiah($sisa), 'tebal' => true, 'garis' => false];
+        $baris[] = ['label' => $labelSisa, 'nilai' => self::rupiah($sisa), 'tebal' => true, 'garis' => false];
+
+        // Ajakan bayar DP minimal: baris sorot terpisah, bukan bagian penjumlahan
+        if ($belumDp && $persen > 0 && $total > 0) {
+            $baris[] = ['label' => 'Bayar DP min ' . $persen . '%', 'nilai' => self::rupiah((float) ceil($total * $persen / 100)),
+                'tebal' => true, 'garis' => false, 'sorot' => true];
+        }
 
         return [
             'baris'     => $baris,

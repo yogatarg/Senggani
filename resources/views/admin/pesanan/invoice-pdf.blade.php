@@ -105,6 +105,10 @@
     .rincian .info { font-size: 7.5pt; line-height: 1.2; font-weight: normal; color: #57534E; }
     .rincian .tebal td { font-weight: bold; }
     .rincian .garis td { border-bottom: 0.75pt solid #44403C; }
+    /* Ajakan bayar DP: latar merah muda tipis seperti badge BELUM LUNAS, teks merah tua tebal */
+    .rincian-sorot { border-collapse: separate; border-spacing: 0; margin-top: 1.6mm; background: #FDECEF; border: 0.75pt solid #F5BCC5; border-radius: 1.2mm; }
+    .rincian-sorot td { font-size: 11pt; font-weight: bold; color: #7A0505; height: 6.2mm; vertical-align: middle; padding: 0 1.6mm; }
+    .rincian-sorot .nilai { text-align: right; white-space: nowrap; }
     .kelebihan { font-size: 8pt; color: #B54708; text-align: right; margin-top: 1mm; }
     .ttd-area { position: relative; height: 22mm; margin-top: 2mm; }
     .ttd-kosong { height: 16mm; }
@@ -271,13 +275,22 @@
             </td>
             <td style="padding-left: 2mm;">
                 <table class="rincian">
-                    @foreach ($ringkasan['baris'] as $r)
+                    @foreach (array_filter($ringkasan['baris'], fn ($r) => empty($r['sorot'])) as $r)
                         <tr class="{{ $r['tebal'] ? 'tebal' : '' }} {{ $r['garis'] ? 'garis' : '' }} {{ ! empty($r['info']) ? 'berinfo' : '' }}">
                             <td>{{ $r['label'] }}@if (! empty($r['info']))<div class="info">{{ $r['info'] }}</div>@endif</td>
                             <td class="nilai">{{ $r['nilai'] }}</td>
                         </tr>
                     @endforeach
                 </table>
+                {{-- Ajakan bayar (mis. "Bayar DP min 50%"): kotak sorot terpisah, bukan bagian penjumlahan --}}
+                @foreach (array_filter($ringkasan['baris'], fn ($r) => ! empty($r['sorot'])) as $r)
+                    <table class="rincian-sorot">
+                        <tr>
+                            <td>{{ $r['label'] }}</td>
+                            <td class="nilai">{{ $r['nilai'] }}</td>
+                        </tr>
+                    </table>
+                @endforeach
                 @if ($ringkasan['kelebihan'])
                     <div class="kelebihan">{{ $ringkasan['kelebihan'] }}</div>
                 @endif

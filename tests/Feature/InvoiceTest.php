@@ -417,7 +417,8 @@ class InvoiceTest extends TestCase
             $data($p)['ringkasan']['baris'],
         );
 
-        // BELUM LUNAS, belum DP: DP minimal 50% dan sisa = total − DP minimal
+        // BELUM LUNAS, belum DP: DP dibayar "-", sisa tagihan = total (DP minimal tidak dikurangkan),
+        // lalu ajakan "Bayar DP min 50%" sebagai baris sorot terpisah
         $p = $this->buat();
         $v = $data($p);
         $this->assertSame('belum_lunas', $v['statusBayar']);
@@ -428,9 +429,14 @@ class InvoiceTest extends TestCase
             'Subtotal produk = Rp2.350.000',
             'Biaya ongkir = -',
             'Total tagihan = Rp2.350.000',
-            'DP min 50% = Rp1.175.000',
-            'Sisa pelunasan = Rp1.175.000',
+            'DP dibayar = -',
+            'Sisa tagihan = Rp2.350.000',
+            'Bayar DP min 50% = Rp1.175.000',
         ], $baris($p));
+        $sorot = array_values(array_filter($v['ringkasan']['baris'], fn ($b) => ! empty($b['sorot'])));
+        $this->assertCount(1, $sorot);
+        $this->assertSame('Bayar DP min 50%', $sorot[0]['label']);
+        $this->assertSame('Sisa tagihan', $v['ringkasan']['baris'][count($v['ringkasan']['baris']) - 2]['label']);
         $this->assertSame('Paperbag · 25×10×30cm', $v['item'][0]['judul']);
         $this->assertSame('Rp 4.300', $v['item'][0]['harga']);
 
@@ -444,6 +450,7 @@ class InvoiceTest extends TestCase
             'DP dibayar Transfer BCA · 23 Nov = Rp1.000.000',
             'Sisa pelunasan = Rp1.375.000',
         ], $baris($p));
+        $this->assertEmpty(array_filter($data($p)['ringkasan']['baris'], fn ($b) => ! empty($b['sorot'])));
 
         // LUNAS
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
@@ -461,6 +468,48 @@ class InvoiceTest extends TestCase
             'Pelunasan QRIS · 23 Nov = Rp1.375.000',
             'Sisa pelunasan = Rp0',
         ], $baris($p));
+        $this->assertEmpty(array_filter($data($p)['ringkasan']['baris'], fn ($b) => ! empty($b['sorot'])));
+    }
+
+    public function test_invoice_belum_dp_sisa_tagihan_sama_dengan_total_dan_ajakan_dp(): void
+    {
+        $ringkasan = fn (Pesanan $p, int $persen) => (fn () => $this->ringkasan($p, ['persen_dp' => $persen]))->call(app(InvoicePdf::class));
+        $teks = fn (array $r) => array_map(fn ($b) => $b['label'] . ' = ' . $b['nilai'], $r['baris']);
+
+        // Kasus laporan bug: total Rp300.000, belum DP, DP min 50%
+        $p = Pesanan::factory()->status('menunggu_dp')->create(['total' => 300000, 'ongkir' => 0, 'dp' => 0]);
+        $r = $teks($ringkasan($p, 50));
+        $this->assertSame([
+            'Subtotal produk = Rp300.000',
+            'Biaya ongkir = -',
+            'Total tagihan = Rp300.000',
+            'DP dibayar = -',
+            'Sisa tagihan = Rp300.000',
+            'Bayar DP min 50% = Rp150.000',
+        ], $r);
+        $this->assertNotContains('Sisa pelunasan = Rp150.000', $r);
+
+        // Pembulatan ke atas
+        $q = Pesanan::factory()->status('menunggu_dp')->create(['total' => 300001, 'ongkir' => 0, 'dp' => 0]);
+        $this->assertContains('Bayar DP min 50% = Rp150.001', $teks($ringkasan($q, 50)));
+
+        // Persen 0 atau total 0: tanpa baris ajakan
+        $this->assertSame('Sisa tagihan = Rp300.000', last($teks($ringkasan($p, 0))));
+        $kosong = Pesanan::factory()->status('menunggu_dp')->create(['total' => 0, 'ongkir' => 0, 'dp' => 0]);
+        $this->assertSame('Sisa tagihan = Rp0', last($teks($ringkasan($kosong, 50))));
+
+        // HTML invoice: ajakan tampil dalam kotak sorot, bukan "Sisa pelunasan Rp150.000"
+        $data = (fn () => $this->dataView($p))->call(app(InvoicePdf::class));
+        $html = preg_replace('/\s+/u', ' ', view('admin.pesanan.invoice-pdf', [...$data, 'sela' => null])->render());
+        $this->assertStringContainsString('class="rincian-sorot"', $html);
+        $this->assertMatchesRegularExpression('/rincian-sorot">\s*<tr>\s*<td>Bayar DP min 50%<\/td>\s*<td class="nilai">Rp150\.000<\/td>/u', $html);
+        $this->assertStringNotContainsString('Sisa pelunasan', $html);
+
+        // PDF utuh: blok bawah (satu baris lebih tinggi) tetap menempel di batas bawah halaman terakhir
+        $invoice = app(InvoicePdf::class);
+        $pdf = $invoice->buat($p);
+        $this->assertEqualsWithDelta(InvoicePdf::BATAS_BAWAH_BLOK, $invoice->ukuranTerakhir['bawah'], 1.5);
+        $this->assertSame($pdf->getDomPDF()->getCanvas()->get_page_count(), $invoice->ukuranTerakhir['halaman']);
     }
 
     public function test_format_rekening_dan_kontak_invoice(): void
