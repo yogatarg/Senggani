@@ -896,6 +896,45 @@ class InvoiceTest extends TestCase
         }
     }
 
+    public function test_watermark_stempel_di_tengah_setiap_halaman_bukan_di_sela(): void
+    {
+        $invoice = app(InvoicePdf::class);
+        $html = function (Pesanan $p) use ($invoice): string {
+            $v = (fn () => $this->dataView($p))->call($invoice);
+
+            return view(InvoicePdf::VIEW, [...$v, 'sela' => ['tinggi' => 80.0, 'halaman_baru' => false, 'garis' => [37.0, 74.0]]])->render();
+        };
+
+        // Tanpa stempel: tanpa watermark
+        $p = Pesanan::factory()->create(['total' => 100000]);
+        $this->assertNull((fn () => $this->dataView($p))->call($invoice)['watermark']);
+        $this->assertStringNotContainsString('class="watermark"', $html($p));
+
+        // Dengan stempel 533 × 123 px: lebar 160 mm proporsional, di tengah area isi 182 × 258 mm
+        app(PengaturanInvoice::class)->simpanGambar('stempel', UploadedFile::fake()->image('stempel.png', 533, 123));
+        $w = (fn () => $this->dataView($p->fresh()))->call($invoice)['watermark'];
+        $this->assertSame(160.0, $w['lebar']);
+        $this->assertEqualsWithDelta(160 * 123 / 533, $w['tinggi'], 0.01);
+        $this->assertEqualsWithDelta(InvoicePdf::LEBAR_ISI / 2, $w['kiri'] + $w['lebar'] / 2, 0.01);
+        $this->assertEqualsWithDelta(InvoicePdf::TINGGI_ISI / 2, $w['atas'] + $w['tinggi'] / 2, 0.01);
+
+        // Satu elemen fixed (diulang DomPDF di tiap halaman) di awal <body>, tidak ada lagi di sela; juga saat LUNAS
+        foreach (['belum lunas' => [], 'lunas' => ['tanggal_lunas' => '2026-11-23', 'metode_lunas' => 'cash']] as $nama => $ubah) {
+            $p->update($ubah);
+            $isi = $html($p->fresh());
+            $this->assertSame(1, substr_count($isi, 'class="watermark"'), "Watermark sekali ({$nama}).");
+            $this->assertMatchesRegularExpression('#<body>\s*<img class="watermark"#', $isi);
+            $this->assertMatchesRegularExpression('#\.watermark \{ position: fixed; z-index: -1; \}#', $isi);
+            $this->assertStringNotContainsString('sela-watermark', $isi);
+        }
+        $this->assertSame('lunas', $p->fresh()->status_bayar_invoice);
+
+        // Pass ukur dengan dan tanpa elemen watermark menghasilkan tata letak yang sama
+        $v = (fn () => $this->dataView($p->fresh()))->call($invoice);
+        $ukur = fn (array $data) => (fn () => $this->ukur($data, $p))->call($invoice);
+        $this->assertEquals($ukur([...$v, 'watermark' => null]), $ukur($v));
+    }
+
     public function test_url_invoice_ditolak_dialihkan_ke_detail_spp(): void
     {
         $hitung = $this->buat(['item' => [['harga_satuan' => ''], ['harga_satuan' => '']]]);

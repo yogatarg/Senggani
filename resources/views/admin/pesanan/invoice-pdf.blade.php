@@ -1,8 +1,8 @@
 {{--
     Invoice PDF (DomPDF, A4 portrait). Data dari App\Services\InvoicePdf::dataView().
     Layout final admin (23 Nov 2026): kop merah tua + kapsul kontak, INVOICE di kanan, tabel item,
-    sela bergaris + watermark stempel, blok bawah (pembayaran transfer + rincian + ttd) menempel di bawah
-    halaman terakhir. Aturan DomPDF: tata letak dengan <table>, CSS 2.1, gambar data URI, font Poppins.
+    sela bergaris, blok bawah (pembayaran transfer + rincian + ttd) menempel di bawah halaman terakhir.
+    Watermark stempel pudar di tengah setiap halaman (position: fixed, di belakang isi). Aturan DomPDF: tata letak dengan <table>, CSS 2.1, gambar data URI, font Poppins.
     $sela = null pada pass ukur (gambar diganti PNG 1×1, jadi semua <img> wajib berukuran tetap lewat CSS/style);
     render penuh berisi tinggi sela (lihat InvoicePdf::buat). Teks panjang tanpa spasi dipotong (overflow-wrap)
     dan tabel item memakai table-layout: fixed supaya kolom angka selalu terlihat.
@@ -70,11 +70,14 @@
     .item-detail { font-size: 7.5pt; line-height: 1.3; color: #57534E; margin-top: 1.4mm; }
     .item-catatan { font-size: 7.5pt; line-height: 1.3; color: #78716C; margin-top: 0.6mm; }
 
-    /* Sela: garis tipis + watermark stempel */
+    /* Watermark tiap halaman: fixed = diulang DomPDF di setiap halaman, relatif ke area isi (dalam margin
+       @page). z-index negatif + posisi pertama di <body> = digambar paling dulu, jadi di belakang isi. */
+    .watermark { position: fixed; z-index: -1; }
+
+    /* Sela: garis tipis */
     .sela { position: relative; page-break-inside: avoid; }
     .sela-baru { page-break-before: always; }
     .sela-garis { position: absolute; left: 0; width: 182mm; height: 0; border-top: 0.75pt solid #D6D6D6; }
-    .sela-watermark { position: absolute; }
 
     /* Blok bawah (tidak terbelah) */
     .blok-bawah { page-break-inside: avoid; padding-top: 4mm; }
@@ -111,6 +114,12 @@
 </style>
 </head>
 <body>
+
+{{-- ── Watermark stempel (setiap halaman, di belakang isi) ── --}}
+@if ($watermark)
+    <img class="watermark" src="{{ $watermark['uri'] }}" alt=""
+         style="left: {{ $watermark['kiri'] }}mm; top: {{ $watermark['atas'] }}mm; width: {{ $watermark['lebar'] }}mm; height: {{ $watermark['tinggi'] }}mm;">
+@endif
 
 {{-- ── Kop ─────────────────────────────────────── --}}
 <table>
@@ -198,13 +207,9 @@
     </tbody>
 </table>
 
-{{-- ── Sela: garis tipis + watermark (hanya di render penuh; halaman_baru = mulai di halaman berikutnya) ── --}}
+{{-- ── Sela: garis tipis (hanya di render penuh; halaman_baru = mulai di halaman berikutnya) ── --}}
 @if ($sela)
     <div class="sela {{ $sela['halaman_baru'] ? 'sela-baru' : '' }}" style="height: {{ $sela['tinggi'] }}mm;">
-        @if ($sela['watermark'])
-            <img class="sela-watermark" src="{{ $sela['watermark']['uri'] }}" alt=""
-                 style="left: {{ $sela['watermark']['kiri'] }}mm; top: {{ $sela['watermark']['atas'] }}mm; width: {{ $sela['watermark']['lebar'] }}mm; height: {{ $sela['watermark']['tinggi'] }}mm;">
-        @endif
         @foreach ($sela['garis'] as $y)
             <div class="sela-garis" style="top: {{ $y }}mm;"></div>
         @endforeach

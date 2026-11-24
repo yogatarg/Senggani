@@ -26,8 +26,11 @@ use Symfony\Component\HttpFoundation\HeaderUtils;
  * Blok bawah (pembayaran + rincian + ttd) selalu berakhir di BATAS_BAWAH_BLOK pada halaman terakhir:
  * 1. Pass ukur: render ringan tanpa gambar (semua <img> berukuran tetap lewat CSS, jadi tata letaknya
  *    sama persis) untuk membaca posisi blok bawah dan halaman akhir tabel (±0,1 detik).
- * 2. Render penuh: "sela" (garis tipis + watermark stempel) disisipkan setinggi sisa ruang. Bila blok
- *    bawah tidak bisa berakhir di batas pada halaman tabel, sela dimulai di halaman baru (page-break).
+ * 2. Render penuh: "sela" (garis tipis) disisipkan setinggi sisa ruang. Bila blok bawah tidak bisa
+ *    berakhir di batas pada halaman tabel, sela dimulai di halaman baru (page-break).
+ *
+ * Watermark stempel pudar tampil di tengah area isi SETIAP halaman (elemen position: fixed di awal <body>,
+ * di belakang isi), lepas dari sela; tanpa stempel tanpa watermark. Lihat dataWatermark().
  *
  * Hasil PDF disimpan di disk privat (FOLDER_CACHE/<id pesanan>/<hash>.pdf), lihat isi() dan kunciCache().
  */
@@ -49,8 +52,16 @@ class InvoicePdf
     // Tepi atas area isi (margin atas @page di view)
     public const MARGIN_ATAS = 13;
 
-    // Sela lebih pendek dari ini: cukup satu garis tanpa watermark
-    public const SELA_MIN_WATERMARK = 40;
+    // Ukuran area isi halaman (mm): A4 dikurangi margin @page 13/14/26/14 mm
+    public const TINGGI_ISI = 258;
+
+    public const LEBAR_ISI = 182;
+
+    // Sela lebih pendek dari ini: cukup satu garis di tengah (bukan garis berjarak rata)
+    public const SELA_MIN_BERGARIS = 40;
+
+    // Lebar maksimal watermark stempel (mm)
+    public const LEBAR_WATERMARK = 160;
 
     // Jarak garis sela (mm) kira-kira setinggi satu baris tabel item
     public const JARAK_GARIS = 18;
@@ -186,12 +197,16 @@ class InvoicePdf
         return $pdf;
     }
 
-    /** Pass ukur: semua gambar diganti PNG 1×1 (ukuran tampil tetap dari CSS/atribut style), tanpa sela. */
+    /**
+     * Pass ukur: semua gambar diganti PNG 1×1 (ukuran tampil tetap dari CSS/atribut style), tanpa sela.
+     * Watermark (position: fixed, di luar alur) ikut diganti, jadi tata letaknya tetap sama.
+     */
     private function ukur(array $data, Pesanan $pesanan): array
     {
         $kosong = fn ($g) => is_array($g) && isset($g['uri']) ? ['uri' => self::GAMBAR_KOSONG] + $g : $g;
 
         $data['logoKop']  = $kosong($data['logoKop']);
+        $data['watermark'] = $kosong($data['watermark']);
         $data['qris']     = $kosong($data['qris']);
         $data['logoQris'] = $kosong($data['logoQris']);
         $data['ikon']     = array_map($kosong, $data['ikon']);
@@ -285,49 +300,61 @@ class InvoicePdf
     }
 
     /**
-     * Isi sela. Sela ≥ SELA_MIN_WATERMARK: garis tipis berjarak rata (±JARAK_GARIS) dari bawah tabel sampai
-     * 6 mm di atas blok bawah (garis terakhir), watermark stempel (lebar maks 160 mm) di tengah area bergaris.
-     * Sela 10 mm s.d. < SELA_MIN_WATERMARK: satu garis di tengah tanpa watermark. Di bawah 10 mm: kosong.
+     * Isi sela. Sela ≥ SELA_MIN_BERGARIS: garis tipis berjarak rata (±JARAK_GARIS) dari bawah tabel sampai
+     * 6 mm di atas blok bawah (garis terakhir). Sela 10 mm s.d. < SELA_MIN_BERGARIS: satu garis di tengah.
+     * Di bawah 10 mm: kosong.
      *
      * @param  array{tinggi: float, halaman_baru: bool}  $sela
-     * @return array{tinggi: float, halaman_baru: bool, garis: list<float>, watermark: ?array{uri: string, lebar: float, tinggi: float, atas: float, kiri: float}}
+     * @return array{tinggi: float, halaman_baru: bool, garis: list<float>}
      */
     private function dataSela(array $sela): array
     {
-        $tinggi    = $sela['tinggi'];
-        $garis     = [];
-        $watermark = null;
+        $tinggi = $sela['tinggi'];
+        $garis  = [];
 
-        if ($tinggi >= self::SELA_MIN_WATERMARK) {
+        if ($tinggi >= self::SELA_MIN_BERGARIS) {
             $area   = $tinggi - 6;
             $jumlah = max(2, (int) round($area / self::JARAK_GARIS));
             for ($i = 1; $i <= $jumlah; $i++) {
                 $garis[] = round($area * $i / $jumlah, 2);
             }
-
-            $stempel = $this->watermark();
-            if ($stempel) {
-                $rasio   = $stempel['tinggi'] / max($stempel['lebar'], 1);
-                $lebar   = min(160, ($area - 4) / $rasio);
-                $tinggiW = $lebar * $rasio;
-                $watermark = [
-                    'uri'    => $stempel['uri'],
-                    'lebar'  => round($lebar, 2),
-                    'tinggi' => round($tinggiW, 2),
-                    'atas'   => round(max(($area - $tinggiW) / 2, 2), 2),
-                    'kiri'   => round((182 - $lebar) / 2, 2),
-                ];
-            }
         } elseif ($tinggi >= 10) {
             $garis[] = round($tinggi / 2, 2);
         }
 
-        return ['tinggi' => $tinggi, 'halaman_baru' => $sela['halaman_baru'], 'garis' => $garis, 'watermark' => $watermark];
+        return ['tinggi' => $tinggi, 'halaman_baru' => $sela['halaman_baru'], 'garis' => $garis];
+    }
+
+    /**
+     * Watermark tiap halaman: stempel pudar selebar maks LEBAR_WATERMARK (proporsional, tetap muat tinggi
+     * area isi), di tengah area isi halaman. Posisi (mm) relatif terhadap pojok kiri atas area isi, karena
+     * DomPDF menempatkan elemen position: fixed di dalam margin @page. Null bila stempel belum diunggah.
+     *
+     * @return array{uri: string, lebar: float, tinggi: float, atas: float, kiri: float}|null
+     */
+    private function dataWatermark(): ?array
+    {
+        $stempel = $this->watermark();
+        if (! $stempel) {
+            return null;
+        }
+
+        $rasio  = $stempel['tinggi'] / max($stempel['lebar'], 1);
+        $lebar  = min(self::LEBAR_WATERMARK, (self::TINGGI_ISI - 20) / max($rasio, 0.001));
+        $tinggi = $lebar * $rasio;
+
+        return [
+            'uri'    => $stempel['uri'],
+            'lebar'  => round($lebar, 2),
+            'tinggi' => round($tinggi, 2),
+            'atas'   => round((self::TINGGI_ISI - $tinggi) / 2, 2),
+            'kiri'   => round((self::LEBAR_ISI - $lebar) / 2, 2),
+        ];
     }
 
     /**
      * Stempel versi pudar (±6%) untuk watermark, dibuat dengan GD (alfa tiap piksel dikali 6%), supaya
-     * tidak bergantung pada dukungan CSS opacity DomPDF. Latar tetap transparan, garis sela tetap terlihat.
+     * tidak bergantung pada dukungan CSS opacity DomPDF. Latar tetap transparan, isi di atasnya tetap terbaca.
      * Lebar dibatasi 945 px (160 mm pada 150 dpi; gambar pudar tidak butuh lebih).
      *
      * @return array{uri: string, lebar: int, tinggi: int}|null
@@ -529,6 +556,8 @@ class InvoicePdf
             ],
             // Logo kop kanan = gambar stempel dari Pengaturan Invoice (disembunyikan bila kosong)
             'logoKop'     => $this->ukurGambar($stempel, maksLebar: 29, maksTinggi: 9),
+            // Stempel pudar di tengah tiap halaman (juga saat LUNAS); null bila stempel kosong
+            'watermark'   => $this->dataWatermark(),
             'kepada'      => $this->kepada($pesanan),
             'tanggal'     => self::tanggalPanjang($pesanan->tanggal_order),
             'statusBayar' => $status,
