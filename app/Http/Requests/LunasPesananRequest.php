@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\MetodeBayar;
+use App\Enums\StatusProduksi;
 use App\Http\Requests\Concerns\PesanIndonesia;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -10,7 +11,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
- * Catat pelunasan (khusus admin, SPP yang sudah masuk produksi). Tanggal bawaan: hari ini.
+ * Catat pelunasan (khusus admin, SPP yang sudah masuk produksi dan tidak dibatalkan). Tanggal bawaan: hari ini.
  * metode_lunas wajib (App\Enums\MetodeBayar); field `metode` diterima sebagai alias.
  */
 class LunasPesananRequest extends FormRequest
@@ -49,6 +50,11 @@ class LunasPesananRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
+            if ($this->route('pesanan')->status_produksi === StatusProduksi::Dibatalkan) {
+                $validator->errors()->add('tanggal_lunas', 'SPP yang dibatalkan tidak bisa dicatat lunas. Pulihkan SPP dulu bila pelunasan perlu dicatat.');
+
+                return;
+            }
             if (! $this->route('pesanan')->status_produksi->sudahProduksi()) {
                 $validator->errors()->add('tanggal_lunas', 'Pelunasan dicatat setelah DP dicatat dan SPP masuk produksi.');
 

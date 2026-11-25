@@ -39,7 +39,7 @@
     $bisaBatal = ! $dibatalkan && $status->bisaDibatalkan() && Gate::allows('batalkan', $pesanan);
     $bisaHapus = Gate::allows('delete', $pesanan);
     $bisaPulihkan = $diArsipBatal && Gate::allows('pulihkan', $pesanan);
-    $bisaCatatLunas = $sudahProduksi && ! $pesanan->tanggal_lunas && $pesanan->total_tagihan > 0 && Gate::allows('catatLunas', $pesanan);
+    $bisaCatatLunas = $sudahProduksi && ! $dibatalkan && ! $pesanan->tanggal_lunas && $pesanan->total_tagihan > 0 && Gate::allows('catatLunas', $pesanan);
     $tampilHitungHarga = $hitungHarga && $bisaIsiHarga;
 
     // Ke Pengiriman dikunci sampai lunas (backend menolak; tombol ditampilkan nonaktif dengan keterangan)

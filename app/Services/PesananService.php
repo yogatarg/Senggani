@@ -450,11 +450,15 @@ class PesananService
                 'DP ' . self::rupiah($dp) . ' via ' . $metode->label() . ' dicatat ('
                     . $tanggal->translatedFormat('d/m/Y') . "), nomor SPP #{$nomor}",
                 $oleh,
+                // Status lunas selalu dihitung ulang dari DP baru: dikosongkan dulu, lalu lunasOtomatis
+                // mengisinya lagi hanya bila DP ≥ total tagihan (pengaman bila ada tanggal lunas basi).
                 kolom: [
-                    'dp'         => $dp,
-                    'tanggal_dp' => $tanggal->toDateString(),
-                    'metode_dp'  => $metode->value,
-                    'nomor_spp'  => $nomor,
+                    'dp'            => $dp,
+                    'tanggal_dp'    => $tanggal->toDateString(),
+                    'metode_dp'     => $metode->value,
+                    'nomor_spp'     => $nomor,
+                    'tanggal_lunas' => null,
+                    'metode_lunas'  => null,
                 ],
                 setelah: function (Pesanan $p) use ($nomorLama, $nomor, $oleh) {
                     if ($nomorLama && $nomorLama !== $nomor) {
@@ -478,7 +482,7 @@ class PesananService
      * bila di database sudah berbeda, StatusBentrok dilempar dan tidak ada yang berubah.
      *
      * - hitung_harga → menunggu_dp hanya lewat isiHarga; menunggu_dp → proses hanya lewat catatDp.
-     * - proses → menunggu_dp khusus admin (nomor SPP tetap).
+     * - proses → menunggu_dp khusus admin (nomor SPP tetap; tanggal & metode lunas dikosongkan).
      * - selesai_produksi → pengiriman wajib lunas (AksiDitolak::BELUM_LUNAS).
      */
     public function ubahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh): void
@@ -514,7 +518,23 @@ class PesananService
             };
         }
 
-        $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh, $syarat);
+        // Kembali ke Menunggu DP: DP akan dicatat ulang, jadi status lunas dibatalkan di transaksi yang sama
+        // (DP lama tetap tersimpan sampai ditimpa Catat DP). $segar = data sebelum status diubah.
+        $kolom   = [];
+        $setelah = null;
+        if ($dari === StatusProduksi::Proses && $ke === StatusProduksi::MenungguDp) {
+            $kolom   = ['tanggal_lunas' => null, 'metode_lunas' => null];
+            $setelah = function (Pesanan $segar) use ($oleh) {
+                if ($segar->tanggal_lunas) {
+                    $this->catat($segar, $oleh, null, null,
+                        'Status lunas dibatalkan karena SPP dikembalikan ke ' . StatusProduksi::MenungguDp->label()
+                        . ' (DP sebelumnya ' . self::rupiah((float) $segar->dp)
+                        . ', lunas tanggal ' . $segar->tanggal_lunas->translatedFormat('d/m/Y') . '). Catat DP lagi untuk menghitung ulang.');
+                }
+            };
+        }
+
+        $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh, $syarat, $kolom, $setelah);
     }
 
     /**
