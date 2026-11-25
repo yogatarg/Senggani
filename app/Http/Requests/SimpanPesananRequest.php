@@ -252,6 +252,14 @@ class SimpanPesananRequest extends FormRequest
                     'DP (' . self::rupiah($dp) . ') tidak boleh lebih dari total tagihan (' . self::rupiah($total) . ').');
             }
 
+            // DP ≥ total tagihan = lunas (sama dengan lunasOtomatis). Mengosongkan tanggal lunas SPP yang lunas
+            // sementara DP masih menutup total ditolak, supaya tidak muncul tombol Lunas dengan pelunasan Rp 0.
+            if ($pesanan?->tanggal_lunas && $this->pakaiPembayaran() && ! $this->filled('tanggal_lunas')
+                && $total > 0 && $dp >= $total) {
+                $validator->errors()->add('tanggal_lunas', 'Tanggal lunas tidak bisa dikosongkan karena DP (' . self::rupiah($dp)
+                    . ') sudah menutup total tagihan (' . self::rupiah($total) . '). Kurangi DP dulu bila SPP memang belum lunas.');
+            }
+
             if ($this->pakaiPembayaran() && $this->filled('tanggal_lunas') && $total <= 0) {
                 $validator->errors()->add('tanggal_lunas', 'Tanggal lunas hanya bisa diisi bila total tagihan lebih dari Rp 0.');
             }

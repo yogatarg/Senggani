@@ -843,10 +843,16 @@ class InvoiceTest extends TestCase
         $this->assertSame('lunas', $p->status_bayar_invoice);
         $this->assertSame(1, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
 
-        // Tanggal lunas sengaja dikosongkan tanpa mengubah DP/total: tidak diisi ulang
-        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '2.375.000', 'tanggal_lunas' => ''])->assertSessionHasNoErrors();
+        // Tanggal lunas dikosongkan sementara DP masih menutup total: ditolak (tidak ada tombol Lunas dengan pelunasan Rp 0)
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '2.375.000', 'tanggal_lunas' => ''])
+            ->assertSessionHasErrors(['tanggal_lunas' => 'Tanggal lunas tidak bisa dikosongkan karena DP (Rp 2.375.000) sudah menutup total tagihan (Rp 2.375.000). Kurangi DP dulu bila SPP memang belum lunas.']);
+        $this->assertSame('2026-11-23', $p->fresh()->tanggal_lunas->toDateString());
+
+        // Dikosongkan sambil DP dikurangi di bawah total: boleh, SPP kembali belum lunas
+        $this->sebagai($this->admin)->put($url, [...$data, 'dp' => '2.000.000', 'metode_dp' => 'transfer_bri', 'tanggal_lunas' => ''])->assertSessionHasNoErrors();
         $this->assertNull($p->fresh()->tanggal_lunas);
         $this->assertSame('belum_lunas', $p->fresh()->status_bayar_invoice);
+        $this->assertSame(375000.0, $p->fresh()->sisa);
 
         // Isi Harga menurunkan total tagihan sampai sama dengan DP → lunas otomatis
         $q = $this->buat(['nama_customer' => 'Ismun', 'ongkir' => '25.000']);
@@ -1092,7 +1098,7 @@ class InvoiceTest extends TestCase
         $this->assertNull($p->metode_lunas);
         $this->assertSame(0.0, (float) $p->dp);
         $this->assertSame(1, $p->riwayat()->where('catatan',
-            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 2.375.000 via QRIS (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: sebelumnya dibayar lunas Rp 2.375.000 via QRIS (23/11/2026). Catat DP lagi.')->count());
 
         // Catat DP lagi 60% (1.425.000): status DP, invoice BELUM LUNAS, sisa 950.000
         $this->catatDp($p, ['dp' => '1.425.000', 'metode_dp' => 'transfer_bca'])->assertSessionHasNoErrors();
@@ -1109,7 +1115,7 @@ class InvoiceTest extends TestCase
 
         // Pengiriman tetap terkunci sampai lunas
         $this->ubahStatus($p, 'proses', 'selesai_produksi')->assertSessionHasNoErrors();
-        $this->ubahStatus($p, 'selesai_produksi', 'pengiriman')->assertSessionHas('error', 'Belum lunas — minta admin mencatat pelunasan dulu.');
+        $this->ubahStatus($p, 'selesai_produksi', 'pengiriman')->assertSessionHas('error', 'Belum lunas — catat pelunasan dulu untuk mengirim.');
         $this->assertSame('selesai_produksi', $p->fresh()->status_produksi->value);
     }
 
@@ -1138,6 +1144,17 @@ class InvoiceTest extends TestCase
         $this->assertSame(176, (int) $p->nomor_spp, 'Nomor SPP tetap.');
         $this->assertSame(1, $p->riwayat()->where('catatan',
             'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 1.000.000 via Transfer BCA (23/11/2026). Catat DP lagi.')->count());
+    }
+
+    public function test_kembali_ke_menunggu_dp_dp_lalu_pelunasan_teks_tetap_dp(): void
+    {
+        $p = $this->buatProduksi(); // DP 1.000.000 via BCA
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'qris'])->assertSessionHasNoErrors();
+        $this->assertFalse($p->fresh()->lunas_langsung);
+
+        $this->ubahStatus($p, 'proses', 'menunggu_dp')->assertSessionHasNoErrors();
+        $this->assertSame(1, $p->riwayat()->where('catatan',
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 1.000.000 via Transfer BCA (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
     }
 
     public function test_catat_dp_menghapus_tanggal_lunas_basi(): void
@@ -1226,7 +1243,7 @@ class InvoiceTest extends TestCase
         $this->assertSame('belum_dp', $p->status_pembayaran);
         $this->assertSame(176, (int) $p->nomor_spp);
         $this->assertSame(1, $p->riwayat()->where('catatan',
-            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 600.000 via Transfer BCA (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: sebelumnya dibayar lunas Rp 600.000 via Transfer BCA (23/11/2026). Catat DP lagi.')->count());
 
         [$status, $baris] = $this->ringkasanInvoice($p);
         $this->assertSame('belum_lunas', $status);
@@ -1407,6 +1424,13 @@ class InvoiceTest extends TestCase
 
         $html = $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()->getContent();
         $this->assertSame(2, substr_count($html, 'data-bs-target="#modalLunas"'), 'Satu di aksi desktop, satu di bilah HP.');
+
+        // Teks kunci pengiriman: admin mencatat sendiri, produksi diminta menghubungi admin
+        $this->assertStringContainsString('Belum lunas — catat pelunasan dulu untuk mengirim.', $html);
+        $this->assertStringNotContainsString('minta admin mencatat pelunasan', $html);
+        $this->sebagai($this->produksi)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('Belum lunas — minta admin mencatat pelunasan dulu.', false)
+            ->assertDontSee('catat pelunasan dulu untuk mengirim', false);
     }
 
     public function test_lunas_langsung_dari_dp_penuh_invoice_satu_baris(): void
@@ -1435,7 +1459,7 @@ class InvoiceTest extends TestCase
         $this->assertSame('belum_lunas', $p->status_bayar_invoice);
         $this->assertSame(176, (int) $p->nomor_spp);
         $this->assertSame(1, $p->riwayat()->where('catatan',
-            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 2.350.000 via Cash (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: sebelumnya dibayar lunas Rp 2.350.000 via Cash (23/11/2026). Catat DP lagi.')->count());
 
         // Bayar lunas lagi dengan nomor lama SPP ini sendiri: diterima (bukan duplikat)
         $this->bayarLunas($p, ['nomor_spp' => '176', 'metode_bayar' => 'qris'])->assertSessionHasNoErrors();

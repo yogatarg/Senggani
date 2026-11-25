@@ -158,7 +158,7 @@ class PesananService
                 $this->catat($pesanan, $oleh, null, null, 'SPP diubah');
 
                 // DP atau total tagihan berubah dan DP kini menutup seluruh tagihan → lunas otomatis.
-                // Tanggal lunas yang sengaja dikosongkan tanpa mengubah DP/total tidak diisi ulang.
+                // Mengosongkan tanggal lunas selama DP ≥ total tagihan ditolak di SimpanPesananRequest.
                 if ((float) $pesanan->dp !== $dpLama || $pesanan->total_tagihan !== $tagihanLama) {
                     $this->lunasOtomatis($pesanan, $oleh);
                 }
@@ -538,7 +538,7 @@ class PesananService
      *
      * - hitung_harga → menunggu_dp hanya lewat isiHarga; menunggu_dp → proses hanya lewat catatDp / bayarLunas.
      * - proses → menunggu_dp khusus admin (nomor SPP tetap; pembayaran direset, lihat KOLOM_RESET_BAYAR).
-     * - selesai_produksi → pengiriman wajib lunas (AksiDitolak::BELUM_LUNAS).
+     * - selesai_produksi → pengiriman wajib lunas (AksiDitolak::teksBelumLunas).
      */
     public function ubahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh): void
     {
@@ -566,9 +566,9 @@ class PesananService
 
         $syarat = null;
         if ($dari === StatusProduksi::SelesaiProduksi && $ke === StatusProduksi::Pengiriman) {
-            $syarat = function (Pesanan $segar) {
+            $syarat = function (Pesanan $segar) use ($oleh) {
                 if (! $segar->tanggal_lunas) {
-                    throw new AksiDitolak(AksiDitolak::BELUM_LUNAS);
+                    throw new AksiDitolak(AksiDitolak::teksBelumLunas($oleh->can('catatLunas', $segar)));
                 }
             };
         }
@@ -601,22 +601,33 @@ class PesananService
 
     /**
      * "Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 600.000 via Transfer BCA
-     * (23/11/2026), lunas 23/11/2026. Catat DP lagi." Metode/tanggal yang kosong (data lama) dilewati.
+     * (23/11/2026), lunas 25/11/2026. Catat DP lagi." Bila sebelumnya lunas langsung (Bayar lunas / DP ≥ total):
+     * "...: sebelumnya dibayar lunas Rp 600.000 via QRIS (25/11/2026). Catat DP lagi."
+     * Metode/tanggal yang kosong (data lama) dilewati.
      */
     private static function teksResetBayar(Pesanan $lama): string
     {
-        $dp = 'DP sebelumnya ' . self::rupiah((float) $lama->dp);
-        if ($lama->metode_dp) {
-            $dp .= ' via ' . $lama->metode_dp->label();
-        }
-        if ($lama->tanggal_dp) {
-            $dp .= ' (' . $lama->tanggal_dp->translatedFormat('d/m/Y') . ')';
-        }
-        if ($lama->tanggal_lunas) {
-            $dp .= ', lunas ' . $lama->tanggal_lunas->translatedFormat('d/m/Y');
+        if ($lama->lunas_langsung) {
+            $teks   = 'sebelumnya dibayar lunas ' . self::rupiah((float) $lama->dp);
+            $metode = $lama->metode_lunas ?? $lama->metode_dp;
+            if ($metode) {
+                $teks .= ' via ' . $metode->label();
+            }
+            $teks .= ' (' . $lama->tanggal_lunas->translatedFormat('d/m/Y') . ')';
+        } else {
+            $teks = 'DP sebelumnya ' . self::rupiah((float) $lama->dp);
+            if ($lama->metode_dp) {
+                $teks .= ' via ' . $lama->metode_dp->label();
+            }
+            if ($lama->tanggal_dp) {
+                $teks .= ' (' . $lama->tanggal_dp->translatedFormat('d/m/Y') . ')';
+            }
+            if ($lama->tanggal_lunas) {
+                $teks .= ', lunas ' . $lama->tanggal_lunas->translatedFormat('d/m/Y');
+            }
         }
 
-        return 'Pembayaran direset karena SPP dikembalikan ke ' . StatusProduksi::MenungguDp->label() . ': ' . $dp . '. Catat DP lagi.';
+        return 'Pembayaran direset karena SPP dikembalikan ke ' . StatusProduksi::MenungguDp->label() . ': ' . $teks . '. Catat DP lagi.';
     }
 
     /**

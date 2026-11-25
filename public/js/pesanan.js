@@ -19,6 +19,23 @@
         return d === '' ? 0 : parseInt(d, 10);
     };
 
+    // Peringatan "DP melebihi total" (browser) vs galat server untuk field DP yang sama: tampilkan satu saja.
+    // Galat server dari kiriman sebelumnya tetap tampil sampai nilai DP diubah (lihat sembunyikanGalatServer);
+    // selama masih tampil, peringatan browser disembunyikan supaya pesan tidak dobel.
+    var galatServerField = function (el) {
+        var field = el && el.closest('.sg-field');
+        return field ? $$('.sg-galat:not([data-peringatan-dp])', field).filter(function (g) { return !g.hidden; }) : [];
+    };
+    var sembunyikanGalatServer = function (input) {
+        galatServerField(input).forEach(function (g) { g.hidden = true; });
+    };
+    var aturPeringatanDp = function (peringatan, teks) {
+        if (!peringatan) return;
+        var tampil = !!teks && galatServerField(peringatan).length === 0;
+        peringatan.hidden = !tampil;
+        $('span', peringatan).textContent = tampil ? teks : '';
+    };
+
     // ── Toast ──────────────────────────────────────────
     var wadahToast = $('#wadah-toast');
 
@@ -573,11 +590,9 @@
         var cekDp = function () {
             if (!inputDp || !peringatanDp) return;
             var dp = keAngka(inputDp.value);
-            var lebih = dp > totalDp;
-            peringatanDp.hidden = !lebih;
-            if (lebih) $('span', peringatanDp).textContent = 'DP melebihi total tagihan sebesar ' + rupiah(dp - totalDp) + '.';
+            aturPeringatanDp(peringatanDp, dp > totalDp ? 'DP melebihi total tagihan sebesar ' + rupiah(dp - totalDp) + '.' : '');
         };
-        if (inputDp) inputDp.addEventListener('input', cekDp);
+        if (inputDp) inputDp.addEventListener('input', function () { sembunyikanGalatServer(inputDp); cekDp(); });
 
         var inputNoDp = $('[data-nomor-dp]', formDp);
         var kotakNoDp = $('[data-konfirmasi-nomor]', formDp);
@@ -1102,14 +1117,8 @@
                 $('[data-teks-bayar]', b).textContent = info[0];
             });
 
-            var peringatan = $('[data-peringatan-dp]', formOrder);
-            if (dp > tagihan) {
-                peringatan.hidden = false;
-                $('span', peringatan).textContent = 'DP melebihi total tagihan sebesar ' + rupiah(dp - tagihan) + '.';
-            } else {
-                peringatan.hidden = true;
-                $('span', peringatan).textContent = '';
-            }
+            aturPeringatanDp($('[data-peringatan-dp]', formOrder),
+                dp > tagihan ? 'DP melebihi total tagihan sebesar ' + rupiah(dp - tagihan) + '.' : '');
         };
 
         // Metode pelunasan hanya tampil (dan ikut terkirim) bila tanggal lunas terisi
@@ -1172,6 +1181,7 @@
         aturKunciLunas();
 
         formOrder.addEventListener('input', function (e) {
+            if (e.target.matches('[data-dp]')) sembunyikanGalatServer(e.target);
             if (e.target.matches('[data-jumlah], [data-harga], [data-dp], [data-tanggal-lunas], [data-ongkir]')) hitungTotal();
             if (e.target.matches('[data-tanggal-lunas]')) { aturMetodeLunas(); aturKunciLunas(); }
             if (e.target.matches('[data-dp], [data-tanggal-lunas]')) aturWajibMetode();

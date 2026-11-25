@@ -373,7 +373,7 @@ class PesananAlurBaruTest extends TestCase
             ->assertRedirect(route('admin.pesanan.show', $p))
             ->assertSessionHas('error', 'Belum lunas — minta admin mencatat pelunasan dulu.');
         $this->sebagai($this->admin)->postJson(route('admin.pesanan.status', $p), $kirim)
-            ->assertStatus(422)->assertExactJson(['pesan' => 'Belum lunas — minta admin mencatat pelunasan dulu.']);
+            ->assertStatus(422)->assertExactJson(['pesan' => 'Belum lunas — catat pelunasan dulu untuk mengirim.']);
         $this->assertSame(StatusProduksi::SelesaiProduksi, $p->fresh()->status_produksi);
         $this->assertSame(0, $p->riwayat()->count());
 

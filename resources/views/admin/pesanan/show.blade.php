@@ -44,7 +44,8 @@
 
     // Ke Pengiriman dikunci sampai lunas (backend menolak; tombol ditampilkan nonaktif dengan keterangan)
     $majuTerkunci = $menungguPelunasan && $statusBerikutnya === StatusProduksi::Pengiriman;
-    $teksKunci = 'Belum lunas — minta admin mencatat pelunasan dulu.';
+    // Admin bisa mencatat lunas sendiri (tombol Lunas di sampingnya); produksi diminta menghubungi admin
+    $teksKunci = \App\Exceptions\AksiDitolak::teksBelumLunas(Gate::allows('catatLunas', $pesanan));
 
     // Alasan "tidak jadi" = catatan pada riwayat terakhir yang memindahkan ke tidak_jadi
     $riwayatTidakJadi = $tidakJadi ? $riwayat->first(fn ($r) => $r->status_ke === StatusProduksi::TidakJadi) : null;
