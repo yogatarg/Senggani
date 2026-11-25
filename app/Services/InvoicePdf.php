@@ -674,7 +674,8 @@ class InvoicePdf
      * BELUM LUNAS tanpa DP: Subtotal produk, Biaya ongkir, Total tagihan, DP dibayar "-", Sisa tagihan (= total),
      * lalu baris sorot "Bayar DP min X%" (ajakan bayar, di luar penjumlahan; tidak ada bila persen/total 0).
      * BELUM LUNAS dengan DP: ... DP dibayar (metode, tanggal), Sisa pelunasan.
-     * LUNAS: ... DP dibayar, Pelunasan, Sisa pelunasan Rp0.
+     * LUNAS setelah DP: ... DP dibayar, Pelunasan (= total − DP), Sisa pelunasan Rp0.
+     * LUNAS langsung (Bayar lunas / DP ≥ total): ... Dibayar lunas (= total), Sisa pelunasan Rp0.
      *
      * @return array{baris: list<array{label: string, info?: ?string, nilai: string, tebal: bool, garis: bool, sorot?: bool}>, kelebihan: ?string}
      */
@@ -695,7 +696,11 @@ class InvoicePdf
         $belumDp   = ! $lunas && $dp <= 0;
         $labelSisa = 'Sisa pelunasan';
 
-        if ($dp > 0) {
+        if ($lunas && $pesanan->lunas_langsung) {
+            // Bayar penuh sekaligus (tombol "Bayar lunas" atau DP ≥ total): satu baris, bukan "DP + Pelunasan Rp0"
+            $baris[] = ['label' => 'Dibayar lunas', 'info' => self::infoBayar($pesanan->metode_lunas?->label(), $pesanan->tanggal_lunas),
+                'nilai' => self::rupiah($total), 'tebal' => false, 'garis' => false];
+        } elseif ($dp > 0) {
             $baris[] = ['label' => 'DP dibayar', 'info' => self::infoBayar($pesanan->metode_dp?->label(), $pesanan->tanggal_dp),
                 'nilai' => self::rupiah($dp), 'tebal' => false, 'garis' => false];
         } elseif ($belumDp) {

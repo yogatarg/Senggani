@@ -565,19 +565,19 @@
         hitungHarga();
     }
 
-    // Catat DP: peringatan DP > total & nomor SPP loncat (server tetap penentu)
-    var formDp = $('[data-form-dp]');
-    if (formDp) {
+    // Catat DP & Bayar lunas: peringatan DP > total (hanya Catat DP) & nomor SPP loncat (server tetap penentu)
+    $$('[data-form-dp]').forEach(function (formDp) {
         var totalDp = parseInt(formDp.getAttribute('data-total'), 10) || 0;
         var inputDp = $('[data-dp-input]', formDp);
         var peringatanDp = $('[data-peringatan-dp]', formDp);
         var cekDp = function () {
+            if (!inputDp || !peringatanDp) return;
             var dp = keAngka(inputDp.value);
             var lebih = dp > totalDp;
             peringatanDp.hidden = !lebih;
             if (lebih) $('span', peringatanDp).textContent = 'DP melebihi total tagihan sebesar ' + rupiah(dp - totalDp) + '.';
         };
-        inputDp.addEventListener('input', cekDp);
+        if (inputDp) inputDp.addEventListener('input', cekDp);
 
         var inputNoDp = $('[data-nomor-dp]', formDp);
         var kotakNoDp = $('[data-konfirmasi-nomor]', formDp);
@@ -611,7 +611,7 @@
             centang.focus({ preventScroll: true });
         });
         cekDp();
-    }
+    });
 
     // ── Metode bayar (ubin radio, [data-metode]) ─────────
     // Wajib dipilih ([data-metode-wajib], tanpa pilihan bawaan): cek sebelum kirim. Server tetap penentu.

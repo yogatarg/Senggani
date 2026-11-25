@@ -205,6 +205,17 @@ class Pesanan extends Model
     }
 
     /**
+     * Lunas sekaligus tanpa pelunasan terpisah: tombol "Bayar lunas" dari Menunggu DP, atau DP ≥ total tagihan
+     * (lunas otomatis). Ditampilkan sebagai satu baris "Dibayar lunas" (bukan "DP … + Pelunasan Rp0").
+     */
+    protected function lunasLangsung(): Attribute
+    {
+        return Attribute::get(fn () => (bool) $this->tanggal_lunas
+            && $this->total_tagihan > 0
+            && (float) $this->dp >= $this->total_tagihan);
+    }
+
+    /**
      * Status bayar di invoice (dua saja): lunas hanya bila tanggal_lunas terisi (sama dengan status admin),
      * selain itu belum_lunas. DP yang menutup seluruh tagihan sudah otomatis dicatat lunas saat Catat DP /
      * Edit (PesananService::lunasOtomatis), jadi tidak perlu diturunkan dari DP ≥ total di sini.
@@ -463,17 +474,20 @@ class Pesanan extends Model
                 $biaya[] = '🚚 Ongkir: ' . self::rupiahSpp($this->ongkir);
                 $biaya[] = '💰 Total: ' . self::rupiahSpp($this->total_tagihan);
             }
-            if ((float) $this->dp > 0) {
-                $info = array_filter([$this->metode_dp?->label(), $this->tanggalSpp($this->tanggal_dp)]);
-                $biaya[] = '💳 DP: ' . self::rupiahSpp($this->dp) . ($info ? ' (' . implode(', ', $info) . ')' : '');
-            }
-            if ($this->tanggal_lunas) {
-                // "✅ Lunas: Rp1.625.000 (QRIS, 23 Nov)"; lunas dari DP saja (pelunasan Rp0) tanpa nominal
-                $info = array_filter([$this->metode_lunas?->label(), $this->tanggalSpp($this->tanggal_lunas)]);
-                $info = $info ? ' (' . implode(', ', $info) . ')' : '';
-                $biaya[] = $this->nilai_pelunasan > 0
-                    ? '✅ Lunas: ' . self::rupiahSpp($this->nilai_pelunasan) . $info
-                    : '✅ Lunas: DP menutup seluruh tagihan' . $info;
+            $infoLunas = array_filter([$this->metode_lunas?->label(), $this->tanggalSpp($this->tanggal_lunas)]);
+            $infoLunas = $infoLunas ? ' (' . implode(', ', $infoLunas) . ')' : '';
+            if ($this->lunas_langsung) {
+                // Bayar penuh sekaligus: satu baris "✅ Dibayar lunas: Rp600.000 (QRIS, 23 Nov)", tanpa baris DP
+                $biaya[] = '✅ Dibayar lunas: ' . self::rupiahSpp($this->total_tagihan) . $infoLunas;
+            } else {
+                if ((float) $this->dp > 0) {
+                    $info = array_filter([$this->metode_dp?->label(), $this->tanggalSpp($this->tanggal_dp)]);
+                    $biaya[] = '💳 DP: ' . self::rupiahSpp($this->dp) . ($info ? ' (' . implode(', ', $info) . ')' : '');
+                }
+                if ($this->tanggal_lunas) {
+                    // "✅ Lunas: Rp1.625.000 (QRIS, 23 Nov)" = pelunasan setelah DP
+                    $biaya[] = '✅ Lunas: ' . self::rupiahSpp($this->nilai_pelunasan) . $infoLunas;
+                }
             }
             $blok[] = $biaya;
 

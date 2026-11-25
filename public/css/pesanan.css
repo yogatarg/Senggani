@@ -942,6 +942,9 @@ button.sg-avatar { background: transparent; }
 .sg-bilah-kolom .sg-btn { width: 100%; }
 .sg-bilah-baris { display: flex; gap: 8px; }
 .sg-bilah-baris .sg-btn { flex: 1 1 0; min-width: 0; padding: 0 10px; white-space: nowrap; }
+/* Tombol Lunas / Bayar lunas di bilah HP: selebar isinya; tombol utama di sebelahnya boleh membungkus 2 baris */
+.sg-bilah .sg-btn-lunas { flex: 0 0 auto; padding: 0 14px; white-space: nowrap; }
+.sg-bilah .sg-bilah-lentur { min-width: 0; padding: 0 12px; }
 .sg-bilah-teks { flex: 1; min-width: 0; margin: 0; color: var(--sg-text-2); font-weight: 500; line-height: 1.35; }
 
 /* ── Lonceng notifikasi deadline ─────────────── */

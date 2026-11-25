@@ -475,14 +475,69 @@ class PesananService
         }
     }
 
+    /**
+     * "Bayar lunas" dari Menunggu DP (customer langsung membayar penuh, khusus admin): beri nomor SPP dan pindahkan
+     * menunggu_dp → proses seperti Catat DP, dengan DP = total tagihan dan lunas di tanggal & metode yang sama.
+     * Total tagihan dibaca dari baris yang sudah dikunci (bukan isian form), jadi tidak bisa selisih dengan harga.
+     *
+     * @return float nominal yang dicatat lunas (= total tagihan)
+     *
+     * @throws StatusBentrok bila status bukan menunggu_dp lagi
+     * @throws ValidationException bila total tagihan Rp 0 atau nomor SPP keduluan admin lain (indeks unik)
+     */
+    public function bayarLunas(Pesanan $pesanan, Carbon $tanggal, int $nomor, MetodeBayar $metode, Admin $oleh): float
+    {
+        $nomorLama = $pesanan->nomor_spp ? (int) $pesanan->nomor_spp : null;
+        $total     = 0.0;
+
+        try {
+            DB::transaction(function () use ($pesanan, $tanggal, $nomor, $metode, $oleh, $nomorLama, &$total) {
+                $segar = Pesanan::whereKey($pesanan->id)->lockForUpdate()->first();
+                if (! $segar || $segar->status_produksi !== StatusProduksi::MenungguDp) {
+                    throw $this->bentrok($pesanan);
+                }
+
+                $total = $segar->total_tagihan;
+                if ($total <= 0) {
+                    throw ValidationException::withMessages(['status' => 'Total tagihan masih Rp 0, jadi tidak ada yang dibayar lunas.']);
+                }
+
+                $tgl = $tanggal->toDateString();
+                $this->pindahStatusDalamTransaksi($segar, StatusProduksi::MenungguDp, StatusProduksi::Proses,
+                    'Dibayar lunas ' . self::rupiah($total) . ' via ' . $metode->label() . ' ('
+                        . $tanggal->translatedFormat('d/m/Y') . "), nomor SPP #{$nomor}",
+                    $oleh,
+                    [
+                        'dp'            => $total,
+                        'tanggal_dp'    => $tgl,
+                        'metode_dp'     => $metode->value,
+                        'nomor_spp'     => $nomor,
+                        'tanggal_lunas' => $tgl,
+                        'metode_lunas'  => $metode->value,
+                    ],
+                );
+
+                if ($nomorLama && $nomorLama !== $nomor) {
+                    $this->catat($segar, $oleh, null, null, "Nomor SPP diubah dari #{$nomorLama} menjadi #{$nomor} oleh {$oleh->nama}");
+                }
+            });
+        } catch (Throwable $e) {
+            throw $this->terjemahkanDuplikat($e, $nomor);
+        } finally {
+            $pesanan->refresh();
+        }
+
+        return $total;
+    }
+
     // ── Status produksi ────────────────────────────────
 
     /**
      * Maju/mundur SATU langkah. $dari = status yang dilihat pengguna di layar;
      * bila di database sudah berbeda, StatusBentrok dilempar dan tidak ada yang berubah.
      *
-     * - hitung_harga → menunggu_dp hanya lewat isiHarga; menunggu_dp → proses hanya lewat catatDp.
-     * - proses → menunggu_dp khusus admin (nomor SPP tetap; tanggal & metode lunas dikosongkan).
+     * - hitung_harga → menunggu_dp hanya lewat isiHarga; menunggu_dp → proses hanya lewat catatDp / bayarLunas.
+     * - proses → menunggu_dp khusus admin (nomor SPP tetap; pembayaran direset, lihat KOLOM_RESET_BAYAR).
      * - selesai_produksi → pengiriman wajib lunas (AksiDitolak::BELUM_LUNAS).
      */
     public function ubahStatus(Pesanan $pesanan, StatusProduksi $dari, StatusProduksi $ke, ?string $catatan, Admin $oleh): void
@@ -518,23 +573,50 @@ class PesananService
             };
         }
 
-        // Kembali ke Menunggu DP: DP akan dicatat ulang, jadi status lunas dibatalkan di transaksi yang sama
-        // (DP lama tetap tersimpan sampai ditimpa Catat DP). $segar = data sebelum status diubah.
+        // Kembali ke Menunggu DP = pembayaran direset di transaksi yang sama (DP, tanggal & metode DP/lunas),
+        // supaya invoice, teks SPP, dan kartu pembayaran kembali "belum bayar". Nomor SPP tetap.
+        // $segar = data sebelum status diubah (nilai lama dicatat di riwayat).
         $kolom   = [];
         $setelah = null;
         if ($dari === StatusProduksi::Proses && $ke === StatusProduksi::MenungguDp) {
-            $kolom   = ['tanggal_lunas' => null, 'metode_lunas' => null];
+            $kolom   = self::KOLOM_RESET_BAYAR;
             $setelah = function (Pesanan $segar) use ($oleh) {
-                if ($segar->tanggal_lunas) {
-                    $this->catat($segar, $oleh, null, null,
-                        'Status lunas dibatalkan karena SPP dikembalikan ke ' . StatusProduksi::MenungguDp->label()
-                        . ' (DP sebelumnya ' . self::rupiah((float) $segar->dp)
-                        . ', lunas tanggal ' . $segar->tanggal_lunas->translatedFormat('d/m/Y') . '). Catat DP lagi untuk menghitung ulang.');
+                if ((float) $segar->dp > 0 || $segar->tanggal_lunas) {
+                    $this->catat($segar, $oleh, null, null, self::teksResetBayar($segar));
                 }
             };
         }
 
         $this->pindahStatus($pesanan, $dari, $ke, $catatan, $oleh, $syarat, $kolom, $setelah);
+    }
+
+    /** Kolom pembayaran yang dikosongkan saat SPP dikembalikan ke Menunggu DP. */
+    public const KOLOM_RESET_BAYAR = [
+        'dp'            => 0,
+        'tanggal_dp'    => null,
+        'metode_dp'     => null,
+        'tanggal_lunas' => null,
+        'metode_lunas'  => null,
+    ];
+
+    /**
+     * "Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 600.000 via Transfer BCA
+     * (23/11/2026), lunas 23/11/2026. Catat DP lagi." Metode/tanggal yang kosong (data lama) dilewati.
+     */
+    private static function teksResetBayar(Pesanan $lama): string
+    {
+        $dp = 'DP sebelumnya ' . self::rupiah((float) $lama->dp);
+        if ($lama->metode_dp) {
+            $dp .= ' via ' . $lama->metode_dp->label();
+        }
+        if ($lama->tanggal_dp) {
+            $dp .= ' (' . $lama->tanggal_dp->translatedFormat('d/m/Y') . ')';
+        }
+        if ($lama->tanggal_lunas) {
+            $dp .= ', lunas ' . $lama->tanggal_lunas->translatedFormat('d/m/Y');
+        }
+
+        return 'Pembayaran direset karena SPP dikembalikan ke ' . StatusProduksi::MenungguDp->label() . ': ' . $dp . '. Catat DP lagi.';
     }
 
     /**

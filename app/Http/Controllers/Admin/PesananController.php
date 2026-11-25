@@ -10,6 +10,7 @@ use App\Exceptions\StatusBentrok;
 use App\Http\Controllers\Admin\Concerns\UnggahGambar;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BatalPesananRequest;
+use App\Http\Requests\BayarLunasPesananRequest;
 use App\Http\Requests\CatatanPesananRequest;
 use App\Http\Requests\CatatDpPesananRequest;
 use App\Http\Requests\IsiHargaPesananRequest;
@@ -31,6 +32,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -195,6 +197,8 @@ class PesananController extends Controller
             // Aksi alur baru
             'bisaIsiHarga'       => Gate::allows('isiHarga', $pesanan),
             'bisaCatatDp'        => $status === StatusProduksi::MenungguDp && Gate::allows('catatDp', $pesanan),
+            // Customer langsung bayar penuh dari Menunggu DP (tombol "Bayar lunas")
+            'bisaBayarLunas'     => $status === StatusProduksi::MenungguDp && $pesanan->total_tagihan > 0 && Gate::allows('catatLunas', $pesanan),
             'bisaTidakJadi'      => $status->sebelumProduksi() && Gate::allows('tidakJadi', $pesanan),
             'saranNomor'         => $pesanan->nomor_spp ?: Pesanan::saranNomorSpp(),
             'menungguPelunasan'  => $pesanan->menunggu_pelunasan,
@@ -326,6 +330,27 @@ class PesananController extends Controller
             );
 
             return "DP dicatat. {$pesanan->kode_tampil} masuk produksi.";
+        });
+    }
+
+    /** "Bayar lunas": customer langsung membayar penuh, menunggu_dp → proses + nomor SPP, lunas. */
+    public function bayarLunas(BayarLunasPesananRequest $request, Pesanan $pesanan)
+    {
+        return $this->jalankanStatus($request, $pesanan, function () use ($pesanan, $request) {
+            try {
+                $this->layanan->bayarLunas(
+                    $pesanan,
+                    Carbon::parse($request->validated('tanggal_bayar')),
+                    (int) $request->validated('nomor_spp'),
+                    $request->metode(),
+                    Auth::user(),
+                );
+            } catch (ValidationException $e) {
+                // Nomor keduluan admin lain (indeks unik): tampilkan di modal Bayar lunas, bukan Catat DP
+                throw $e->errorBag(BayarLunasPesananRequest::ERROR_BAG);
+            }
+
+            return "Dibayar lunas. {$pesanan->kode_tampil} masuk produksi.";
         });
     }
 

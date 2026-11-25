@@ -819,7 +819,9 @@ class InvoiceTest extends TestCase
         $this->assertSame('lunas', $p->status_bayar_invoice);
         $this->assertSame(0.0, $p->sisa);
         $this->assertSame(1, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
-        $this->assertStringContainsString('✅ Lunas: DP menutup seluruh tagihan (QRIS, 22 Nov)', $p->teks_spp);
+        // DP menutup seluruh tagihan = lunas langsung: satu baris, tanpa baris DP terpisah
+        $this->assertStringContainsString('✅ Dibayar lunas: Rp2.375.000 (QRIS, 22 Nov)', $p->teks_spp);
+        $this->assertStringNotContainsString('💳 DP', $p->teks_spp);
 
         // DP sebagian: tidak lunas otomatis
         $q = $this->buat(['nama_customer' => 'Ismun']);
@@ -1082,15 +1084,15 @@ class InvoiceTest extends TestCase
         $this->catatDp($p, ['dp' => '2.375.000', 'metode_dp' => 'qris'])->assertSessionHasNoErrors();
         $this->assertSame('lunas', $p->fresh()->status_pembayaran);
 
-        // Proses → Menunggu DP: tanggal & metode lunas dikosongkan, riwayat mencatat DP lama
+        // Proses → Menunggu DP: pembayaran direset (DP, tanggal & metode DP/lunas), riwayat mencatat nilai lama
         $this->ubahStatus($p, 'proses', 'menunggu_dp')->assertSessionHasNoErrors();
         $p->refresh();
         $this->assertSame('menunggu_dp', $p->status_produksi->value);
         $this->assertNull($p->tanggal_lunas);
         $this->assertNull($p->metode_lunas);
-        $this->assertSame(2375000.0, (float) $p->dp, 'DP lama tetap tersimpan sampai Catat DP berikutnya.');
+        $this->assertSame(0.0, (float) $p->dp);
         $this->assertSame(1, $p->riwayat()->where('catatan',
-            'Status lunas dibatalkan karena SPP dikembalikan ke Menunggu DP (DP sebelumnya Rp 2.375.000, lunas tanggal 23/11/2026). Catat DP lagi untuk menghitung ulang.')->count());
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 2.375.000 via QRIS (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
 
         // Catat DP lagi 60% (1.425.000): status DP, invoice BELUM LUNAS, sisa 950.000
         $this->catatDp($p, ['dp' => '1.425.000', 'metode_dp' => 'transfer_bca'])->assertSessionHasNoErrors();
@@ -1125,11 +1127,17 @@ class InvoiceTest extends TestCase
         $this->assertSame(2, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
     }
 
-    public function test_kembali_ke_menunggu_dp_tanpa_lunas_tidak_mencatat_pembatalan(): void
+    public function test_kembali_ke_menunggu_dp_dp_sebagian_ikut_direset(): void
     {
-        $p = $this->buatProduksi(); // DP 1.000.000, belum lunas
+        $p = $this->buatProduksi(); // DP 1.000.000 via BCA, belum lunas, #176
         $this->ubahStatus($p, 'proses', 'menunggu_dp')->assertSessionHasNoErrors();
-        $this->assertSame(0, $p->riwayat()->where('catatan', 'like', 'Status lunas dibatalkan%')->count());
+        $p->refresh();
+        $this->assertSame(0.0, (float) $p->dp);
+        $this->assertNull($p->tanggal_dp);
+        $this->assertNull($p->metode_dp);
+        $this->assertSame(176, (int) $p->nomor_spp, 'Nomor SPP tetap.');
+        $this->assertSame(1, $p->riwayat()->where('catatan',
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 1.000.000 via Transfer BCA (23/11/2026). Catat DP lagi.')->count());
     }
 
     public function test_catat_dp_menghapus_tanggal_lunas_basi(): void
@@ -1179,5 +1187,271 @@ class InvoiceTest extends TestCase
         $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()->assertSee('id="modalLunas"', false);
         $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
         $this->assertSame('lunas', $p->fresh()->status_pembayaran);
+    }
+
+    // ── Reset pembayaran, Bayar lunas, tombol Lunas ──
+
+    private function bayarLunas(Pesanan $p, array $ubah = [], ?Admin $oleh = null)
+    {
+        return $this->sebagai($oleh ?? $this->admin)->post(route('admin.pesanan.bayar_lunas', $p), [
+            'aksi' => 'bayar_lunas', 'nomor_spp' => '176', 'metode_bayar' => 'transfer_bca', ...$ubah,
+        ]);
+    }
+
+    /** SPP 1 × 400.000 + 1 × 200.000 = 600.000 (kasus laporan pengguna). */
+    private function buat600(): Pesanan
+    {
+        return $this->buat(['item' => [
+            ['jumlah' => '1', 'harga_satuan' => '400.000'],
+            ['jumlah' => '1', 'harga_satuan' => '200.000'],
+        ]]);
+    }
+
+    public function test_reset_pembayaran_invoice_dan_teks_spp_kembali_belum_bayar(): void
+    {
+        // Kasus laporan: tagihan 600.000, DP 600.000 → lunas, lalu dikembalikan ke Menunggu DP
+        $p = $this->buat600();
+        $this->assertSame(600000.0, $p->total_tagihan);
+        $this->catatDp($p, ['dp' => '600.000'])->assertSessionHasNoErrors();
+        $this->assertSame('lunas', $p->fresh()->status_pembayaran);
+
+        $this->ubahStatus($p, 'proses', 'menunggu_dp')->assertSessionHasNoErrors();
+        $p = $p->fresh();
+        $this->assertSame(0.0, (float) $p->dp);
+        $this->assertNull($p->tanggal_dp);
+        $this->assertNull($p->metode_dp);
+        $this->assertNull($p->tanggal_lunas);
+        $this->assertNull($p->metode_lunas);
+        $this->assertSame(600000.0, $p->sisa);
+        $this->assertSame('belum_dp', $p->status_pembayaran);
+        $this->assertSame(176, (int) $p->nomor_spp);
+        $this->assertSame(1, $p->riwayat()->where('catatan',
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 600.000 via Transfer BCA (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
+
+        [$status, $baris] = $this->ringkasanInvoice($p);
+        $this->assertSame('belum_lunas', $status);
+        $this->assertSame([
+            'Subtotal produk = Rp600.000',
+            'Biaya ongkir = -',
+            'Total tagihan = Rp600.000',
+            'DP dibayar = -',
+            'Sisa tagihan = Rp600.000',
+            'Bayar DP min 50% = Rp300.000',
+        ], $baris);
+
+        // Teks SPP WhatsApp tanpa DP/lunas; kartu pembayaran & modal Catat DP tidak memakai DP lama
+        $this->assertStringNotContainsString('💳 DP', $p->teks_spp);
+        $this->assertStringNotContainsString('lunas', strtolower($p->teks_spp));
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('Belum ada pembayaran.', false)
+            ->assertSee('name="dp" value=""', false)
+            ->assertSee('id="modalBayarLunas"', false);
+    }
+
+    public function test_modal_kembali_ke_menunggu_dp_memperingatkan_reset(): void
+    {
+        $p = $this->buatProduksi();
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('Pembayaran yang sudah dicatat (DP Rp 1.000.000) akan direset', false);
+    }
+
+    public function test_bayar_lunas_dari_menunggu_dp(): void
+    {
+        $p = $this->buat(['ongkir' => '25.000']); // total tagihan 2.375.000
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('data-bs-target="#modalBayarLunas"', false)
+            ->assertSee(route('admin.pesanan.bayar_lunas', $p), false)
+            ->assertSee('Nominal dibayar lunas', false);
+
+        $this->bayarLunas($p, ['metode_bayar' => 'qris', 'tanggal_bayar' => '2026-11-22'])
+            ->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $p = $p->fresh();
+        $this->assertSame('proses', $p->status_produksi->value);
+        $this->assertSame(176, (int) $p->nomor_spp);
+        $this->assertSame(2375000.0, (float) $p->dp);
+        $this->assertSame('2026-11-22', $p->tanggal_dp->toDateString());
+        $this->assertSame('2026-11-22', $p->tanggal_lunas->toDateString());
+        $this->assertSame(MetodeBayar::Qris, $p->metode_dp);
+        $this->assertSame(MetodeBayar::Qris, $p->metode_lunas);
+        $this->assertSame('lunas', $p->status_pembayaran);
+        $this->assertTrue($p->lunas_langsung);
+        $this->assertSame(0.0, $p->sisa);
+        $this->assertSame(1, $p->riwayat()->where('status_ke', 'proses')
+            ->where('catatan', 'Dibayar lunas Rp 2.375.000 via QRIS (22/11/2026), nomor SPP #176')->count());
+        $this->assertSame(0, $p->riwayat()->where('catatan', 'Lunas otomatis: DP menutup seluruh tagihan')->count());
+
+        // Invoice: satu baris "Dibayar lunas", bukan "DP dibayar + Pelunasan Rp0"
+        [$status, $baris] = $this->ringkasanInvoice($p);
+        $this->assertSame('lunas', $status);
+        $this->assertSame([
+            'Subtotal produk = Rp2.350.000',
+            'Biaya ongkir = Rp25.000',
+            'Total tagihan = Rp2.375.000',
+            'Dibayar lunas QRIS · 22 Nov = Rp2.375.000',
+            'Sisa pelunasan = Rp0',
+        ], $baris);
+        $this->assertStringContainsString('✅ Dibayar lunas: Rp2.375.000 (QRIS, 22 Nov)', $p->teks_spp);
+        $this->assertStringNotContainsString('💳 DP', $p->teks_spp);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.invoice', $p))->assertOk();
+
+        // Halaman detail: tombol Lunas & Bayar lunas hilang, kartu menampilkan "Dibayar lunas"
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertDontSee('data-bs-target="#modalLunas"', false)
+            ->assertDontSee('id="modalBayarLunas"', false)
+            ->assertSee('<dt>Dibayar lunas</dt>', false)
+            ->assertSee('Dibayar lunas · masuk', false);
+
+        // Pengiriman tidak terkunci
+        $this->ubahStatus($p, 'proses', 'selesai_produksi')->assertSessionHasNoErrors();
+        $this->ubahStatus($p, 'selesai_produksi', 'pengiriman')->assertSessionHasNoErrors();
+        $this->assertSame('pengiriman', $p->fresh()->status_produksi->value);
+    }
+
+    public function test_bayar_lunas_validasi_nomor_metode_dan_status(): void
+    {
+        $lain = $this->buat(['nama_customer' => 'Ismun', 'nomor_whatsapp' => '0812-1111-2222']);
+        $this->catatDp($lain)->assertSessionHasNoErrors(); // memakai #176
+
+        $p = $this->buat();
+
+        // Nomor SPP duplikat ditolak (error bag terpisah dari modal Catat DP)
+        $this->bayarLunas($p, ['nomor_spp' => '176'])
+            ->assertSessionHasErrorsIn('bayarLunas', ['nomor_spp' => 'SPP #176 sudah dipakai oleh Ismun.']);
+        $this->assertSame('menunggu_dp', $p->fresh()->status_produksi->value);
+        $this->assertNull($p->fresh()->tanggal_lunas);
+
+        // Metode wajib
+        $this->bayarLunas($p, ['nomor_spp' => '177', 'metode_bayar' => ''])
+            ->assertSessionHasErrorsIn('bayarLunas', ['metode_bayar' => 'Pilih metode pembayaran.']);
+
+        // Nomor loncat jauh butuh konfirmasi
+        $this->bayarLunas($p, ['nomor_spp' => '500'])->assertSessionHasErrorsIn('bayarLunas', ['konfirmasi_nomor']);
+        $this->assertSame('menunggu_dp', $p->fresh()->status_produksi->value);
+
+        // Berhasil, lalu dikirim lagi (status bukan Menunggu DP lagi): ditolak
+        $this->bayarLunas($p, ['nomor_spp' => '177'])->assertSessionHasNoErrors();
+        $this->bayarLunas($p->fresh(), ['nomor_spp' => '178'])->assertSessionHasErrorsIn('bayarLunas', ['status']);
+        $this->assertSame(177, (int) $p->fresh()->nomor_spp);
+    }
+
+    public function test_galat_bayar_lunas_tampil_di_modalnya_sendiri(): void
+    {
+        $lain = $this->buat(['nama_customer' => 'Ismun', 'nomor_whatsapp' => '0812-1111-2222']);
+        $this->catatDp($lain)->assertSessionHasNoErrors();
+        $p = $this->buat();
+
+        $this->bayarLunas($p, ['nomor_spp' => '176'])->assertRedirect();
+        $html = $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/id="modalBayarLunas"[^>]*data-buka-otomatis/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="modalCatatDp"[^>]*data-buka-otomatis/', $html);
+        $this->assertStringContainsString('id="g-bl-nomor_spp"', $html);
+        $this->assertStringNotContainsString('id="g-nomor_spp"', $html);
+    }
+
+    public function test_bayar_lunas_dan_tombol_lunas_khusus_admin(): void
+    {
+        $p = $this->buat();
+        $this->sebagai($this->produksi)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertDontSee('id="modalBayarLunas"', false)
+            ->assertDontSee('data-bs-target="#modalBayarLunas"', false);
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.bayar_lunas', $p), ['nomor_spp' => '176', 'metode_bayar' => 'cash'])->assertForbidden();
+        $this->assertSame('menunggu_dp', $p->fresh()->status_produksi->value);
+
+        $this->catatDp($p)->assertSessionHasNoErrors();
+        $this->sebagai($this->produksi)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertDontSee('id="modalLunas"', false)
+            ->assertDontSee('data-bs-target="#modalLunas"', false);
+        $this->sebagai($this->produksi)->postJson(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertForbidden();
+        $this->assertNull($p->fresh()->tanggal_lunas);
+    }
+
+    public function test_tombol_lunas_di_proses_lalu_pelunasan_sisa(): void
+    {
+        $p = $this->buatProduksi(); // 2.375.000, DP 1.000.000 → sisa 1.375.000
+
+        // Tombol Lunas di area aksi utama (desktop & bilah HP), tidak lagi di kartu Pembayaran
+        $html = $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('id="modalLunas"', false)
+            ->assertSee('Nominal pelunasan', false)
+            ->assertSee('Rp 1.375.000', false)
+            ->getContent();
+        $this->assertSame(2, substr_count($html, 'data-bs-target="#modalLunas"'), 'Satu di aksi desktop, satu di bilah HP.');
+        $this->assertStringContainsString('sg-btn sg-btn-sekunder sg-btn-lunas', $html);
+
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasNoErrors();
+        $p = $p->fresh();
+        $this->assertSame('lunas', $p->status_pembayaran);
+        $this->assertFalse($p->lunas_langsung);
+
+        [$status, $baris] = $this->ringkasanInvoice($p);
+        $this->assertSame('lunas', $status);
+        $this->assertSame([
+            'Subtotal produk = Rp2.350.000',
+            'Biaya ongkir = Rp25.000',
+            'Total tagihan = Rp2.375.000',
+            'DP dibayar Transfer BCA · 23 Nov = Rp1.000.000',
+            'Pelunasan Cash · 23 Nov = Rp1.375.000',
+            'Sisa pelunasan = Rp0',
+        ], $baris);
+
+        // Setelah lunas tombol hilang
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertDontSee('data-bs-target="#modalLunas"', false);
+    }
+
+    public function test_tombol_lunas_di_selesai_produksi(): void
+    {
+        $p = $this->buatProduksi();
+        $this->ubahStatus($p, 'proses', 'selesai_produksi')->assertSessionHasNoErrors();
+
+        $html = $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()->getContent();
+        $this->assertSame(2, substr_count($html, 'data-bs-target="#modalLunas"'), 'Satu di aksi desktop, satu di bilah HP.');
+    }
+
+    public function test_lunas_langsung_dari_dp_penuh_invoice_satu_baris(): void
+    {
+        $p = $this->buat(); // 2.350.000
+        $this->catatDp($p, ['dp' => '2.350.000', 'metode_dp' => 'cash'])->assertSessionHasNoErrors();
+
+        [$status, $baris] = $this->ringkasanInvoice($p->fresh());
+        $this->assertSame('lunas', $status);
+        $this->assertContains('Dibayar lunas Cash · 23 Nov = Rp2.350.000', $baris);
+        $this->assertSame('Sisa pelunasan = Rp0', last($baris));
+        $this->assertEmpty(array_filter($baris, fn ($b) => str_starts_with($b, 'DP dibayar') || str_starts_with($b, 'Pelunasan')));
+    }
+
+    public function test_bayar_lunas_lalu_kembali_ke_menunggu_dp_direset(): void
+    {
+        $p = $this->buat();
+        $this->bayarLunas($p, ['metode_bayar' => 'cash'])->assertSessionHasNoErrors();
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertSee('Pembayaran yang sudah dicatat (dibayar lunas Rp 2.350.000) akan direset', false);
+        $this->ubahStatus($p, 'proses', 'menunggu_dp')->assertSessionHasNoErrors();
+
+        $p = $p->fresh();
+        $this->assertSame(0.0, (float) $p->dp);
+        $this->assertNull($p->tanggal_lunas);
+        $this->assertSame('belum_lunas', $p->status_bayar_invoice);
+        $this->assertSame(176, (int) $p->nomor_spp);
+        $this->assertSame(1, $p->riwayat()->where('catatan',
+            'Pembayaran direset karena SPP dikembalikan ke Menunggu DP: DP sebelumnya Rp 2.350.000 via Cash (23/11/2026), lunas 23/11/2026. Catat DP lagi.')->count());
+
+        // Bayar lunas lagi dengan nomor lama SPP ini sendiri: diterima (bukan duplikat)
+        $this->bayarLunas($p, ['nomor_spp' => '176', 'metode_bayar' => 'qris'])->assertSessionHasNoErrors();
+        $this->assertSame('lunas', $p->fresh()->status_pembayaran);
+    }
+
+    public function test_bayar_lunas_dan_lunas_ditolak_untuk_spp_dibatalkan(): void
+    {
+        $p = $this->buatProduksi();
+        $this->sebagai($this->admin)->post(route('admin.pesanan.batal', $p), ['status_lama' => 'proses'])->assertSessionHasNoErrors();
+
+        $this->bayarLunas($p, ['nomor_spp' => '177'])->assertSessionHasErrorsIn('bayarLunas', ['status']);
+        $this->sebagai($this->admin)->post(route('admin.pesanan.lunas', $p), ['metode_lunas' => 'cash'])->assertSessionHasErrors(['tanggal_lunas']);
+        $this->assertNull($p->fresh()->tanggal_lunas);
+        $this->sebagai($this->admin)->get(route('admin.pesanan.show', $p))->assertOk()
+            ->assertDontSee('data-bs-target="#modalLunas"', false)
+            ->assertDontSee('id="modalBayarLunas"', false);
     }
 }
